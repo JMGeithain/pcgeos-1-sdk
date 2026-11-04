@@ -163,3 +163,44 @@ The report's builder is deliberately application-specific: 63 resources, one UI 
 5. Add object/LMem construction and GenText as separate opt-in modules, with target-specific layout profiles.
 6. Add 8086/ABI tests for DS/SS separation, stack/register canaries, movable-resource lock lifetime and adversarial relocation.
 7. Keep library generation as a later milestone after export, loader lifecycle, two-client, reentrancy and unload tests exist.
+## User-supplied GNU Chess source packages — archive verification (2026-11-04)
+
+Two separate ZIP archives were supplied and inspected locally. ZIP CRC/integrity checks passed for both. Do not conflate their root layouts or release generations:
+
+| Archive | Bytes | SHA-256 | Contents / status |
+|---|---:|---|---|
+| `GNUChess-Ensemble1.zip` | 17,678,481 | `0645270262dd21ea7d1b07857725f3d0a941203832b0fa3de8f9ae86cb10f475` | 1,760 entries; root prefix `GNUChess-Ensemble1-MoveEntry/`; contains extensive MoveEntry, bilingual and `cpu8086-history12-13` evidence |
+| `GNUChess-Ensemble1-DE-EN-8086.zip` | 16,768,589 | `0bf99b6b9aeea212827a275a2680b33483385b41299c7ad640d9bf4917958c5e` | 1,598 entries; root prefix `GNUChess-Ensemble1-8086/`; explicit 8088/8086 release package |
+
+The first archive's size and SHA-256 exactly match the values previously stated in the technical report. The second is a distinct package, not a byte-identical repack: after removing the differing top-level directory prefix, 33 common paths have different contents and 261 / 99 paths are unique to the first / second archive respectively.
+
+### Verified 8086 release artifacts in the second archive
+
+The second archive's `RELEASE.json`, `DEVELOPMENT/source-rebuild-report.json`, `EVIDENCE/cpu8086/acceptance.json`, and actual GEO members agree on these outputs:
+
+| Edition | Release | GEO bytes | SHA-256 |
+|---|---:|---:|---|
+| English | 6.3.0.12 | 170,028 | `2676a6fb7f2539399a184718cc8aa15b29ab146fe6d5efe281e439ffe31acb70` |
+| German | 6.3.0.13 | 170,012 | `4e18a9d01870d7e9b78acf568b5a1b346de19a074dc10c94e0c75ce0b4a10b9e` |
+
+Both archive member files were hashed directly and matched these values. The package reports a source-manifest allowlist of 410 files and an SDK-free rebuild requiring Python 3 standard library plus NASM 2.16 or later. Its optional full engine rebuild uses the separately documented GOC/Glue/Open Watcom route. The package does not include the commercial GEOS runtime, SDK, compiler or fonts.
+
+### CPU and native acceptance — precise scope
+
+The package's acceptance report marks both editions passed for its declared 8086 target. The native run uses the dedicated DOSBox-X 2024.03.01 SDL2 8086 normal core, 640 KiB conventional memory, VGA 640x480/16, `disk.geo` swapping only, and no XMS/EMS/UMB. It records GeoManager launch, mouse and keyboard moves with engine replies, depth 4, Undo/New Game, maximize/resize, expose repaint, close/reopen and native exit to DOS. The maximized incremental-Undo board and genuine full-Expose comparison report zero differing RGB pixels.
+
+This is strong, bounded 8086 instruction-compatibility and native-emulator evidence, not physical 8088/8086 hardware, cycle/bus timing, a minimum-RAM guarantee, or exhaustive chess-position proof. The native run is on the supplied **English** GeoWorks Pro / Ensemble 1.2 system for both English and German applications; a German system runtime was not supplied. The report explicitly says the kernel CPU-type byte and guest heap peaks were not directly observed in this acceptance run.
+
+The opcode verifier is not based on NASM's `CPU 8086` switch alone: its independent raw decoder rejects later-CPU forms that NASM accepts in that mode. The package reports a 207-case independent verifier review and guards known semantic differences such as PUSH SP and unmasked CL shift counts. These are finite verifier/test suites, not an exhaustive formal proof of every instruction path.
+
+### ABI bridge and memory findings
+
+The 8086 package replaces PUSHA/POPA and later conditional-branch encodings with 8086-compatible sequences. Its report describes per-target near-call stubs and a shared movable-resource lock/return bridge. A separate thunk ABI review covers RETF and RETF N cleanup, register/FLAGS preservation, nested resource-lock lifetimes and failure paths. The fixed bridge assumes the engine's private DGROUP remains DS on entry/return; it is not a universal thunk for arbitrary routines returning another DS.
+
+The report's release accounting gives DGROUP 8,400 bytes, arena 34,336 bytes (34,260 used after initialization), stack reservation 49,152 bytes, fixed initialized resources plus stack 127,616 bytes for both editions, and all resource reservations plus stack 214,848 bytes EN / 214,832 bytes DE. These are file-derived reservations and explicitly exclude actual GEOS heap/handle/loader/UI overhead.
+
+### Target/API caution and SDK use
+
+These archives provide excellent reproducible engineering examples for a native 1.x application builder, strict instruction audit, relocation/resource manifest, and movable-code bridge. They do not by themselves establish that their private object layouts, UI messages, ordinals, or kernel details apply unchanged to the user's German GeoWorks 1.2 system. The native test system is English 1.2. Keep GNU Chess's application-specific object and resource assumptions out of the general SDK API until independently cross-checked.
+
+Recommended SDK reuse order: (1) archive/hash and manifest verification; (2) independent GEODE reader and relocation audit; (3) 8086 raw opcode verifier and bounded execution harness; (4) ABI bridge tests as an isolated module; (5) one minimal non-chess application through a general writer; (6) German 1.2 target validation. Do not import the whole GNU Chess application as SDK runtime code.
