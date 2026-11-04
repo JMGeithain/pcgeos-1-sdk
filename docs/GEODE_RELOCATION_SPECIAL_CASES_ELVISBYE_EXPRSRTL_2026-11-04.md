@@ -81,3 +81,17 @@ The parser must neither silently accept `DDh` and `63h` as ordinary relocation t
 ## Reproducibility and limits
 
 The three archive members were read directly from the ZIP; sizes, SHA-256 values, raw bytes and difference ranges were recalculated. Resource 10's relocation position is derived from `0C98h + 03F0h = 1088h`. The 68 word values were counted as 16-bit little-endian words over `0368h–03EFh`. This is static byte analysis, not a GeoManager loader test or a complete GEODE specification.
+
+
+## Archive-wide search for the two 68-word sequences
+
+An additional search was run across the complete `GEOWORKS(4).zip` archive:
+
+- Scope: 263 archive members with the `.GEO` extension.
+- Exact contiguous 136-byte patterns searched:
+  - `DD 02` repeated 68 times.
+  - `63 02` repeated 68 times.
+- Result: the first complete pattern occurs only in `ELVISBYE.GEO`; the second occurs only in `EXPRSRTL.GEO`.
+- Neither complete pattern was found in the other 261 GEO files.
+
+**Evidence limit:** This is an exact-pattern search for these two complete 136-byte sequences. It is not a complete decoder of all relocation tables and does not establish that the archive contains no other unknown `GRI_info` values. In particular, it does not semantically classify all individual occurrences of bytes `DDh` or `63h`.
