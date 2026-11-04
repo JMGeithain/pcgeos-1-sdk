@@ -216,3 +216,36 @@ Nach der Commodore-GEOS-Tabelle wäre `63h` ein Unique-Marker (`81h–DBh`) und 
 4. Der PC/GEOS-1.x-Decoder bzw. eine originale 1.x-Spezifikation muss direkt untersucht werden.
 
 **SDK-Regel:** Keine Parseränderung. Commodore-GEOS-Dokumentation bleibt eine ausdrücklich gekennzeichnete Vergleichsquelle und ist kein Beleg für das PC/GEOS-1.x-Binärformat.
+
+
+## 16. Exakter Vergleich des Bitmap-Payloads: erster Unterschied bei 0368h
+
+Die drei Payloads wurden erneut byteweise aus den Originaldateien extrahiert. Verglichen wurde ausschließlich der durch den Bitmap-Befehl begrenzte Bereich `0036h–03EBh` (950 Bytes).
+
+### Gemeinsamer Anfang und erste Abweichung
+
+- ELVISBYE und EXPRSRTL sind vom Payload-Anfang `0036h` bis einschließlich `0367h` identisch.
+- Das erste unterschiedliche Byte zwischen diesen beiden Dateien liegt bei Ressourcenoffset `0368h`.
+- SENDFAX2 weicht erstmals bei `0369h` von ELVISBYE ab; das Byte bei `0368h` ist dort noch gleich.
+- Unmittelbar vor der Abweichung stehen in allen drei Dateien die Bytes `D8 0D` bei `0366h–0367h`.
+
+Ab `0368h` beginnt in ELVISBYE die Folge `DD 02`, in EXPRSRTL die Folge `63 02`. Diese Folgen reichen jeweils bis zum Ende des berechneten Payloadbereichs bei `03ECh`. Damit liegen 132 Bytes bzw. 66 Paare innerhalb des Payloads. Der nachfolgende Ressourcenrest `03ECh–03EFh` enthält jeweils zwei weitere identische Paare.
+
+### Exakte Datenlänge
+
+Die Payloadlänge ergibt sich aus dem im Bitmap-Befehl gespeicherten Wert `03B6h` = 950 Dezimalbytes. Die Grenze ist durch die Addition `0036h + 03B6h = 03ECh` nachvollziehbar. Für alle drei Dateien gilt dieselbe Länge.
+
+### Bedeutung
+
+Dieser Vergleich zeigt, dass die abweichenden Folgen nicht über den gesamten Bitmapinhalt verteilt sind. Vielmehr stimmen die drei Payloads über einen langen Anfangsbereich überein und unterscheiden sich erst am Ende bzw. in dessen unmittelbarer Nähe. Bei ELVISBYE und EXPRSRTL ersetzt die Folge ab `0368h` den ansonsten dort vorhandenen Dateninhalt vollständig bis zur Payloadgrenze.
+
+Das ist mit einer gezielten Datenvariation oder einem besonderen End-/Füllbereich vereinbar. Es beweist weder eine Kompressionsregel noch, dass die Bytes `DD 02` bzw. `63 02` als RLE-Steuerzeichen interpretiert werden. Die Commodore-GEOS-Kompressionsbeschreibung bleibt eine Fremdplattform-Vergleichsquelle und darf nicht auf PC/GEOS 1.x übertragen werden.
+
+### Nächste technische Prüfung
+
+1. Die Bedeutung des Bitmap-Befehls-Längenfelds und der nachfolgenden vier Bytes `40 00 28 00` anhand originaler PC/GEOS-1.x-Quellen oder eines disassemblierten 1.x-Decoders bestimmen.
+2. Die Bytefolge vor `0368h` als GString-/Bitmap-Payload im PC/GEOS-1.x-Kontext klassifizieren; insbesondere klären, ob die wiederholten Bytes ab `0368h` Daten, Padding oder ein besonderer Abschlussbereich sind.
+3. Den vier Byte langen Ressourcenrest `03ECh–03EFh` separat weiterverfolgen.
+4. Erst nach Decoder- oder Loadernachweis die Relokationseinträge `DD 02 DD 02` und `63 02 63 02` semantisch klassifizieren.
+
+**SDK-Folge:** Keine Parseränderung. Die erste Abweichung bei `0368h` ist als reproduzierbarer Befund dokumentiert; die Interpretation bleibt offen.
