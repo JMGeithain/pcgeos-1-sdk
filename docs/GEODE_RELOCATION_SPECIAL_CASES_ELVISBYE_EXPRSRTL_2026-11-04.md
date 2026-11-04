@@ -95,3 +95,14 @@ An additional search was run across the complete `GEOWORKS(4).zip` archive:
 - Neither complete pattern was found in the other 261 GEO files.
 
 **Evidence limit:** This is an exact-pattern search for these two complete 136-byte sequences. It is not a complete decoder of all relocation tables and does not establish that the archive contains no other unknown `GRI_info` values. In particular, it does not semantically classify all individual occurrences of bytes `DDh` or `63h`.
+
+
+## Byte-level occurrences of the target offset words outside the repeated table
+
+A further raw-byte scan searched the two complete GEO files for the little-endian words `02 DD` (ELVIS target offset) and `63 02` (EXPRESS target offset).
+
+- In ELVISBYE, five additional occurrences of `DD 02` occur in resource 10 at file offsets `0D0Eh`, `0E69h`, `0E80h`, `0E86h`, and `0EB3h` (resource-relative offsets `0076h`, `01D1h`, `01E8h`, `01EEh`, `021Bh`).
+- The bytes surrounding all five occurrences are identical in ELVISBYE and EXPRSRTL.
+- In EXPRSRTL, no additional occurrence of `63 02` was found outside the 68-word repeated table and the four-byte relocation record.
+
+**Interpretation limit:** These are raw byte matches, not proven code references. Without disassembly, entry-point context, or runtime observation, they cannot be called pointer consumers. The asymmetry is recorded as a lead for subsequent analysis, not as evidence that the two applications use different relocation semantics.
