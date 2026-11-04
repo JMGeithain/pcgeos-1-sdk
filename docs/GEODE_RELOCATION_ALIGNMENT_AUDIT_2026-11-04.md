@@ -66,3 +66,22 @@ By contrast, the archive's small native 1.x audit helper uses p + size for reloc
 ## Method and limits
 
 The ZIP was CRC-tested. Header/resource table values and raw bytes were read directly from archived GEO members. Record alignment was tested by decoding four-byte little-endian records at both candidate offsets and checking source, type, and target bounds. This is a static structural check, not execution by the GeoManager loader. The result is strong evidence for the tested SPLAY file, not a complete specification of every PC/GEOS 1.x variant.
+
+
+## Cross-validation against seven native donor files
+
+A second read-only pass applied the current SDK parser's structural checks (header count consistency, resource bounds, paragraph-aligned relocation starts, four-byte relocation records, source/type limits, import bounds, and target bounds) to seven available GEOS 1.x donor files. All seven passed this bounded check:
+
+| File | Bytes | Resources | Relocation records |
+|---|---:|---:|---:|
+| NOTEPAD.GEO | 8,070 | 15 | 105 |
+| VIEWER.GEO | 59,984 | 37 | 877 |
+| TERM.GEO | 63,718 | 32 | 1,240 |
+| SPINTEXT.GEO | 3,764 | 11 | 58 |
+| SYSTEM/SVGA8004.GEO | 18,950 | 3 | 50 |
+| WORLD/BOUNCE.GEO | 3,572 | 11 | 46 |
+| SPLAY.GEO | 31,390 | 14 | 389 |
+
+The check was an independent script reproducing the current parser's structural rules, not a call to the repository's Python module and not a GeoManager load. The four user-supplied application files are known local inputs; SPINTEXT.GEO contains local demo/site strings and is not a pristine stock donor. BOUNCE and SVGA8004 came from the supplied GeoWorks archive. These results support the paragraph-aligned relocation offset for this bounded donor set; they do not prove every legacy relocation source/type is covered.
+
+A wider inventory also surfaced exceptional files whose relocation records do not satisfy the parser's current source/type restrictions (including a distinct DOCUMENT/SPLAY.GEO variant and some CD-player geodes). Do not broaden or weaken the accepted relocation source/type range without identifying the semantics of those records. Record these as separate compatibility cases, not as evidence against the SPLAY alignment result.
