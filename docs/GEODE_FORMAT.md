@@ -51,3 +51,10 @@ The upper nibble of `info` identifies the source class; the lower nibble identif
 The SDK starts from a known native 1.x application skeleton, preserves its import table and compatible resources, replaces dgroup/code/UI resources, appends a private engine resource, and rewrites the resource descriptor table and payload positions.
 
 This is safer than manufacturing every undocumented header field from zero in the first SDK release.
+
+
+## Open relocation special cases (2026-11-04)
+
+A static comparison of native GeoWorks 1.x `ELVISBYE.GEO`, `EXPRSRTL.GEO` and `SENDFAX2.GEO` found single four-byte resource-10 relocation records with info bytes `DDh`, `63h` and `23h`, respectively. The meanings of `DDh` and `63h` are not established. Both files also contain 68 repeated little-endian words in initialized resource data that match the respective relocation offset word (`02DDh` / `0263h`). This correlation is documented but its runtime meaning remains open.
+
+Do not broaden the parser's accepted relocation types based on these two examples, and do not label the values invalid without tracing the original 1.x loader. See [the dedicated audit](GEODE_RELOCATION_SPECIAL_CASES_ELVISBYE_EXPRSRTL_2026-11-04.md). No original GEO file or parser code was modified.
