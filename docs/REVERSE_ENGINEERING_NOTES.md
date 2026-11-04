@@ -66,3 +66,42 @@ The research baseline includes GeoWorks 1.2 installations and patched DOSBox/Bas
 ### Contribution rule
 
 No driver register sequence, kernel ordinal, object offset, callback signature, or ABI statement should enter the public API as established fact solely because it appears in a disassembly or later source tree. Require a provenance record and a reproducible validation plan first.
+
+## German GeoWorks 1.2 target — initial binary inventory (2026-11-04)
+
+This is an initial inventory of user-supplied files. It is not yet a completed target profile: the unmodified German kernel has not been supplied in this batch, and runtime compatibility has not been tested.
+
+### Supplied binary identities
+
+SHA-256 values are recorded exactly as calculated from the supplied files:
+
+| File | Size (bytes) | SHA-256 | Initial classification |
+|---|---:|---|---|
+| `KERNEL(5).EXE` | 72937 | `601d0ba51bbf45508dba1997974fda669928a8cd4478bf6f7557427a21a0d527` | Patched kernel according to prior project provenance; not the original German kernel |
+| `DOS5.OLD` | 6392 | `d76e8562da86e7025c839631928c17153d575654121737d9d7e717345118034d` | Original German DOS5 candidate |
+| `DOS5(1).GEO` | 6312 | `2b74f591044a5fa02b3a585c7c0392410096e5cd3bd7dd1b1c9d23e7cd7b6a23` | Patched DOS5 candidate |
+| `NOTEPAD.GEO` | 8070 | `a1ebd0cb84712a126b1f67f5fd1ca6b57f8bda2e9038e9224ba16ebc008f9ea9` | PC/GEOS 1.x container; internal application name “Notizblock” |
+| `SPINTEXT.GEO` | 3764 | `6a9ddda1c491438d29b10c044eb92e5b9e8bd701c922172dd6bb89988e2c1261` | PC/GEOS 1.x container; contains “3D Schrift Demo”, “Geithain” and “www.moellerjaner.de”; do not treat as an unmodified stock skeleton |
+| `TERM.GEO` | 63718 | `a62ebc0fb3c01acb4b59c8172d20d520653822a6d42f0bec4831dfdb93e1cf3a` | PC/GEOS 1.x container; internal application name “GeoComm” |
+| `VIEWER.GEO` | 59984 | `c884b76cdc4f9119d4794f7830d5438e0abcc1d92d3cc248aa912bde85ed43e7` | PC/GEOS 1.x container; internal application name “Quattro Pro Ansicht” |
+| `GEOS(4).INI` | 6960 | `ac83b8aae7381468247eeb805fc86342637ea9178006c892ab47c98d5c15e2da` | Configuration snapshot; GeoWorks 1.2, German keyboard configuration, BaseBox display and absolute-coordinate BaseBox mouse |
+
+### Direct comparison: DOS5
+
+The supplied `DOS5.OLD` and `DOS5(1).GEO` are not identical. Their sizes differ by 80 bytes (6392 versus 6312), and a byte-level comparison shows changes in executable code and message/data regions. The old file contains German disk-related messages, while the candidate patched file contains corresponding English messages. This supports keeping them as separate original and patched test inputs; it does not by itself establish every patch's purpose or runtime effect.
+
+### Container and target cautions
+
+All five supplied `.GEO` files begin with the observed byte signature `C7 45 CF 53`. Record this as a raw observation; do not infer full ABI compatibility from the signature alone.
+
+The supplied `GEOS.INI` selects `BB96_64.GEO` for the active screen and `CTMABS.GEO` for the mouse. It is therefore a BaseBox configuration snapshot, not evidence of operation with physical SVGA hardware.
+
+The supplied `SPINTEXT.GEO` hash does not match the existing SDK 0.1 Pro 1.2 donor hash. Its embedded demo and personal-site strings also make it unsuitable as an assumed stock donor until its provenance and intended role are confirmed.
+
+### Outstanding evidence required
+
+- Obtain the unmodified German `KERNEL.OLD` and calculate its hash. Do not substitute the supplied patched `KERNEL(5).EXE`.
+- Confirm the exact installation provenance of the four application GEO files and whether any are locally modified.
+- Parse and validate the complete GEODE headers, export/import tables, resource maps, and protocol requirements against the SDK parser.
+- Establish a separate German GeoWorks 1.2 target profile only after the kernel and application identities are confirmed.
+- Perform runtime tests independently on the unmodified and patched environments. No runtime compatibility claim is made by this inventory.
