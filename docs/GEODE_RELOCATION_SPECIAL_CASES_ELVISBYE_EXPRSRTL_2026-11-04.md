@@ -132,3 +132,63 @@ The 68-fold byte repetition remains a correct observation. Its interpretation as
 **Consequence for further work:** The relocation record `DD 02 DD 02` or `63 02 63 02` has an offset word that lands inside a region structurally identified as bitmap data. This makes a special GString/bitmap relocation relationship a new working hypothesis. It does not prove which loader operation `GRI_info=DDh` or `63h` performs.
 
 This qualification supersedes the earlier pointer-table hypothesis. The byte observations remain valid; only their interpretation is corrected.
+
+
+## 13. Korrektur/Präzisierung: Einbettung in den Bitmap-GString
+
+Eine erneute bytegenaue Prüfung des Anfangs von Ressource 10 zeigt unmittelbar vor dem auffälligen Datenbereich einen GString-Bitmap-Befehl:
+
+- Ressourcenrelativer Offset `002Fh` (Dateioffset `0CC7h`): Opcode `1Ah`.
+- Darauf folgen `B6 03`, als Little-Endian-Wert `03B6h`.
+- Danach stehen `40 00 28 00` sowie die Bitmap-Daten.
+- Der Beginn der Bitmap-Daten liegt bei Ressourcenoffset `0036h`.
+
+Die Rechnung `0036h + 03B6h = 03ECh` stimmt exakt mit dem im Ressourcenheader bei Offset `0008h` gespeicherten Wert `03ECh` überein. Der Ressourcenheader enthält außerdem bei Offset `0014h` den Wert `03F0h`; der Relokationsstrom beginnt bei `03F0h` relativ zur Ressource (Dateioffset `1088h`). Das ist ein starker struktureller Beleg dafür, dass die `03B6h`-Bytefolge ab `0036h` den Bitmap-Datenbereich bis unmittelbar vor `03ECh` beschreibt. Die exakte Semantik sämtlicher Ressourcenheaderfelder ist damit noch nicht vollständig spezifiziert.
+
+Daraus folgt eine wichtige Präzisierung der früheren Interpretation:
+
+- Der Bereich `0368h–03EBh` umfasst 132 Bytes = 66 Wörter und liegt innerhalb des durch den Bitmap-Befehl beschriebenen Datenbereichs.
+- Die letzten vier Bytes `03ECh–03EFh` (zwei weitere Wörter `DD 02` bzw. `63 02`) liegen nach dem berechneten Bitmap-Datenende, aber noch innerhalb der Ressourcengröße `03F0h`.
+- Der zuvor als 68-Wort-Tabelle beschriebene Gesamtbereich ist also **keine nachgewiesene Pointertabelle**. Mindestens 66 der 68 Wörter sind Teil der Bitmap-Datenbytes; die letzten zwei Wörter sind ein separater vier Byte langer Restbereich, dessen Bedeutung offen bleibt.
+- Die Zieloffsets `02DDh` und `0263h` liegen ebenfalls innerhalb des Bitmap-Datenbereichs `0036h–03EBh`.
+- Die fünf zusätzlichen Rohbyte-Treffer von `DD 02` bei Ressourcenoffsets `0076h`, `01D1h`, `01E8h`, `01EEh` und `021Bh` liegen ebenfalls im Bitmap-Datenbereich. Sie dürfen daher nicht als Code-Pointer-Referenzen bezeichnet werden.
+
+Die 68-fache Wiederholung ist weiterhin als bytegenaue Beobachtung korrekt. Ihre Deutung als Offset-/Pointertabelle wird jedoch zurückgenommen. Eine mögliche Erklärung ist, dass die Werte zur kodierten Bitmapdarstellung gehören; das genaue Kompressions-/Bitmapdatenformat ist hier noch nicht vollständig dekodiert.
+
+**Folgerung für die weitere Arbeit:** Der Relokationseintrag `DD 02 DD 02` bzw. `63 02 63 02` verweist mit seinem Offsetwort in einen Bereich, der strukturell als Bitmapdatenbereich ausgewiesen ist. Das macht eine spezielle GString-/Bitmap-Relokationsbeziehung zu einer neuen Arbeitshypothese. Es beweist noch nicht, welche Loader-Operation `GRI_info=DDh` oder `63h` ausführt.
+
+Diese Präzisierung ersetzt die frühere Vermutung einer 68-Einträge-Pointertabelle. Alle Bytebeobachtungen bleiben erhalten; nur die Interpretation wird korrigiert.
+
+
+## 14. Kontrollvergleich mit SENDFAX2.GEO
+
+Als Kontrollfall wurde dieselbe Ressource 10 in `SENDFAX2.GEO` untersucht. Die drei Dateien besitzen an den geprüften Strukturstellen denselben Aufbau:
+
+- Ressourcenheader ab Dateioffset `0C98h` mit dem Wert `03ECh` bei Ressourcenoffset `0008h` und `03F0h` bei Ressourcenoffset `0014h`.
+- GString-Bitmap-Opcode `1Ah` bei Ressourcenoffset `002Fh`.
+- Danach derselbe Längenwert `03B6h` und dieselben vier Bytes `40 00 28 00`.
+- Der Bitmap-Datenbereich beginnt damit in allen drei Fällen bei `0036h`; die Rechnung `0036h + 03B6h = 03ECh` ist für alle drei identisch.
+- Der Relokationsstrom beginnt in allen drei Dateien bei Ressourcenoffset `03F0h`.
+
+Der Vergleich des Ressourcenendes zeigt jedoch drei unterschiedliche Datenmuster:
+
+| Datei | Ressourcenoffset `03ECh–03EFh` | Relokationsdatensatz ab `03F0h` |
+|---|---|---|
+| `ELVISBYE.GEO` | `DD 02 DD 02` | `DD 02 DD 02` |
+| `EXPRSRTL.GEO` | `63 02 63 02` | `63 02 63 02` |
+| `SENDFAX2.GEO` | `00 00 00 00` | `23 00 00 00` |
+
+Damit ist jetzt ein zusätzlicher Vergleichspunkt gesichert: In ELVISBYE und EXPRSRTL wiederholt sich das jeweilige Zwei-Byte-Muster unmittelbar über die rechnerische Bitmap-Datengrenze hinweg und anschließend nochmals im vier Byte langen Relokationsdatensatz. In SENDFAX2 endet der Bitmap-Datenbereich dagegen mit vier Nullbytes; der Relokationsdatensatz ist der bislang zugeordnete Wert `23 00 00 00`.
+
+**Was dieser Vergleich belegt:** Die Ressource und der Bitmap-GString-Aufbau sind nicht nur zufällig ähnlich; die drei Dateien teilen dieselben Strukturwerte und dieselbe berechnete Bitmap-Datengrenze. Zugleich ist das auffällige `DD 02`-/`63 02`-Muster nicht einfach ein allgemeines Merkmal jeder solchen Ressource: Im Kontrollfall SENDFAX2 tritt es an dieser Stelle nicht auf.
+
+**Was weiterhin offen bleibt:** Der Vergleich erklärt nicht, warum die Bytes `DD 02` bzw. `63 02` in ELVISBYE/EXPRSRTL sowohl am Ende des Bitmap-Datenbereichs als auch im Relokationsdatensatz stehen. Er beweist insbesondere nicht, dass die vier Bytes bei `03ECh–03EFh` vom Bitmap-Decoder gelesen werden oder dass der Loader sie als Verweis auf Bitmapdaten behandelt. Die Beziehung zwischen Bitmap-Ende, vier Byte langem Ressourcenrest und Relokationsdatensatz bleibt daher eine gezielte offene Frage.
+
+### Aktualisierte nächste Prüfschritte
+
+1. Die GString-Bitmap-Kommando-Spezifikation für Opcode `1Ah` anhand einer originalen PC/GEOS-1.x-Quelle verifizieren: insbesondere Bedeutung des Längenworts, der Koordinatenbytes und die Frage, ob die Länge ausschließlich Bitmapdaten oder einen größeren Befehlsteil umfasst.
+2. Die letzten 16 bis 32 Bytes des Bitmap-Datenbereichs in allen drei Dateien vergleichen und prüfen, ob `DD 02`/`63 02` in ELVISBYE/EXPRSRTL als reguläre komprimierte Bitmapdaten dekodierbar sind.
+3. Den vier Byte langen Bereich `03ECh–03EFh` getrennt vom Bitmapdatenbereich und getrennt vom Relokationsstrom behandeln, bis seine Funktion nachgewiesen ist.
+4. Im originalen GeoManager-Lader die Verarbeitung des Relokationsdatensatzes `DD 02 DD 02` bzw. `63 02 63 02` verfolgen. Erst daraus lässt sich die Bedeutung der Info-Bytes belastbar bestimmen.
+
+**SDK-Folge:** Keine Änderung an Parser oder Loaderannahmen. `SENDFAX2.GEO` ist ein nützlicher struktureller Kontrollfall, aber kein Beweis für die Bedeutung der unbekannten Werte `DDh` und `63h`.
