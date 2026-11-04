@@ -106,3 +106,29 @@ A further raw-byte scan searched the two complete GEO files for the little-endia
 - In EXPRSRTL, no additional occurrence of `63 02` was found outside the 68-word repeated table and the four-byte relocation record.
 
 **Interpretation limit:** These are raw byte matches, not proven code references. Without disassembly, entry-point context, or runtime observation, they cannot be called pointer consumers. The asymmetry is recorded as a lead for subsequent analysis, not as evidence that the two applications use different relocation semantics.
+
+
+## Correction/qualification: bitmap GString context
+
+A byte-level recheck of the beginning of resource 10 identifies a bitmap command immediately before the data region:
+
+- Resource-relative offset `002Fh` (file offset `0CC7h`): opcode `1Ah`.
+- It is followed by `B6 03`, the little-endian value `03B6h`.
+- Next are `40 00 28 00`, followed by bitmap data.
+- The bitmap data begins at resource-relative offset `0036h`.
+
+The arithmetic `0036h + 03B6h = 03ECh` exactly matches the value `03ECh` stored in the resource header at offset `0008h`. The header also contains `03F0h` at offset `0014h`; the relocation stream begins at resource-relative `03F0h` (file offset `1088h`). This is strong structural evidence that the `03B6h)-byte sequence beginning at `0036h` is the bitmap-data region ending immediately before `03ECh`. The exact semantics of every resource-header field are not yet fully specified.
+
+This requires an important qualification of the earlier interpretation:
+
+- Resource-relative range `0368h–03EBh` is 132 bytes = 66 words and lies inside the bitmap-data region described by the bitmap command.
+- The final four bytes `03ECh–03EFh` (two more words `DD 02` or `63 02`) lie after the calculated bitmap-data end, but remain inside the declared resource size `03F0h`.
+- Thus, the previously described 68-word run is **not an established pointer table**. At least 66 of the 68 words are bitmap-data bytes; the final two words are a separate four-byte tail whose meaning remains open.
+- Target offsets `02DDh` and `0263h` also lie inside the bitmap-data range `0036h–03EBh`.
+- The five additional raw `DD 02` matches at resource-relative offsets `0076h`, `01D1h`, `01E8h`, `01EEh`, and `021Bh` also lie inside that bitmap-data region. They must not be called code-pointer references.
+
+The 68-fold byte repetition remains a correct observation. Its interpretation as an offset/pointer table is withdrawn. One possible explanation is that these values belong to the encoded bitmap representation; the precise bitmap compression/data format has not yet been fully decoded.
+
+**Consequence for further work:** The relocation record `DD 02 DD 02` or `63 02 63 02` has an offset word that lands inside a region structurally identified as bitmap data. This makes a special GString/bitmap relocation relationship a new working hypothesis. It does not prove which loader operation `GRI_info=DDh` or `63h` performs.
+
+This qualification supersedes the earlier pointer-table hypothesis. The byte observations remain valid; only their interpretation is corrected.
