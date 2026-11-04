@@ -192,3 +192,27 @@ Damit ist jetzt ein zusätzlicher Vergleichspunkt gesichert: In ELVISBYE und EXP
 4. Im originalen GeoManager-Lader die Verarbeitung des Relokationsdatensatzes `DD 02 DD 02` bzw. `63 02 63 02` verfolgen. Erst daraus lässt sich die Bedeutung der Info-Bytes belastbar bestimmen.
 
 **SDK-Folge:** Keine Änderung an Parser oder Loaderannahmen. `SENDFAX2.GEO` ist ein nützlicher struktureller Kontrollfall, aber kein Beweis für die Bedeutung der unbekannten Werte `DDh` und `63h`.
+
+
+## 15. RLE-Hinweis zur Folge DD 02 (Vergleichsquelle, noch kein PC/GEOS-Beweis)
+
+Bei der Prüfung der Bitmapdaten fiel auf, dass die Folge `DD 02` auch als mögliches Kompressionsmuster gelesen werden kann. Eine veröffentlichte technische Beschreibung der Bitmapkompression von Commodore-GEOS nennt `DD–FF` als Bigcount-Marker: Auf den Marker folgt ein Bigcount-Byte; anschließend werden die folgenden `count - DC` Bytes entsprechend dem Bigcount wiederholt und als innerer Datenstrom nach Repeat-/Unique-Regeln interpretiert. Für `DD 02` bedeutet dies nicht, dass die beiden Bytes isoliert ein vollständiges Paket bilden; die nachfolgenden Bytes müssen in die Dekodierung einbezogen werden.
+
+**Wichtige Versions- und Plattformgrenze:** Die Beschreibung bezieht sich auf Commodore-GEOS und Photo Scraps/BitmapUp. Sie ist keine Spezifikation von PC/GEOS 1.x und darf nicht ungeprüft auf den GString-Bitmapbefehl übertragen werden.
+
+### Bytegenaue Einordnung
+
+- Im Bereich `0368h–03EBh` liegen 132 Bytes, also 66 Paare `DD 02` in ELVISBYE bzw. `63 02` in EXPRSRTL.
+- Im Bereich `03ECh–03EFh` liegen weitere vier Bytes, also zwei weitere Paare außerhalb des rechnerischen Bitmapdatenbereichs.
+- Bei SENDFAX2.GEO ist diese repetitive Folge nicht vorhanden; der entsprechende Bereich enthält eine andere Bytefolge.
+
+Nach der Commodore-GEOS-Tabelle wäre `63h` ein Unique-Marker (`81h–DBh`) und würde 227 wörtliche Bytes ankündigen. Das passt nicht unmittelbar zur beobachteten alternierenden Folge `63 02`. Damit zeigt gerade EXPRSRTL, warum eine ungeprüfte Übertragung dieser Fremdplattformregel unzulässig ist.
+
+### Ergebnis und Konsequenz
+
+1. `DD 02` ist formal mit einem Bigcount-Anfang der dokumentierten Commodore-GEOS-Kompression vereinbar; die vollständige Dekodierung hängt aber von den nachfolgenden Bytes ab.
+2. Dieselbe Regel erklärt `63 02` nicht als entsprechende kurze Wiederholung.
+3. Es liegt weiterhin kein Nachweis vor, dass PC/GEOS 1.x dieselbe Kompression oder dieselben Kontrollbytes verwendet.
+4. Der PC/GEOS-1.x-Decoder bzw. eine originale 1.x-Spezifikation muss direkt untersucht werden.
+
+**SDK-Regel:** Keine Parseränderung. Commodore-GEOS-Dokumentation bleibt eine ausdrücklich gekennzeichnete Vergleichsquelle und ist kein Beleg für das PC/GEOS-1.x-Binärformat.
