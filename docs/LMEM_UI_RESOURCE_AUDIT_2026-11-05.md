@@ -157,3 +157,30 @@ Die aktuelle Sonderliste in `build_basic_ui()` (0020h-Handles der generierten Re
 - Originaldateien und SDK-Code bleiben während dieser statischen Auditphase unverändert.
 - Kein Build oder Patch, bis die relevanten Strukturen ausreichend verstanden und dokumentiert sind.
 - Messwerte, gesicherte Beobachtungen und Hypothesen sind in diesem Dossier ausdrücklich getrennt.
+
+
+## 9. Zeitgenössische Systemdokumentation (10.11.1990)
+
+Als zusätzliche Referenz wurde die GeoWorks-Dokumentation *PC/GEOS System Software Overview*, Entwurfsfassung vom 10. November 1990, ausgewertet. Sie ist eine zeitgenössische PC/GEOS-Systembeschreibung und damit näher am Zielsystem 1.x als spätere FreeGEOS-/PC/GEOS-2.x-Unterlagen.
+
+Quelle: Lyon Labs, PDF, Seiten 38–40:
+https://www.lyonlabs.org/commodore/onrequest/geos/PC-GEOS-System-Software-Overview.pdf
+
+Dort wird ausdrücklich beschrieben:
+
+- Ein lokaler Heap wird innerhalb eines globalen Speicherblocks angelegt; vor der Initialisierung wird der Block alloziert und gelockt.
+- `LMemInitHeap` initialisiert den Heap ab einem bestimmten Offset; der Heap reicht von dort bis zum Ende des Blocks.
+- Der `LMemBlockHeader` liegt am Anfang des Blocks. Die Abbildung bezeichnet ihn als 16 Byte groß.
+- Die lokale Handle-Tabelle enthält die Chunk-Handles. Ein Chunk-Handle ist ein Offset in den Block auf den Tabelleneintrag, an dem der tatsächliche Chunk-Offset gespeichert ist.
+- Die tatsächlichen Chunk-Positionen können sich durch LMem-Operationen ändern; gespeichert werden soll deshalb der Handle und nicht ein zuvor dereferenzierter Offset.
+- Ein Objektblock verwendet diesen LMem-Heap; jedes Objekt wird als eigener Chunk abgelegt. Die Kombination aus globalem Block-Handle und Chunk-Handle bildet den Object Descriptor (OD).
+
+### Aussagegrenze
+
+Die Dokumentation bestätigt das allgemeine LMem-Modell und die Rolle von LMem bei UI-Objekten. Sie erklärt in den ausgewerteten Passagen **nicht** die Bytewerte 02h, 03h und 07h in der Handle-Tabelle unserer GEO-Ressourcen. Daraus wird keine Flag-Semantik abgeleitet.
+
+Insbesondere bestätigt die Dokumentation nicht, dass das Generatorfeld `ignore_dirty` tatsächlich ein historisches Dirty-Bit steuert. Dieser Parametername bleibt eine interne Bezeichnung des SDK-Codes, bis Kernel-/Loader-Code oder eine passende 1.x-Strukturdefinition die Semantik belegt.
+
+### Konsequenz für die weitere Analyse
+
+Die nächste belastbare Spur ist die konkrete Implementierung von LMem im PC/GEOS-1.x-Kernel bzw. der Ressourcendatei-Lader. Die Dokumentation liefert zwar die abstrakte Struktur, aber keine ausreichende Grundlage, um die Flag-Bits oder die Leer-Handle-Codierung im Generator zu ändern.
