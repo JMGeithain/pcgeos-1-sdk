@@ -272,3 +272,30 @@ Die in Abschnitt 14 beschriebene Übereinstimmung der Bytes am Ressourcenende un
 **Nicht bewiesen** ist weiterhin, ob die Wiederholung innerhalb der Bitmapdaten vom Bitmap-Decoder als komprimierte Bilddaten interpretiert wird, ob der vier Byte lange Rest eine separate Funktion hat oder ob eine spezielle Beziehung zum Relokationsdatensatz besteht. Die Opcode-Semantik von `1Ah` ist anhand einer originalen PC/GEOS-1.x-Quelle noch nicht verifiziert.
 
 **SDK-Konsequenz:** Die Parser- und Loaderregeln bleiben unverändert. Die 68-Wort-Folge darf weder als Pointertabelle noch als nachgewiesene Bitmap-Kompressionsanweisung klassifiziert werden.
+
+
+## 16. Archivweiter Vergleich der Bitmap-Befehlslängen: fehlendes Null-Ende bei ELVISBYE/EXPRSRTL
+
+Im Archiv wurden 184 Fundstellen des Byte-Musters `1A ?? ?? 40 00 28 00` in GEO-Dateien gefunden. Für jede Fundstelle wurde der 16-Bit-Wert unmittelbar nach Opcode `1Ah` little-endian gelesen und die Byteposition `Opcode-Offset + 3 + Längenwert` geprüft.
+
+Ergebnis: Bei 182 von 184 Fundstellen steht an dieser berechneten Position das Byte `00`. Die beiden Ausnahmen sind genau die hier untersuchten Dateien:
+
+| Datei | Opcode-Dateioffset | Längenwert | berechnete Position | dort gespeichertes Byte |
+|---|---:|---:|---:|---:|
+| `ELVISBYE.GEO` | `0CC7h` | `03B6h` | `1090h` | außerhalb der Datei |
+| `EXPRSRTL.GEO` | `0CC7h` | `03B6h` | `1090h` | außerhalb der Datei |
+
+Die beiden Dateien enden bei Dateioffset `1090h` (letztes vorhandenes Byte: `108Fh`). Der erwartete Nullwert liegt somit exakt eine Position hinter dem Dateiende. Die Bytes von Dateioffset `1088h` bis `108Fh` enthalten in ELVISBYE acht Bytes `DD 02 DD 02 DD 02 DD 02`, in EXPRSRTL acht Bytes `63 02 63 02 63 02 63 02`. Diese acht Bytes umfassen den zuvor identifizierten Relokationsbereich ab Ressourcenoffset `03F0h`; sie sind nicht als Bitmapdaten oder als GString-Endopcode zu klassifizieren, solange die Ressourcen-/Relokationsstruktur nicht vollständig geklärt ist.
+
+**Bedeutung des Befunds:** Die Längen-/Ende-Beziehung, die bei 182 Vergleichsfunden auf ein Nullbyte führt, ist bei ELVISBYE und EXPRSRTL anomal. Die erwartete Position liegt außerhalb der vorhandenen Datei; es fehlt also nicht lediglich ein Nullbyte innerhalb des Bitmapdatenbereichs. Der Wert `03B6h` kann in diesen beiden Fällen nicht ohne Weiteres mit derselben Interpretation wie bei den 182 Vergleichsfunden verwendet werden.
+
+**Wichtige Einschränkung:** Das Byte-Muster ist ein Suchkriterium und kein vollständiger Parsernachweis. Die 182 Treffer sind deshalb Vergleichsfälle, nicht automatisch 182 unabhängig validierte GString-Objekte. Ebenso beweist die Abweichung nicht, ob die Längenangabe fehlerhaft, speziell kodiert oder durch eine ungewöhnliche Ressourcen-/Relokationsanordnung beeinflusst ist.
+
+### Konsequenz und nächste Prüfung
+
+1. Die Ressourcenlänge, den Dateiende-Offset und den Beginn/Umfang des Relokationsstroms für diese beiden Dateien erneut gemeinsam modellieren.
+2. Bei den 182 Vergleichsfunden prüfen, ob das Nullbyte tatsächlich jeweils ein GString-Terminator ist oder ob es nur aufgrund der Signatur-/Längen-Korrelation dort steht.
+3. ELVISBYE/EXPRSRTL mit weiteren GEO-Dateien desselben Programmzweigs vergleichen, insbesondere hinsichtlich identischer Ressourcenheader und Dateigrößen.
+4. Keine automatische Korrektur des Längenwerts und keine Änderung des Parsers vornehmen.
+
+**SDK-Status:** Neuer, reproduzierbarer Anomaliebefund. Die Interpretation von Opcode `1Ah` und seines Längenfelds bleibt bis zur Prüfung der originalen PC/GEOS-1.x-Parserroutine offen.
