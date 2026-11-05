@@ -274,28 +274,78 @@ Die in Abschnitt 14 beschriebene Übereinstimmung der Bytes am Ressourcenende un
 **SDK-Konsequenz:** Die Parser- und Loaderregeln bleiben unverändert. Die 68-Wort-Folge darf weder als Pointertabelle noch als nachgewiesene Bitmap-Kompressionsanweisung klassifiziert werden.
 
 
-## 16. Archivweiter Vergleich der Bitmap-Befehlslängen: fehlendes Null-Ende bei ELVISBYE/EXPRSRTL
+## 16. Korrektur: berechneter Bitmap-Endpunkt liegt bei 1080h, nicht außerhalb der Datei
 
-Im Archiv wurden 184 Fundstellen des Byte-Musters `1A ?? ?? 40 00 28 00` in GEO-Dateien gefunden. Für jede Fundstelle wurde der 16-Bit-Wert unmittelbar nach Opcode `1Ah` little-endian gelesen und die Byteposition `Opcode-Offset + 3 + Längenwert` geprüft.
+Die vorherige Fassung dieses Abschnitts enthielt einen Rechenfehler. Die Position wurde fälschlich als `1090h` angegeben. Die korrekte Rechnung lautet:
 
-Ergebnis: Bei 182 von 184 Fundstellen steht an dieser berechneten Position das Byte `00`. Die beiden Ausnahmen sind genau die hier untersuchten Dateien:
+- Opcode-Dateioffset: `0CC7h`
+- Längenwert: `03B6h`
+- Endpunkt nach der verwendeten Suchformel: `0CC7h + 3 + 03B6h = 1080h`
 
-| Datei | Opcode-Dateioffset | Längenwert | berechnete Position | dort gespeichertes Byte |
-|---|---:|---:|---:|---:|
-| `ELVISBYE.GEO` | `0CC7h` | `03B6h` | `1090h` | außerhalb der Datei |
-| `EXPRSRTL.GEO` | `0CC7h` | `03B6h` | `1090h` | außerhalb der Datei |
+Der Endpunkt liegt damit **innerhalb** der 4.240 Byte langen Datei (Dateigröße `1090h`) und nicht außerhalb. Bei `1080h` stehen:
 
-Die beiden Dateien enden bei Dateioffset `1090h` (letztes vorhandenes Byte: `108Fh`). Der erwartete Nullwert liegt somit exakt eine Position hinter dem Dateiende. Die Bytes von Dateioffset `1088h` bis `108Fh` enthalten in ELVISBYE acht Bytes `DD 02 DD 02 DD 02 DD 02`, in EXPRSRTL acht Bytes `63 02 63 02 63 02 63 02`. Diese acht Bytes umfassen den zuvor identifizierten Relokationsbereich ab Ressourcenoffset `03F0h`; sie sind nicht als Bitmapdaten oder als GString-Endopcode zu klassifizieren, solange die Ressourcen-/Relokationsstruktur nicht vollständig geklärt ist.
+| Datei | Byte bei `1080h` |
+|---|---:|
+| `ELVISBYE.GEO` | `DDh` |
+| `EXPRSRTL.GEO` | `63h` |
+| `SENDFAX2.GEO` | `00h` |
 
-**Bedeutung des Befunds:** Die Längen-/Ende-Beziehung, die bei 182 Vergleichsfunden auf ein Nullbyte führt, ist bei ELVISBYE und EXPRSRTL anomal. Die erwartete Position liegt außerhalb der vorhandenen Datei; es fehlt also nicht lediglich ein Nullbyte innerhalb des Bitmapdatenbereichs. Der Wert `03B6h` kann in diesen beiden Fällen nicht ohne Weiteres mit derselben Interpretation wie bei den 182 Vergleichsfunden verwendet werden.
+Die Position `1080h` ist der Anfang des letzten Acht-Byte-Abschnitts vor dem bisher aus dem Ressourcenheader abgeleiteten Relokationsbeginn `1088h`. Von `1080h` bis `1087h` stehen:
 
-**Wichtige Einschränkung:** Das Byte-Muster ist ein Suchkriterium und kein vollständiger Parsernachweis. Die 182 Treffer sind deshalb Vergleichsfälle, nicht automatisch 182 unabhängig validierte GString-Objekte. Ebenso beweist die Abweichung nicht, ob die Längenangabe fehlerhaft, speziell kodiert oder durch eine ungewöhnliche Ressourcen-/Relokationsanordnung beeinflusst ist.
+- ELVISBYE: `DD 02 DD 02 DD 02 DD 02`
+- EXPRSRTL: `63 02 63 02 63 02 63 02`
+- SENDFAX2: `00 01 0D D0 FB 00 FC DD`
+
+Damit ist die frühere Aussage, das erwartete Nullbyte liege exakt hinter dem Dateiende, zurückzunehmen. Die Bytes bei `1080h` gehören zu einem vorhandenen Datenbereich und müssen im Zusammenhang mit dem acht Byte langen Bereich bis `1087h` untersucht werden.
+
+Die archivweite Rohsuche bleibt als Zählung unverändert: 184 Treffer des Suchmusters `1A ?? ?? 40 00 28 00`; an der jeweils nach der bisherigen Formel berechneten Position stehen bei 182 Treffern `00h`, bei einem Treffer `DDh` (ELVISBYE) und bei einem Treffer `63h` (EXPRSRTL). Diese 184 Fundstellen sind **Rohsignaturtreffer**, keine 184 unabhängig validierten GString-Befehle.
+
+Die zwei Treffer in jeder der drei Vergleichsdateien sind:
+- Erster Treffer bei `0B53h`, Länge `0138h`, berechnete Position `0C8Eh`, Byte dort `00h`.
+- Zweiter Treffer bei `0CC7h`, Länge `03B6h`, berechnete Position `1080h`, Byte dort wie oben tabelliert.
+
+**Korrekturstatus:** Die Aussage „außerhalb der Datei“ ist vollständig aufgehoben. Offen bleibt, welche genaue Semantik die Längenangabe und die berechnete Position bei Opcode `1Ah` in PC/GEOS 1.x besitzen. Die Rohsignaturstatistik allein beweist keine Terminatorregel.
 
 ### Konsequenz und nächste Prüfung
 
-1. Die Ressourcenlänge, den Dateiende-Offset und den Beginn/Umfang des Relokationsstroms für diese beiden Dateien erneut gemeinsam modellieren.
-2. Bei den 182 Vergleichsfunden prüfen, ob das Nullbyte tatsächlich jeweils ein GString-Terminator ist oder ob es nur aufgrund der Signatur-/Längen-Korrelation dort steht.
-3. ELVISBYE/EXPRSRTL mit weiteren GEO-Dateien desselben Programmzweigs vergleichen, insbesondere hinsichtlich identischer Ressourcenheader und Dateigrößen.
-4. Keine automatische Korrektur des Längenwerts und keine Änderung des Parsers vornehmen.
+1. Die Bytes `1080h–1087h` als eigenen acht Byte langen Bereich erfassen.
+2. Die acht Bytes `1088h–108Fh` getrennt davon betrachten; ihre Interpretation als ein oder zwei Relokationsdatensätze ist noch zu belegen.
+3. Die Rohsignaturtreffer nicht als vollständig geparste GString-Objekte zählen.
+4. Keine automatische Korrektur der Bitmaplänge und keine Parseränderung vornehmen.
 
-**SDK-Status:** Neuer, reproduzierbarer Anomaliebefund. Die Interpretation von Opcode `1Ah` und seines Längenfelds bleibt bis zur Prüfung der originalen PC/GEOS-1.x-Parserroutine offen.
+**SDK-Status:** Rechenfehler korrigiert. Keine Parseränderung.
+
+## 17. Präzise Abgrenzung der letzten 16 Bytes und offene Datensatzanzahl
+
+Die Dateigröße aller drei Vergleichsdateien beträgt `1090h`. Der bisher aus dem Ressourcenheader abgeleitete Relokationsbeginn liegt bei Dateioffset `1088h`; damit verbleiben acht Bytes bis zum Dateiende `1090h`.
+
+Die letzten 16 Bytes ab `1078h` lauten:
+
+| Datei | Bytes `1078h–1087h` | Bytes `1088h–108Fh` |
+|---|---|---|
+| ELVISBYE.GEO | `DD 02 DD 02 DD 02 DD 02` | `DD 02 DD 02 DD 02 DD 02` |
+| EXPRSRTL.GEO | `63 02 63 02 63 02 63 02` | `63 02 63 02 63 02 63 02` |
+| SENDFAX2.GEO | `00 01 0D D0 FB 00 FC DD` | `23 00 00 00 00 00 00 00` |
+
+Die korrigierte Bitmap-Endrechnung ergibt `1080h`. Damit liegt der acht Byte lange Bereich `1080h–1087h` unmittelbar vor dem aus dem Header abgeleiteten Relokationsbeginn `1088h`. Für ELVISBYE und EXPRSRTL setzt sich das jeweilige Zweibytemuster über diese Grenze hinweg fort. SENDFAX2 zeigt an derselben Stelle eine andere Datenfolge.
+
+### Was sich daraus sicher ableiten lässt
+
+- Die acht Bytes `1080h–1087h` sind vorhanden und liegen vor dem Relokationsbeginn.
+- Die acht Bytes `1088h–108Fh` bilden den verbleibenden Dateibereich ab dem Relokationsbeginn.
+- In ELVISBYE und EXPRSRTL sind beide Acht-Byte-Bereiche jeweils mit demselben Zweibytemuster gefüllt.
+- In SENDFAX2 beginnt der Bereich bei `1088h` mit `23 00 00 00` und wird von vier Nullbytes gefolgt.
+
+### Was noch nicht bewiesen ist
+
+Die acht Bytes ab `1088h` dürfen nicht ohne weitere Formatprüfung als zwei vier Byte lange Relokationsdatensätze bezeichnet werden. Ebenso ist nicht abschließend belegt, ob die vier Nullbytes bei SENDFAX2 einen zweiten Null-/Leer-Datensatz, Padding oder eine andere Abschlussstruktur darstellen. Die bisherige Formulierung „ein vier Byte langer Datensatz“ war für die vollständige acht Byte lange Reststrecke zu eng und wird hier als vorläufige Beschreibung des ersten vier Byte Musters verstanden, nicht als abschließende Zählung aller Einträge.
+
+### Nächste statische Prüfungen
+
+1. Andere PC/GEOS-1.x-GEODEs mit acht Byte Relokationsrest und bekannten `GRI_info`-Werten suchen.
+2. Die acht Bytes nach dem Relokationsbeginn gegen die Ressourcenheaderangabe und die tatsächliche GEODE-Verzeichnisstruktur prüfen.
+3. Fälle mit einem bekannten Eintrag plus vier Nullbytes mit Fällen vergleichen, in denen zwei bekannte Einträge folgen.
+4. Im originalen 1.x-Lader die Schleife zum Lesen der Relokationseinträge verfolgen und feststellen, ob sie eine Anzahl, einen Endmarker oder eine feste Restlänge verwendet.
+5. Erst danach entscheiden, ob `DD 02 DD 02 DD 02 DD 02` und `63 02 63 02 63 02 63 02` zwei Datensätze, einen Sonderdatensatz plus Zusatzdaten oder eine andere Struktur darstellen.
+
+**SDK-Folge:** Keine Parseränderung. Die Datensatzanzahl ab `1088h` bleibt ausdrücklich offen.
