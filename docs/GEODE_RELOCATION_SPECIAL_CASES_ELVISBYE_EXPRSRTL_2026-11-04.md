@@ -249,3 +249,26 @@ Das ist mit einer gezielten Datenvariation oder einem besonderen End-/Füllberei
 4. Erst nach Decoder- oder Loadernachweis die Relokationseinträge `DD 02 DD 02` und `63 02 63 02` semantisch klassifizieren.
 
 **SDK-Folge:** Keine Parseränderung. Die erste Abweichung bei `0368h` ist als reproduzierbarer Befund dokumentiert; die Interpretation bleibt offen.
+
+
+## 15. Exakte Länge der wiederholten Bytefolge und Kontrollbereich
+
+Die erneute direkte Auslesung der drei Originaldateien aus `GEOWORKS(4).zip` präzisiert den Beginn und das Ende der Wiederholung:
+
+- Die Folge beginnt bei Ressourcenoffset `0368h`.
+- In `ELVISBYE.GEO` wiederholt sich ab dort das Paar `DD 02` ohne Unterbrechung bis zum Ende der Ressource bei `03F0h`.
+- In `EXPRSRTL.GEO` gilt dasselbe für `63 02`.
+- Die Folge umfasst somit 136 Bytes = 68 Zwei-Byte-Wörter.
+- Davon liegen `0368h–03EBh` (132 Bytes = 66 Wörter) innerhalb des rechnerisch bestimmten Bitmapdatenbereichs.
+- Die letzten vier Bytes `03ECh–03EFh` (zwei Wörter) liegen außerhalb dieses Bitmapdatenbereichs, aber noch innerhalb der Ressource.
+- Unmittelbar danach beginnt bei `03F0h` der separat gespeicherte Relokationsdatensatz.
+
+Der Kontrollvergleich an derselben Position in `SENDFAX2.GEO` zeigt kein entsprechendes Zweibyte-Muster: Bei `0368h` steht dort `DD 08`, gefolgt von abweichenden Daten. Damit ist die lange Wiederholung spezifisch für die beiden untersuchten Ressourcen ELVISBYE/EXPRSRTL und kein generelles Füll- oder Abschlussmuster dieser Ressource.
+
+### Wichtige Präzisierung zur vorherigen Darstellung
+
+Die in Abschnitt 14 beschriebene Übereinstimmung der Bytes am Ressourcenende und im Relokationsdatensatz bleibt bestehen. Der genaue Lauf der Wiederholung endet jedoch nicht bereits bei `03ECh`: Er setzt sich über die Grenze des berechneten Bitmapdatenbereichs hinweg bis `03EFh` fort. Deshalb ist die Folge als ein zusammenhängender 136-Byte-Lauf zu beschreiben, der sich strukturell in 132 Bytes Bitmapdaten und vier Bytes Ressourcenrest aufteilt.
+
+**Nicht bewiesen** ist weiterhin, ob die Wiederholung innerhalb der Bitmapdaten vom Bitmap-Decoder als komprimierte Bilddaten interpretiert wird, ob der vier Byte lange Rest eine separate Funktion hat oder ob eine spezielle Beziehung zum Relokationsdatensatz besteht. Die Opcode-Semantik von `1Ah` ist anhand einer originalen PC/GEOS-1.x-Quelle noch nicht verifiziert.
+
+**SDK-Konsequenz:** Die Parser- und Loaderregeln bleiben unverändert. Die 68-Wort-Folge darf weder als Pointertabelle noch als nachgewiesene Bitmap-Kompressionsanweisung klassifiziert werden.
