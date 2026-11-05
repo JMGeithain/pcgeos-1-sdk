@@ -146,3 +146,9 @@ Runtime debugging requires a DOS/GEOS test environment. Record loader messages, 
 ## ABI stability policy for SDK 0.1
 
 There is no stable binary ABI across SDK versions yet. Source compatibility is the goal, but the runtime, project schema, object templates and C API may change in 0.x releases. Pin SDK 0.1 for reproducible work.
+
+## Static LMem/UI resource audit (2026-11-05)
+
+The current LMem header and handle-flag investigation is recorded in [LMem and UI Resource Audit](LMEM_UI_RESOURCE_AUDIT_2026-11-05.md). It documents the measured SPINTEXT R03/R04 and VIEWER R0C/R1C resource headers, handle tables, empty-handle offsets, and bytewise object comparisons.
+
+Important status: the observed flags 02h, 03h and 07h are not yet semantically decoded. The `ignore_dirty` name in the current Python implementation is not evidence of original GEOS flag semantics. Do not change the generator's flag rules or empty-handle encoding based on the current observations alone. This remains a static PC/GEOS 1.x audit; no SDK patch or build was made.
