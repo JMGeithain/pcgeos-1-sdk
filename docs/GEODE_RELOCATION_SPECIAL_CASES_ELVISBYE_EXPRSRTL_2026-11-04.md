@@ -383,3 +383,30 @@ Die unterschiedlichen vier Bytes vor dem Endmuster zeigen außerdem, dass diese 
 4. Die Sonderfälle ELVISBYE und EXPRSRTL anhand des Lader-Codes und nicht allein anhand ihrer Endbytes klassifizieren.
 
 **SDK-Folge:** Keine Änderung. Der archivweite Treffer bestätigt die Häufigkeit des Vier-Byte-Musters `23 00 00 00`, nicht die Datensatzanzahl in den beiden Sonderdateien.
+
+
+## 19. Einzelprüfung der sieben Dateien mit acht Byte Abschlussmuster
+
+Die sieben GEO-Dateien, deren letzte acht Bytes exakt `23 00 00 00 00 00 00 00` lauten, wurden einzeln identifiziert:
+
+- `L_MAKER.GEO` (4.336 Bytes)
+- `FAXWEG1.GEO` bis `FAXWEG5.GEO` (je 3.984 Bytes)
+- `SENDFAX2.GEO` (4.240 Bytes)
+
+Bei allen sieben Dateien ist das Muster am Dateiende identisch. Die fünf FAXWEG-Dateien besitzen zusätzlich dieselbe letzte 16-Byte-Folge:
+
+`F6 DD 00 CC 00 00 00 00 23 00 00 00 00 00 00 00`
+
+Die fünf FAXWEG-Dateien sind trotz gleicher Dateigröße nicht byteidentisch: Ihre SHA-256-Prüfsummen unterscheiden sich. Der gemeinsame Endbereich ist daher ein stabiler Strukturvergleich, nicht bloß Folge identischer Dateien.
+
+Die Headerbytes im Bereich `0Ch–17h` unterscheiden sich zwischen den Beispielen. Bei den FAXWEG-Dateien stehen dort `03 00 05 00 00 00 00 00 46 41 58 57`, bei SENDFAX2 `02 00 0F 00 00 00 00 00 53 45 4E 44` und bei L_MAKER `06 00 17 00 00 00 00 00 4C 4E 43 48`. Die Bedeutung dieser Headerfelder ist in diesem Prüfschritt nicht neu bestimmt worden; insbesondere werden die Werte `03h`, `02h` und `06h` hier nicht als Ressourcenzahlen etikettiert.
+
+### Einordnung
+
+Der gemeinsame acht Byte lange Dateischluss ist ein weiterer Beleg dafür, dass die vier Nullbytes nach `23 00 00 00` als eigenständiger Abschlussbereich behandelt werden müssen, bis die Laderoutine die Struktur erklärt. Er beweist nicht, dass die Nullbytes ein zweiter leerer Relokationseintrag sind; ebenso wenig beweist er, dass sie immer bloß Padding sind.
+
+Die fünf FAXWEG-Dateien sind besonders nützlich für einen kontrollierten Vergleich, weil sie dieselbe Dateigröße und denselben letzten 16-Byte-Bereich besitzen, aber unterschiedliche Gesamtdatei-Hashes aufweisen.
+
+**Nächste Prüfung:** Die Ressourcentabellen und Verzeichnisgrenzen dieser fünf FAXWEG-Dateien sowie von SENDFAX2 getrennt rekonstruieren. Erst wenn der aus dem Header abgeleitete Relokationsbeginn und die tatsächliche Leseroutine bekannt sind, lässt sich die Bedeutung der vier Nullbytes belastbar entscheiden.
+
+**SDK-Folge:** Keine Änderung an Parser oder Loader. Die acht Byte am Dateiende bleiben als Muster `23 00 00 00 00 00 00 00` dokumentiert; die Interpretation der letzten vier Nullbytes bleibt offen.
