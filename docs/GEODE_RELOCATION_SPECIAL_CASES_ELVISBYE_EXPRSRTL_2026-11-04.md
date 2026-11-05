@@ -349,3 +349,37 @@ Die acht Bytes ab `1088h` dürfen nicht ohne weitere Formatprüfung als zwei vie
 5. Erst danach entscheiden, ob `DD 02 DD 02 DD 02 DD 02` und `63 02 63 02 63 02 63 02` zwei Datensätze, einen Sonderdatensatz plus Zusatzdaten oder eine andere Struktur darstellen.
 
 **SDK-Folge:** Keine Parseränderung. Die Datensatzanzahl ab `1088h` bleibt ausdrücklich offen.
+
+
+## 18. Archivweiter Vergleich der letzten vier Bytes: Häufigkeit von 23 00 00 00
+
+Eine erneute Rohdaten-Auswertung aller 263 GEO-Dateien aus `GEOWORKS(4).zip` hat die letzten vier Bytes jeder Datei gezählt.
+
+Ergebnis:
+- 207 von 263 GEO-Dateien enden mit `23 00 00 00`.
+- Bei 89 dieser 207 Dateien stehen unmittelbar davor vier Nullbytes, also insgesamt `00 00 00 00 23 00 00 00`.
+- Weitere häufige Vorgängerfolgen sind `CC CC CC CC` (27 Dateien), `DD 00 CC CC` (10 Dateien), `00 CC CC CC` (8 Dateien) und `69 69 69 69` (6 Dateien).
+
+Die sieben Dateien, die mit `23 00 00 00 00 00 00 00` enden, umfassen unter anderem `SENDFAX2.GEO` sowie fünf FAXWEG-Dateien und `L_MAKER.GEO`. Bei diesen Beispielen stehen also vier Nullbytes hinter dem abschließenden `23 00 00 00`-Muster.
+
+### Einordnung
+
+Die Häufigkeit von `23 00 00 00` am Dateiende ist ein starker archivweiter Vergleichsbefund. Sie ist mit der bereits dokumentierten Zuordnung von `23h` zu `GRS_RESOURCE / GRT_CALL` vereinbar. Die Statistik allein beweist jedoch nicht, dass jede der 207 Dateien denselben Ressourcentyp, dieselbe GEODE-Verzeichnisstruktur oder dieselbe Relokationslistenlänge besitzt.
+
+Die unterschiedlichen vier Bytes vor dem Endmuster zeigen außerdem, dass diese Vorgängerbytes nicht pauschal als Teil eines zweiten Relokationseintrags interpretiert werden dürfen. Sie können je nach Datei noch zum vorhergehenden Datenbereich gehören. Umgekehrt beweist die Endposition des Musters allein nicht, dass der Eintrag in jedem Fall der einzige Relokationseintrag der Datei ist.
+
+### Bedeutung für ELVISBYE / EXPRSRTL / SENDFAX2
+
+- SENDFAX2 endet mit `23 00 00 00 00 00 00 00`; das häufige Vier-Byte-Muster steht somit vor vier Nullbytes.
+- ELVISBYE und EXPRSRTL enden dagegen mit vier Wiederholungen ihres jeweiligen Zweibytemusters.
+- Das Archivverhalten macht es methodisch unzulässig, die letzten acht Bytes allein aufgrund ihrer Länge in zwei vier Byte lange Relokationseinträge zu zerlegen.
+- Die Startposition und Länge der Relokationsliste müssen aus der GEODE-/Ressourcenstruktur oder aus dem originalen PC/GEOS-1.x-Lader hergeleitet werden, nicht aus dem Dateiende-Muster allein.
+
+### Nächste Prüfungen
+
+1. Die 207 Endmuster-Dateien nach ihren jeweiligen Ressourcen- und GEODE-Verzeichnisangaben gruppieren.
+2. Für eine Stichprobe mit bekannten Ressourcendaten die Position des Relokationsbeginns unabhängig vom Dateiende ermitteln.
+3. Die sieben Dateien mit vier Nullbytes nach dem `23 00 00 00`-Muster gegen andere Dateien mit identischer Ressourcengröße vergleichen.
+4. Die Sonderfälle ELVISBYE und EXPRSRTL anhand des Lader-Codes und nicht allein anhand ihrer Endbytes klassifizieren.
+
+**SDK-Folge:** Keine Änderung. Der archivweite Treffer bestätigt die Häufigkeit des Vier-Byte-Musters `23 00 00 00`, nicht die Datensatzanzahl in den beiden Sonderdateien.
