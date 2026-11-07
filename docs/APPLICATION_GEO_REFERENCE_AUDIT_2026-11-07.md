@@ -422,3 +422,63 @@ Not established:
 6. Only after these steps identify the minimal startup resource set for GEOTEST.
 
 No GEOTEST binary was built or runtime-tested in this pass. The original four GEO files and SDK parser source remain unchanged.
+
+
+## 13. BOUNCE resource-2 code correlation and resource-1 raw layout (2026-11-07)
+
+### 13.1 Resource 2 is executable 8086 code
+
+A 16-bit x86 disassembly of BOUNCE resource 2 (file offset 0x02B0, initialized size 0x0200) shows valid instruction sequences beginning at resource-relative offset 0. For example:
+
+```asm
+0000  0B ED          or   bp,bp
+0002  74 1E          je   0022
+0004  50             push ax
+0005  51             push cx
+0006  06             push es
+0007  8B DD          mov  bx,bp
+0009  9A 05 00 00 00  call far 0000:0005
+0010  8E D8          mov  ds,ax
+0013  B9 70 00       mov  cx,0070
+0016  33 F6          xor  si,si
+0018  BF 7C 00       mov  di,007C
+001B  F3 A4          rep movsb
+001D  9A 06 00 00 00 call far 0000:0006
+```
+
+This is a static interpretation of the bytes as 8086 code. It does not establish the calling convention or the identity of the resolved kernel routines.
+
+### 13.2 All 29 R2 relocation targets are the offset word of a FAR CALL
+
+A direct byte check was performed for every relocation target in BOUNCE R2. For all 29 entries, the byte immediately before the relocation target is 0x9A, the 8086 opcode for immediate FAR CALL. The relocation target is therefore the first WORD operand of that FAR CALL; the following WORD is the segment operand as stored in the file.
+
+This establishes the machine-code context of the relocation targets. It does not yet prove which kernel entry each call resolves to, nor the exact loader algorithm associated with info byte 0x00. The file's stored segment words must not be treated as final runtime segment values.
+
+### 13.3 Resource 1 raw layout
+
+BOUNCE R1 (file offset 0x019C, size 0x00F0) contains a sparse, mostly zero-filled structure. Relevant bytes:
+
+```text
+resource+0010: 00 00 00 00 EE 00 00 00 00 00 00 00 00 00 00 00
+resource+0040: 00 00 00 00 00 00 07 00 04 00 00 00 00 00 00 00
+resource+0050: 08 01 01 0A 03 0A 04 00 57 00 00 0C 49 00 01 0C
+resource+0060: 00 00 02 00 38 00 02 00 7A 00 02 00 9A 00 02 00
+resource+0070: AF 00 02 00 CD 00 02 00 19 01 02 00 00 19 00 19
+```
+
+The six source-class-2 relocation targets in R1 are at 0x0062, 0x0066, 0x006A, 0x006E, 0x0072 and 0x0076. Each target WORD initially contains 0x0002. The repeated layout is consistent with six resource-2 references embedded in a table-like structure. The exact structure type and consumer are not yet identified; it must not yet be labelled as a process object, method table, or startup descriptor.
+
+The first two R1 relocation targets, 0x0040 and 0x0042, have info bytes 0x11 and 0x12 and both target WORDs are zero in the file. Their relation to imported library ui is established by the parser's source-class/import-index interpretation, but the specific imported symbols/ordinals and runtime actions remain unknown.
+
+### 13.4 Kernel image identification and limits
+
+The supplied KERNEL(1).OLD is an MZ executable of 72,688 bytes. Its MZ header declares a 0x600-byte DOS header, 273 DOS relocation entries, and initial CS:IP = 0000:02B1. The corresponding file offset of the initial instruction pointer is 0x08B1. This identifies the DOS executable entry location, not the GEOS geode relocation dispatcher. No kernel relocation routine address is claimed in this pass.
+
+### 13.5 Current conclusion
+
+- BOUNCE R2 is executable 8086 code, not an opaque data resource.
+- Every one of its 29 relocation targets is byte-for-byte the operand word of an immediate FAR CALL (preceding byte 0x9A).
+- BOUNCE R1 contains six repeated resource-2 relocation slots and two import-index-0 relocation slots.
+- The resource-1 structure's semantic type remains open.
+- The exact kernel relocation dispatcher and resolved call destinations remain unidentified.
+- No runtime test or GEOTEST build was performed.
