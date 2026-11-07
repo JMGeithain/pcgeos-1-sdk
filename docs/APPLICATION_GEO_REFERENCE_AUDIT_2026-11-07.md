@@ -205,3 +205,88 @@ The first implementation should be derived from a proven native application skel
 ## Reproduction notes
 
 The hashes above were calculated directly from the four uploaded files. The byte excerpts are file offsets (hexadecimal), not runtime addresses. The preliminary 8086 decode is a linear decode of the printed bytes only; it is not a loader-aware disassembly. No supplied original GEO file was modified.
+
+
+## 11. SDK parser cross-check of four native application examples (2026-11-07)
+
+This section supersedes the preliminary interpretation of the bytes at file offset 0x120 in Sections 4–5 above.
+
+### Import table, not resource-name table
+
+The SDK reader `pcgeos1/geode.py` uses the following PC/GEOS 1.x table layout:
+
+- executable header origin: file offset 200 (0xC8);
+- import table: `header + 88` = 0x120;
+- each import record: 14 bytes;
+- export table follows the imports, with four bytes per export;
+- resource descriptor arrays follow the exports.
+
+The 14-byte record at 0x120 in BOUNCE is therefore an **import-library record**, not a resource record:
+
+```
+0120: 75 69 20 20 20 20 20 20   "ui      "
+0128: 00 40                    attributes = 0x4000
+012A: B5 02                    protocol = 0x02B5 = 693
+012C: 00 00                    protocol minor = 0
+```
+
+Thus the previous hypothesis that `02B5h` was a UI-resource file pointer is rejected. It is the imported `ui` library's protocol value (693). The same import appears in all four applications.
+
+Other imports observed:
+
+| Library | Protocol major | Protocol minor |
+|---|---:|---:|
+| `ui` | 693 | 0 |
+| `dbase` | 601 | 0 |
+| `spool` | 613 | 0 |
+
+The import attributes for these records are 0x4000 in the four supplied examples.
+
+### Parser-derived application table summary
+
+The four files were checked against the layout and validation logic implemented by `pcgeos1/geode.py`: duplicate header counts, import/export table positions, resource extents, paragraph-aligned relocation stream positions, relocation record bounds, source classes, type range, and import indexes.
+
+| File | Resources | Imports | Exports | Relocation records |
+|---|---:|---:|---:|---:|
+| BOUNCE.GEO | 11 | 1 | 0 | 46 |
+| GEODEX.GEO | 59 | 3 | 3 | 957 |
+| GEOPLAN.GEO | 32 | 3 | 14 | 1,324 |
+| BANNER.GEO | 14 | 2 | 2 | 174 |
+
+This was a parser-equivalent execution of the checked logic against the four uploaded binaries. It is a static structural validation, not a GEOS runtime test. It does not establish that the parser models every loader rule or every private resource flag.
+
+### BOUNCE resource descriptor summary
+
+The SDK reader calculates the following first resource entries for BOUNCE:
+
+| Resource ID | Size | Absolute file position | Relocation bytes | Flags |
+|---:|---:|---:|---:|---:|
+| 0 | 0x0000 | 0x019C | 0x0000 | 0x0880 |
+| 1 | 0x00F0 | 0x019C | 0x0024 | 0x0080 |
+| 2 | 0x0200 | 0x02B0 | 0x0074 | 0x0A72 |
+| 3 | 0x0180 | 0x0524 | 0x0004 | 0x145A |
+| 4 | 0x0150 | 0x06A8 | 0x0004 | 0x145A |
+| 5 | 0x00A0 | 0x07FC | 0x0004 | 0x1C7A |
+| 6 | 0x0060 | 0x08A0 | 0x0004 | 0x1C7A |
+| 7 | 0x0100 | 0x0904 | 0x0004 | 0x1C7A |
+| 8 | 0x0270 | 0x0A08 | 0x0004 | 0x1C7A |
+| 9 | 0x0090 | 0x0C7C | 0x0004 | 0x1C7A |
+| 10 | 0x00E0 | 0x0D10 | 0x0004 | 0x1C7A |
+
+Resource 2 begins at file offset 0x02B0. Consequently, the earlier code examination at 0x02B0 is examining bytes within resource 2, not a standalone file-level startup entry. Resource 2's semantic role has not yet been identified.
+
+The 46 BOUNCE relocation records are distributed as follows: resource 1 has 9; resource 2 has 29; resources 3 through 10 have one each. This distribution is static evidence only; relocation types and runtime effects still need individual tracing.
+
+### Important interpretation corrections
+
+1. `ui`, `dbase`, and `spool` at 0x120 onward are imported library names, not resource names.
+2. The 14-byte spacing is the import-record size: 8-byte library name plus 6 bytes of attributes/protocol fields.
+3. `02B5h` is protocol major 693 for the `ui` import, not a pointer to code or a resource.
+4. File offset 0x02B0 is the beginning of BOUNCE resource 2 according to the SDK resource-position table.
+5. The resource table is distinct from the import and export tables. Resource IDs are zero-based in the SDK parser.
+
+### Consequence for GEOTEST
+
+BOUNCE remains a useful small native application specimen: 11 resources, one imported library (`ui`), no exports, and 46 relocation records. It is not yet proven that all 11 resources are needed to start the application, nor which resource contains the process object, UI tree, or startup code.
+
+Next work should identify resource types and flags from target-matched evidence, trace resource 1 and resource 2 relocations, resolve imported UI symbols/ordinals, and compare the application's process/object lifecycle with BANNER. Do not delete or synthesize resources based only on size or flag values.
