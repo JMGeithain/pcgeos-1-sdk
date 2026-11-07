@@ -290,3 +290,135 @@ The 46 BOUNCE relocation records are distributed as follows: resource 1 has 9; r
 BOUNCE remains a useful small native application specimen: 11 resources, one imported library (`ui`), no exports, and 46 relocation records. It is not yet proven that all 11 resources are needed to start the application, nor which resource contains the process object, UI tree, or startup code.
 
 Next work should identify resource types and flags from target-matched evidence, trace resource 1 and resource 2 relocations, resolve imported UI symbols/ordinals, and compare the application's process/object lifecycle with BANNER. Do not delete or synthesize resources based only on size or flag values.
+
+
+## 12. Resource 1 / Resource 2 relocation audit: BOUNCE and BANNER (2026-11-07)
+
+This section records a fresh byte-level pass over the locally available, user-supplied `BOUNCE.GEO` and `BANNER.GEO`. Hashes were recalculated and match Section 1. The repository parser's table model was reproduced against the local files; no original GEO was modified.
+
+### 12.1 BOUNCE resource 1
+
+Resource 1 descriptor:
+
+| Field | Value |
+|---|---:|
+| Resource ID | 1 |
+| File offset | 0x019C |
+| Initialized size | 0x00F0 |
+| Relocation bytes | 0x0024 (36 bytes / 9 records) |
+| Flags | 0x0080 |
+
+The first nonzero structured fields are visible around resource-relative offset 0x0040. Its nine relocation records are:
+
+| Target offset | Info | Source class | Type | Extra | Word at target |
+|---:|---:|---:|---:|---:|---:|
+| 0x0040 | 0x11 | 1 | 1 | 0 | 0x0000 |
+| 0x0042 | 0x12 | 1 | 2 | 0 | 0x0000 |
+| 0x0062 | 0x22 | 2 | 2 | 0 | 0x0002 |
+| 0x0066 | 0x22 | 2 | 2 | 0 | 0x0002 |
+| 0x006A | 0x22 | 2 | 2 | 0 | 0x0002 |
+| 0x006E | 0x22 | 2 | 2 | 0 | 0x0002 |
+| 0x0072 | 0x22 | 2 | 2 | 0 | 0x0002 |
+| 0x0076 | 0x22 | 2 | 2 | 0 | 0x0002 |
+| 0x007A | 0x22 | 2 | 2 | 0 | 0x0002 |
+
+Under the parser's nibble split, info 0x11 and 0x12 use source class 1 and import index 0 (the `ui` import); the six 0x22 records use source class 2 and extra 0. This establishes structural import/resource relocation relationships under the SDK model. It does not, by itself, establish the runtime operation performed by relocation types 1 and 2.
+
+### 12.2 BOUNCE resource 2
+
+Resource 2 descriptor:
+
+| Field | Value |
+|---|---:|
+| Resource ID | 2 |
+| File offset | 0x02B0 |
+| Initialized size | 0x0200 |
+| Relocation bytes | 0x0074 (116 bytes / 29 records) |
+| Flags | 0x0A72 |
+
+All 29 records have info byte 0x00 (source class 0, type 0, extra 0). Their target offsets and pre-relocation WORD values are:
+
+```
+target  value
+000A    0005
+001B    0006
+0028    01E9
+003F    0000
+0050    0006
+0065    0096
+0075    00A9
+007E    01E9
+008A    0095
+0095    00A9
+00AA    01E9
+00BD    0095
+00C8    00A9
+00E1    0095
+00EC    00A9
+00F5    00D3
+00FA    01BE
+010F    01BF
+0114    00D4
+0122    00D3
+012A    00D4
+0132    00B8
+013E    0095
+0149    00A9
+0175    01B8
+01C9    0163
+01D1    0150
+01DB    0163
+01E3    0150
+```
+
+Several target offsets coincide with the offset-word fields of far-call instructions in the raw resource bytes. This is consistent with the SDK's broad note that its runtime emits kernel far-call and resource relocations, but the exact mapping of source class 0/type 0 to a particular loader operation must still be confirmed from the original 1.x loader/kernel implementation. Do not treat the pre-relocation segment words in the file as runtime segment values.
+
+### 12.3 BANNER comparison
+
+BANNER resource 1 has size 0x0100, relocation bytes 0x006C (27 records), and flags 0x0080. Its first two records also have info bytes 0x11 and 0x12 and import index 0 (`ui`). Additional records include import index 1 (`spool`) and source-class-2 relocations.
+
+BANNER resource 2 has size 0x1040, relocation bytes 0x0220 (136 records), and flags 0x0A72. Its much larger relocation set includes source classes 0, 1 and 2. This provides a second application specimen with the same first-resource flag group and first two UI import relocation encodings.
+
+### 12.4 Resource flags observed in BOUNCE and BANNER
+
+| Resource group | BOUNCE flags | BANNER flags |
+|---|---:|---:|
+| R0 | 0x0880 | 0x0880 |
+| R1 | 0x0080 | 0x0080 |
+| R2 | 0x0A72 | 0x0A72 |
+| Further resources | 0x145A / 0x1C7A | 0x145A / 0x087A / 0x1C7A |
+
+The repeated values are useful classification evidence. Their full bit-level semantics are not established by this comparison. Do not name the flags (fixed, shared, discardable, code, data, etc.) without a target-matched definition or loader trace.
+
+### 12.5 Header library-entry field
+
+The parser currently exposes the two WORDs at header-tail offsets +44 and +46 as `library_entry`. Both BOUNCE and BANNER yield (offset 0, resource 0). This is only the parser's current field label and raw value. It has **not** been established that this is the application's process entry point, or that its semantics are the same for applications and libraries. Do not use (0,0) as a GEOTEST entry point without further header/loader evidence.
+
+### 12.6 Current confidence and open questions
+
+Confirmed by raw bytes and parser calculations:
+
+- BOUNCE R1: 9 relocation records, including two import-index-0 records and six source-class-2 records with extra 0.
+- BOUNCE R2: 29 records, all info 0x00.
+- BANNER R1 begins with the same 0x11 / 0x12 encodings for import `ui`.
+- BOUNCE and BANNER share flags 0x0880, 0x0080 and 0x0A72 for their first three resource IDs.
+- BOUNCE R2 begins at file offset 0x02B0.
+
+Not established:
+
+- The exact loader semantics of relocation types 0, 1, 2 and 3 in every source class.
+- The semantic role of BOUNCE R1 (including whether it contains a process object, an application object, or a startup descriptor).
+- The meaning of all resource flag bits.
+- Whether the header field exposed as `library_entry` is an application entry point.
+- Which resources are essential to launch versus loaded later.
+
+### 12.7 Next investigation
+
+1. Trace source-class-0 relocations against the exact GeoWorks 1.x kernel/loader relocation dispatcher.
+2. Trace import-index-0 relocations to the actual imported `ui` symbols/ordinals and protocol checks.
+3. Decode BOUNCE R1's structures at resource-relative offsets 0x0040–0x007A and compare with BANNER R1.
+4. Identify process/application object structures using confirmed PC/GEOS 1.x definitions, not later 2.x assumptions.
+5. Resolve the application-versus-library meaning of the header-tail entry fields.
+6. Only after these steps identify the minimal startup resource set for GEOTEST.
+
+No GEOTEST binary was built or runtime-tested in this pass. The original four GEO files and SDK parser source remain unchanged.
