@@ -2646,3 +2646,80 @@ Der Lader liest den Dateikopf in mindestens drei unterscheidbaren Schritten: den
 **Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1A56–0x1AEA`, `0x1B11–0x1B80`, `0x1C76–0x1CA3`, `0x2652–0x26B5`; Originaldateien `GEOWORKS/SYSTEM/SAVERS/BLANK.GEO` (1.332 Bytes, SHA-256 `845b310069c51352242331c88531ef64f6b06d38dd9837a627b0333a82fac93f`) und `GEOWORKS/SYSTEM/DISK.GEO` (910 Bytes, SHA-256 `6363699f0b9af45106b59e432f3b715f4e9c38d5e5c07a45fcce660f3f964be9`). Statische Disassemblierung und Bytevergleich; kein Laufzeittest.
 
 **Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte. Kein `geoTest.geo` erstellt.
+
+
+## Untersuchung 2226 – Ressourcenverzeichnis, Flagwörter und offene Feldzuordnung
+
+### 2226.1 – Tatsächliche Lesereihenfolge nach dem 64-Byte-Block
+
+Nach dem Lesen des 64-Byte-Blocks ab Dateioffset `0x00E0` setzt der Kernel die Dateileseposition fort und verarbeitet die nachfolgenden Bereiche in dieser Reihenfolge:
+
+1. `DS:0034` Bibliotheksdeskriptoren zu je `0x0E` Bytes (`0x2652–0x26B5`);
+2. `DS:0032` Importfunktionsdatensätze zu je 4 Bytes (`0x1B45–0x1B80`);
+3. `DS:0038 * 8` Bytes Ressourcen-Verwaltungsdaten (`0x1C76–0x1CA3`);
+4. anschließend `DS:0038 * 2` Bytes in einen temporären Stackpuffer (`0x1CAC–0x1CC3`).
+
+Die vier Bereiche sind im Kernelcode durch getrennte Leseoperationen belegt. Die letzten `2 * Ressourcenzahl` Bytes werden nicht in den Verwaltungsblock ab `DS:003A` eingelesen, sondern separat in den temporären Puffer, der bei der Ressourcenanlage ausgewertet wird.
+
+### 2226.2 – Ressourcen-Verwaltungsbereich: gesicherte interne Grenzen
+
+Für `n = DS:0038` berechnet `0x1C76`:
+
+- `DS:003A = Basis`;
+- `DS:003C = Basis + 2*n`;
+- `DS:003E = Basis + 6*n`.
+
+Danach werden `8*n` Bytes ab `DS:003A` eingelesen. Damit sind die internen Grenzen und die Gesamtgröße dieses Bereichs eindeutig nachgewiesen. `0x20FE` liest die Relokationsanzahl für einen Ressourcenindex aus `DS:003E + 2*Index`. `0x2218` liest für denselben Index zwei aufeinanderfolgende WORD-Werte ab `DS:003C + 2*Index` und verwendet sie als Argumente für die Dateipositionierung und den anschließenden Leseaufruf.
+
+**Wichtige Präzisierung:** Die exakte semantische Zuordnung aller WORDs innerhalb des 8*n-Byte-Bereichs wird noch nicht als vollständig abgeschlossen behandelt. Die beiden untersuchten Originaldateien zeigen an den errechneten Dateipositionen Werte, deren Feldanordnung erst mit dem vollständigen Zugriffspfad und den konkreten Ressourcenindizes abgeglichen werden muss. Insbesondere werden Dateiposition und Leselänge nicht allein aufgrund der benachbarten WORD-Position endgültig benannt.
+
+### 2226.3 – Rohdaten der beiden Originaldateien
+
+Aus den bereits nachgewiesenen Dateilängen der vorangehenden Bereiche ergeben sich die Startpositionen des 8*n-Byte-Ressourcenbereichs:
+
+- BLANK.GEO: `0x0158` (zwei Bibliotheken, sieben Importfunktionsdatensätze);
+- DISK.GEO: `0x012E` (eine Bibliothek, keine Importfunktionsdatensätze).
+
+Die jeweils folgenden `2*n` Flagbytes beginnen bei:
+
+- BLANK.GEO: `0x0178`;
+- DISK.GEO: `0x014E`.
+
+Die vier gelesenen Flag-WORDs lauten:
+
+| Ressource (Index) | BLANK.GEO | DISK.GEO |
+|---:|---:|---:|
+| 0 | `0x0880` | `0x0880` |
+| 1 | `0x0080` | `0x0080` |
+| 2 | `0x0A72` | `0x0AC0` |
+| 3 | `0x145A` | `0x0A50` |
+
+Diese Werte sind direkte Little-Endian-Auslesungen der zwei Byte je Ressource. Die Loader-Routine `0x1D11–0x1D51` wertet dabei insbesondere Bits im oberen Byte aus. Die Tabelle hält die Rohwerte fest; sie behauptet keine symbolischen Flag-Namen.
+
+### 2226.4 – Nachgewiesene Wirkungen ausgewählter Flagbits
+
+Im oberen Byte des jeweiligen Flag-WORDs prüft die Ressourcenanlage:
+
+- Bit `0x08` in `0x1D11`: verzweigt in einen Sonderpfad, der bei vorhandener vorheriger Segmentzuordnung einen bestehenden Eintrag berücksichtigen kann;
+- Bit `0x04` in `0x1D68`: wählt den Sonderpfad, in dem zunächst `AX = 0xFFFF` gesetzt wird;
+- Bit `0x10` in `0x1D70`: führt innerhalb dieses Pfads zu einem zusätzlichen Zugriff auf den Segment-/Handlekontext bei `ES:0x60B` und zum Lesen von `ES:0x50`;
+- Bit `0x80` wird in `0x1D59` bei Ressourcenindex 1 in das obere Flagbyte aufgenommen.
+
+Die genaue historische oder API-seitige Bedeutung dieser Bits ist weiterhin offen. Begriffe wie „shared“, „discardable“, „fixed“ oder „code resource“ werden ohne weitere unabhängige Belege nicht vergeben.
+
+### 2226.5 – Start-/Initialisierungspfad: erster sicherer Befund
+
+Die Routine `0x1B81` ist der nächste Verarbeitungsschritt nach dem Einlesen und Vorbereiten der Ressourcentabellen. Sie prüft Statusbits im GEODE-Verwaltungsblock:
+
+- Bei gesetztem Bit `0x20` in `DS:0003` wird ein Relokationseintrag bei `DS:002A` verarbeitet und anschließend ein über `DS:0028`/`DS:002A` adressierter Far-Callback aufgerufen. Bei erfolgreicher Rückkehr setzt der Kernel Bit `0x01` in `DS:0003`.
+- Bei gesetztem Bit `0x40` in `DS:0003` wird – falls `DS:002E` ungleich null ist – ein weiterer Relokationseintrag verarbeitet und danach `0x2630` aufgerufen. Anschließend setzt der Kernel Bits `0x80` und `0x40` in `DS:0002`.
+
+Damit ist ein konditionaler Callback-/Initialisierungspfad belegt. Die genaue Rolle der beiden Statusbits und die semantische Bezeichnung des Callbacks bleiben offen; die Routine wird daher noch nicht als allgemeiner GEODE-Entry-Point spezifiziert.
+
+### 2226.6 – Konsequenz für geoTest.geo
+
+Der Ressourcenbereich und seine Flag-WORDs werden jetzt getrennt vom Bibliotheks- und Importbereich behandelt. Für einen minimalen Test-GEODE fehlen weiterhin eine vollständige, bytegenaue Zuordnung der Ressourcen-Verwaltungsfelder, die Bedeutung der Flags, die Bedeutung der Headerfelder bei `DS:0028–DS:002E` und der Nachweis, welche Initialisierungspfade für einen konkreten GEODE-Typ zwingend sind.
+
+**Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1B81–0x1C15`, `0x1C76–0x1CC3`, `0x1D11–0x1D9C`, `0x20FE–0x223F`, `0x2630–0x2651`; Originaldateien `BLANK.GEO` und `DISK.GEO` mit den in Untersuchung 2223 genannten SHA-256-Prüfsummen. Statische Disassemblierung und Bytevergleich; kein Laufzeittest.
+
+**Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte. Kein `geoTest.geo` erstellt.
