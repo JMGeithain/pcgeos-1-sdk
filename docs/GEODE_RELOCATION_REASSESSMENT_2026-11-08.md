@@ -1402,3 +1402,39 @@ Im selben Archiv gibt es kleinere importfreie GEODEs anderer Typen, beispielswei
 **Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `1B81h–1C16h`, `1D9Ch–1E1Bh`, `1EBCh–1F0Dh`, `2630h–26B3h` und `271Ch–2788h`; Originaldateien aus `GEOWORKS.zip` (`FONT.GEO`, `BOUNCE.GEO`, `SWAP.GEO`, `STREAM.GEO`). Alle Größen, Zähler, Tabellenpositionen und Bytes wurden direkt aus den Dateien gelesen. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
+
+
+
+## Untersuchungen 2181–2187 – vorhandener SDK-Buildpfad und Zielarchiv-Abgleich
+
+### 2181 – Das SDK besitzt bereits einen experimentellen GEODE-Buildpfad
+
+Die aktuelle SDK-README beschreibt einen Buildpfad für PC/GEOS 1.x-Anwendungen. `pcgeos1/buildsys.py` kompiliert C-Quellen, assembliert die Runtime, linkt ein ELF-Zwischenergebnis, extrahiert Code-/Datenbereiche und übergibt diese an `package_from_skeleton()`. Ein vollständiger GEODE-Packer muss daher für einen ersten Versuch nicht neu erfunden werden. Der Pfad ist laut README ausdrücklich experimentell und nicht ABI-vollständig.
+
+### 2182 – Der vorhandene Packer verwendet SPINTEXT.GEO als Anwendungsskelett
+
+`pcgeos1/buildsys.py` lädt SPINTEXT.GEO und VIEWER.GEO. `pcgeos1/packer.py` übernimmt Ressourcen und Relokationsdaten aus SPINTEXT.GEO, ersetzt unter anderem Ressourcen 1 bis 4, ergänzt eine Engine-Ressource und baut die GEODE-Tabellen und Payload-Blöcke neu auf. Das ist ein konkreter, bereits implementierter Erzeugungsweg für eine Anwendung mit nativer UI; er ist nicht identisch mit einem neu konstruierten Minimal-GEODE aus dem Header allein.
+
+### 2183 – Der Hello-Beispielprojektaufbau ist bereits vorhanden
+
+Im Repository existieren `examples/hello/project.json` und `examples/hello/src/app.c`. Das Projekt definiert den Namen, den permanenten Namen, den 4-Byte-Token, Ausgabe-GEO, Protokoll, Viewport, Quelltext und Stackgröße. Der Beispielcode zeichnet einen Begrüßungstext und reagiert auf Klicks und Enter. Ein Projekt namens geoTest kann strukturell aus diesem Beispiel abgeleitet werden, indem Projektidentität und Ausgabe auf `geoTest.geo` angepasst werden.
+
+### 2184 – Der dokumentierte Standard-Build erwartet einen genau identifizierten Zielbestand
+
+`pcgeos1/target.py` verlangt standardmäßig vier bestimmte GEODE-Dateien und vergleicht ihre SHA-256-Werte mit fest hinterlegten Referenzwerten. Der README-/Kompatibilitätsstand nennt Kernelprotokoll `622.3` und UI-Protokoll `693.0`. Eine bloß passende Protokollnummer ersetzt die Hashprüfung nicht; sie belegt nicht, dass die verwendeten UI-Ressourcenlayouts identisch sind.
+
+### 2185 – GEOWORKS.zip stimmt bei den geprüften UI-Vorlagen nicht mit dem SDK-Referenzsatz überein
+
+Im vorliegenden `GEOWORKS.zip` existieren `GEOWORKS/WORLD/SPINTEXT.GEO`, `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO`, `GEOWORKS/WORLD/VIEWER.GEO`, `GEOWORKS/WORLD/NOTEPAD.GEO` und `GEOWORKS/WORLD/TERM.GEO`. Keine dieser geprüften Dateien hat den im SDK hinterlegten Referenzhash. Außerdem erwartet `target.py` SPINTEXT unter dem Archivpfad `/WORLD/EXTRAS/SPINTEXT.GEO`; dieser Pfad ist im vorliegenden Archiv nicht vorhanden. Die beiden SPINTEXT-Varianten besitzen zwar Kernelprotokoll `622.3` und importieren UI mit Protokoll `693.0`, aber daraus folgt keine bestätigte Binärkompatibilität ihrer Ressourcen mit den SDK-Referenzvorlagen.
+
+### 2186 – Der Hash-Bypass ist ein Forschungsmodus, keine Kompatibilitätsbestätigung
+
+Die Buildkonfiguration kann laut `buildsys.py` mit `allow_unknown_target` die strikte Hashprüfung abschalten. Das löst jedoch nicht automatisch die Pfadfrage und beweist nicht, dass die aus GEOWORKS.zip übernommenen UI-Objektressourcen mit den vom Packer erwarteten Objektlayouts übereinstimmen. Ein solcher Build wäre ein gezielter Versuch mit unbekanntem Zielprofil und müsste als experimentell gekennzeichnet und in einer Wegwerf-/Snapshot-Installation getestet werden.
+
+### 2187 – Konkrete Voraussetzungen für geoTest.geo
+
+Für den ersten Build sind jetzt vier Punkte erforderlich: (1) ein temporäres, korrekt strukturiertes Zielarchiv mit einer ausgewählten SPINTEXT.GEO-Variante an dem vom Loader erwarteten Pfad sowie VIEWER.GEO, NOTEPAD.GEO und TERM.GEO; (2) eine bewusste Entscheidung, ob der Hash-Bypass für diesen Forschungsbuild aktiviert wird; (3) ein verfügbarer GCC/binutils- oder LLVM/LLD-Toolchain gemäß SDK-Dokumentation; (4) anschließende Strukturprüfung mit `pcgeos1 inspect` und ein echter Starttest in einer gesicherten GeoWorks-1.2-Umgebung. Der originale GEOWORKS.zip-Bestand bleibt dabei unangetastet.
+
+**Quellenbasis:** Repository `JMGeithain/pcgeos-1-sdk`, insbesondere `README.md`, `pcgeos1/buildsys.py`, `pcgeos1/packer.py`, `pcgeos1/target.py`, `examples/hello/project.json`, `examples/hello/src/app.c`, `docs/GETTING_STARTED.md` und `docs/TARGET_COMPATIBILITY.md`; außerdem direkte SHA-256-, Header- und Importprüfungen der genannten Dateien in `GEOWORKS.zip`. Analyse des Buildpfads anhand des Quellcodes; ein Build mit dem vorliegenden GEOWORKS.zip wurde in diesem Untersuchungsschritt nicht ausgeführt.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien im Originalarchiv und `pcgeos1/geode.py`.
