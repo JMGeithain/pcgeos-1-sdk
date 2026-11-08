@@ -2011,3 +2011,60 @@ Die Felder `0x08` und `0x14` des LMem-Kopfes werden von diesem Pfad nicht erklä
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x833C–0x8384`, `0xA567–0xA578`, `0x87A1`, `0x8FDB–0x9001` und `0x9323–0x933F). Statische Kontrollfluss- und Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2216 – Aufrufkontexte der Kernelziele 8000h und 8027h
+
+### 2216.1 – Kernelziel 8000h: drei direkte Kernel-Aufrufstellen
+
+Die lineare Disassemblierung enthält drei direkte CALL-Stellen auf `0x8000`:
+
+- `0x829D`: Aufruf aus `0x828E), nachdem AX auf `0x0012` gesetzt und CX/BX aus `ES:[DI+4]` geladen wurde. Nach der Rückkehr wird über `DS:SI` ein Tabellen-/Eintragsbezug berechnet und ein DWORD an diesem Ziel aktualisiert.
+- `0x9271`: Aufruf aus `0x926A), wenn BX dem WORD-Wert `DS:0000` entspricht. Der umgebende Code `0x9248–0x927D` liest einen Eintrag aus einer über SI/BX adressierten Tabelle und prüft Segment-/Offsetwerte.
+- `0x9529`: kurzer Wrapper `0x9527–0x952D), der AX sichert, `0x8000` aufruft und AX anschließend wiederherstellt. Weitere Wrapper bei `0x952E–0x9553` rufen diesen Pfad auf.
+
+Der Einstieg `0x8000` sichert BX, SI, DI und ES, lädt DI aus `[SI]` und geht in den gemeinsamen Pfad bei `0x8051`. Dort wird ein FAR-Zeiger aus `[DI]` nach ES:DI geladen. Anschließend wird über `0x8078` ein Datensatz geprüft. Danach wird über `0x9630` das Kernel-Datensegment gesetzt und DS aus dem zuvor gesicherten Wert bei `DS:0000` wiederhergestellt.
+
+### 2216.2 – Gemeinsame Prüfung bei 8078h
+
+Die Routine `0x8078` beginnt mit:
+
+```asm
+8078  26 F7 45 04 E1 FF    test WORD PTR es:[di+4],0xFFE1
+807E  75 F2                jne 0x8072
+```
+
+Bei gesetzten Bits der Maske `0xFFE1` wird der Pfad bei `0x8072` ausgeführt. Dieser ruft `0x039C` auf und setzt danach AX auf `0x000A`. Der genaue symbolische Zweck dieser Prüfung und des Aufrufs bei `0x039C` ist noch nicht geklärt.
+
+### 2216.3 – Kernelziel 8027h: Descriptor-Verarbeitung
+
+Der Einstieg `0x8027` verwendet ES:DI als Zeiger auf einen Verwaltungsdatensatz:
+
+- `ES:[DI+2]` wird als WORD nach BX geladen.
+- Bei BX ungleich 1 wird der DWORD-Zeiger bei `ES:[DI]` geladen und ES auf BX gesetzt.
+- Bei BX gleich 1 wird zusätzlich `ES:[DI+4]` gelesen. Über SI und eine weitere Tabelle wird ein Eintrag berechnet.
+- Ist dessen erster WORD-Wert null, wird `0x828E` aufgerufen.
+- Andernfalls wird der DWORD-Zeiger aus diesem Eintrag nach ES:DI geladen.
+- Der gemeinsame Abschluss führt über `0x8078` und `0x9630` zurück.
+
+Die Routine `0x828E` sichert mehrere Register, setzt AX auf `0x0012`, liest CX aus `ES:[DI+4]` und ruft `0x8000` auf. Danach berechnet sie über `DS:SI` und BX einen Tabelleneintrag und schreibt CX:DX als DWORD an diesen Eintrag. Damit hängen die Pfade `0x8027` und `0x8000` über die Descriptor-/Tabellenverwaltung zusammen.
+
+### 2216.4 – UI.GEO-Referenzen
+
+In UI.GEO wurden 31 Quelle-0-/Typ-0-Relokationen mit Kernel-Tabellenindex `0x1E9` (Ziel `0x8027`) und 121 entsprechende Relokationen mit Index `0x1E6` (Ziel `0x8000`) gezählt. Die Referenzen auf `0x8027` liegen in den Ressourcen R2, R5, R7, R8, R9, R10, R12, R14, R16 und R19. Die Referenzen auf `0x8000` verteilen sich auf mehrere UI-Ressourcen, unter anderem R2, R5, R7, R8, R10, R11, R14, R16, R19, R21, R22 und R23.
+
+Die FAR-CALL-Operanden der 8027-Referenzen werden im GEODE vor der Relokation als Tabellenindex `0x01E9` gespeichert. Der Kernel-Dispatcher ersetzt diesen Index zur Laufzeit durch den Codeoffset `0x8027` und das Kernel-Code-Segment.
+
+### 2216.5 – Abgrenzung zur LMem-Verwaltung
+
+Die untersuchten Pfade bearbeiten indirekte FAR-Zeiger, Verwaltungsdatensätze und Tabellen. Die Felder `ES:[DI+2]`, `ES:[DI+4]`, `ES:[DI+10]` und `ES:[DI+11]` gehören in diesen Routinen zu dem über ES:DI adressierten Datensatz. Es gibt in diesem Pfad bisher keinen belegten Zugriff auf die LMem-Chunk-Flagtabelle, die bei Untersuchung 2214 über `DS:0002` und den ersten Handletabelleneintrag aufgelöst wurde.
+
+Daher werden `0x8000` und `0x8027` vorläufig als Funktionen der allgemeinen Descriptor-/Ressourcen-/Handleverwaltung geführt. Eine symbolische API-Benennung und die vollständige Bedeutung der Descriptorfelder bleiben offen. Eine endgültige Aussage, dass diese Funktionen keinerlei LMem-Bezug haben, wäre auf Grundlage dieser Teilanalyse ebenfalls zu weitgehend.
+
+### 2216.6 – Nächster Schritt
+
+Als nächstes wird der Descriptor-Aufbau anhand mehrerer realer Aufrufstellen und der zugehörigen Ressourcen-/Handletabellenwerte rekonstruiert. Besonders relevant sind die Übergänge `0x8027 → 0x828E → 0x8000` und die Prüfung bei `0x8078`. Parallel werden weitere unabhängige Aufrufstellen der LMem-Flagroutinen `0x8329` und `0x833C` verfolgt, um deren Eingabekonvention und Handlebereich zu bestätigen.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8000–0x808F), `0x828E–0x82B2), `0x9248–0x927D), `0x9527–0x9553), `0x9630–0x9636); `GEOWORKS/SYSTEM/UI.GEO`, Quelle-0-/Typ-0-Relokationen und Ressourcen R2, R5, R7, R8, R9, R10, R12, R14, R16, R19, R21, R22 und R23. Statische Analyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
