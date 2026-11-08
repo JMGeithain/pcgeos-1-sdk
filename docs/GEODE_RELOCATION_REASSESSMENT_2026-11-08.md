@@ -1558,3 +1558,18 @@ Der Generator `lmem()` setzt Offset `0x08` auf die aktuelle Länge des erzeugten
 **Konsequenz:** Die bisherigen positiven Befunde zu den LMem-Grundfeldern und Flag-Bytes bestätigen nicht den vollständigen LMem-Header. Vor einem Build mit Laufzeitanspruch müssen die Felder `0x08` und `0x14` anhand des PC/GEOS-1.x-Kernels oder zusätzlicher sicher identifizierter Originalressourcen untersucht werden. Bis dahin bleibt die LMem-Konstruktion experimentell.
 
 **Quellenbasis:** Direkt gelesene LMem-Kopfbereiche und Chunk-Endpositionen aus `GEOWORKS/WORLD/SPINTEXT.GEO` (R3/R4) und `GEOWORKS/WORLD/VIEWER.GEO` (R12/R28); Quelltext `pcgeos1/ui.py`, Funktion `lmem()`. Keine Laufzeitannahme und keine Änderung an Originaldateien.
+
+
+## Untersuchungen 2203–2204 – Historische LMem-Dokumentation und Grenzen der Header-Zuordnung
+
+### 2203 – Ein zeitgenössisches PC/GEOS-Dokument bestätigt LMem, aber nicht den GeoWorks-1.2-Header
+
+Das Dokument „PC/GEOS System Software Overview“, datiert auf den 10. November 1990, beschreibt den Local Memory Manager als Kernelbestandteil und nennt die Routinen LMemInitHeap, LMemAlloc, LMemReAlloc und LMemFree. Es erklärt außerdem, dass der LMem-Heap innerhalb eines Speicherblocks angelegt wird und UI-Objekte LMem intensiv verwenden. Die Abbildung auf Seite 39 bezeichnet den dargestellten LMem-Blockheader jedoch als 16 Bytes. Die hier untersuchten GeoWorks-1.2-Ressourcen besitzen einen 32-Byte-Kopfbereich mit weiteren Feldern. Das frühe Dokument ist daher ein zeitgenössischer Beleg für das Konzept und die API-Familie, aber kein hinreichender Feldplan für die konkrete 1.2-Struktur. Insbesondere können daraus die Bedeutungen der WORD-Felder bei 0x08 und 0x14 nicht abgeleitet werden.
+
+### 2204 – Die Rohdaten bestätigen die Werte, aber nicht deren Semantik
+
+Die vier Originalressourcen wurden erneut direkt aus dem GEOWORKS.zip gelesen. Ihre ersten 32 Bytes bestätigen die in Untersuchung 2202 dokumentierten Werte. Der WORD-Wert bei 0x08 beträgt bei den Beispielen Ressourcengröße minus 4 (SPINTEXT R3/R4 und VIEWER R12), während VIEWER R28 an dieser Stelle Ressourcengröße minus 8 enthält. Der WORD-Wert bei 0x14 variiert unabhängig davon: 0x01E0, 0x0150, 0x1440 und 0x02C0. Diese Beobachtung zeigt, dass eine einfache Gleichsetzung beider Felder mit derselben Blocklänge nicht durch alle Beispiele gedeckt ist. Sie beweist jedoch keine alternative Feldbedeutung. Eine Zuordnung als Heap-Ende, freie-Liste-Zeiger, freie Bytezahl oder Ähnliches wäre ohne Kernelzugriff oder eine passende 1.x-Strukturdefinition spekulativ und wird deshalb nicht vorgenommen.
+
+**Weiterer Prüfpfad:** Die Felder müssen durch gezielte Rückverfolgung der LMem-Initialisierungs- und Validierungsroutinen im Originalkernel KERNEL.OLD oder durch eine eindeutig zur GeoWorks-1.2-Version gehörende Strukturdefinition identifiziert werden. Das vorliegende zeitgenössische 1990-Dokument ist dafür nur Hintergrundquelle. Bis zum Nachweis bleiben ui.py:lmem() und insbesondere seine Werte an 0x08 und 0x14 experimentell.
+
+**Quellenbasis:** GEOWORKS/KERNEL.OLD aus dem bereitgestellten GEOWORKS.zip (72.688 Bytes); rohe Headerbytes der Ressourcen SPINTEXT R3/R4 und VIEWER R12/R28 aus demselben Archiv; pcgeos1/ui.py, Funktion lmem(); PC/GEOS System Software Overview, Draft vom 10. November 1990, Seiten 38–40 (insbesondere Seite 39). Die Quelle von 1990 wird ausdrücklich nicht als vollständige Spezifikation des 1.2-Headers verwendet. Keine Änderungen an Originaldateien oder SDK-Quelltexten; keine Laufzeitprüfung.
