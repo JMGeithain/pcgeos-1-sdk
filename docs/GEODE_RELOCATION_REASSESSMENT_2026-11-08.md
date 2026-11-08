@@ -2565,3 +2565,43 @@ Der Kernel-Lader benötigt mindestens konsistente Importmetadaten, ein Ressource
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1B45–0x1B80), `0x1C76–0x1CA3), `0x20FE–0x2153), `0x2218–0x223F); Originaldateien aus `GEOWORKS.zip`: `GEOWORKS/SYSTEM/SAVERS/BLANK.GEO` und `GEOWORKS/SYSTEM/DISK.GEO`, jeweils SHA-256 oben. Statische Disassemblierung und Dateibyteprüfung; kein Laufzeittest.
 
 **Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2224 – Importbibliotheken und Importfunktionen getrennt nachgewiesen
+
+### 2224.1 – Bibliotheksdeskriptoren im GEODE
+
+Die Routine `0x2652–0x26B5` legt die Importbibliotheksliste an. Sie setzt `DS:0036` auf den Laufzeitbereich `0x0046` oder `0x005E`, abhängig von einem GEODE-Statusbit. `DS:0034` gibt die Anzahl der importierten Bibliotheken an.
+
+Für jede Bibliothek liest der Lader genau `0x0E` Bytes aus dem GEODE in einen temporären Stackbereich. Aus jedem 14-Byte-Datensatz werden die WORD-Felder bei +8, +10 und +12 an die Bibliotheksauflösungsroutine `0x271C` übergeben. Der zurückgegebene Bibliothekssegmentwert wird in die WORD-Tabelle ab `DS:0036` eingetragen. Der nächste Laufzeitplatz liegt jeweils zwei Byte weiter.
+
+Damit ist `DS:0036` als Anfang einer WORD-Tabelle mit einem Laufzeitsegment pro importierter Bibliothek bestätigt. `DS:0034` ist die Zahl dieser Bibliothekseinträge. Die genaue semantische Bedeutung der drei aus dem 14-Byte-Deskriptor übergebenen WORD-Felder wird hier nicht weiter benannt, weil die vollständige Protokoll-/Versionsprüfung noch separat zu verfolgen ist.
+
+### 2224.2 – Importfunktionsdatensätze
+
+Nach Abschluss der Bibliotheksauflösung berechnet `0x1B45` den Start der Importfunktionsliste:
+
+`DS:0030 = DS:0036 + 2 * DS:0034`
+
+`DS:0032` ist die Anzahl der Importfunktionsdatensätze. Der Lader liest `4 * DS:0032` Bytes in diesen Bereich und durchläuft anschließend die Einträge mit jeweils vier Byte Abstand. Für jeden Eintrag wird der zweite WORD an die Relokationsroutine `0x1C04` übergeben.
+
+Damit ist die interne Importstruktur präzisiert:
+
+1. WORD-Segmenttabelle ab `DS:0036`, ein WORD je importierter Bibliothek;
+2. anschließend vier Byte pro importierter Funktion ab `DS:0030`;
+3. Anzahl der Bibliotheken in `DS:0034`;
+4. Anzahl der Importfunktionen in `DS:0032`.
+
+### 2224.3 – Relokationsquelle 10h bestätigt den Bibliotheksindex
+
+Der Relokationsdispatcher `0x2153` behandelt Quellklasse `0x10` gesondert. Er nimmt den Bibliotheksindex aus AH, berechnet `DS:0036 + 2*AH`, lädt aus diesem WORD das Segment der betreffenden Bibliothek und verwendet anschließend den Importfunktionsdatensatzbereich ab `DS:0030). Damit stimmt die Laufzeitauflösung direkt mit der in `0x2652–0x26B5` aufgebauten Segmenttabelle überein.
+
+### 2224.4 – Korrektur/Präzisierung zu Untersuchung 2223
+
+Die Formulierung in 2223.1, `DS:0034` zähle lediglich WORD-Einträge vor der Importfunktionsliste, war zu unpräzise. Präzise ist: `DS:0034` ist die Anzahl importierter Bibliotheken; `DS:0036` zeigt auf die zugehörige WORD-Segmenttabelle. Die Importfunktionsliste folgt unmittelbar dahinter und wird über `DS:0030` adressiert; ihre Anzahl steht in `DS:0032`.
+
+Die Ressourcentabelle ab `DS:003A` folgt wiederum nach den vier Byte großen Importfunktionsdatensätzen. Diese Bereiche sind getrennte Tabellen und dürfen nicht miteinander vermischt werden.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x2652–0x26B5), `0x1B45–0x1B80), `0x2153–0x21C6), `0x1C04–0x1C15). Statische Disassemblierung und Register-/Datenflussanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
