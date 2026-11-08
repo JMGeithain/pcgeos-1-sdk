@@ -1616,3 +1616,32 @@ Der Originalvergleich stützt die Grundform der vom SDK verwendeten LMem-Handle-
 **Arbeitsentscheidung:** Noch keinen `geoTest.geo`-Build mit Laufzeitanspruch freigeben. Als nächstes sind die Relokationsziele und Aufrufstellen der UI.GEO-Ressourcen mit den Kernel-Dispatch-Einstiegspunkten abzugleichen. Dabei muss zuerst geklärt werden, wie die Quellklasse-0-Relokationen vom GeoWorks-1.2-Loader aufgelöst werden. Erst danach kann eine gefundene Routine als LMem-Initialisierung, -Allokation oder -Freigabe klassifiziert werden.
 
 **Quellenbasis:** `GEOWORKS/SYSTEM/UI.GEO`, `GEOWORKS/WORLD/SPINTEXT.GEO`, `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` aus dem bereitgestellten `GEOWORKS.zip`; `pcgeos1/geode.py`, `pcgeos1/ui.py` und `pcgeos1/packer.py` im Repository. Ausschließlich statische Auswertung; keine Änderung an Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
+
+
+## Untersuchung 2207 – Importauflösung und erste Zuordnung von Kernel-Relokationsstellen
+
+### 2207.1 – Der Kernel liest 14-Byte-Importdatensätze und löst sie einzeln auf
+
+Im Originalkernel `KERNEL.OLD` ist der Bereich ab Load-Image-Offset `0x2652` erneut im Kontrollfluss verfolgt worden. Die Routine berechnet zunächst `0x0E * Importanzahl`, liest diesen zusammenhängenden Bereich in einen temporären Speicherbereich und durchläuft anschließend die Datensätze in Schritten von 14 Bytes. Für jeden Datensatz lädt sie die WORD-Felder bei +0x08, +0x0A und +0x0C in CX, AX und BX; DX erhält den Geode-Kontext aus `DS:0000`. Danach erfolgt der Aufruf `0x271C`. Bei Erfolg wird der zurückgegebene AX-Wert in die fortlaufende WORD-Tabelle geschrieben; der Datensatzzeiger wird um 0x0E und der Zieltabelleintrag um 2 erhöht.
+
+Die Routine bei `0x271C` übernimmt die weitere Auflösung. Sie verwendet unter anderem die acht Zeichen des Bibliotheksnamens, sucht bzw. lädt die passende Bibliothek und prüft anschließend die angeforderten Protokoll-/Versionswerte. Der Kontrollfluss enthält Fehlerpfade, die den Aufruf mit gesetztem Carry abbrechen. Damit ist die bereits im GEODE-Parser angenommene Datensatzbreite von 14 Bytes durch den Originalkernel-Kontrollfluss bestätigt. Ebenso ist belegt, dass die Bibliotheksimporte vor ihrer Nutzung in eine kompakte WORD-Tabelle aufgelöst werden.
+
+**Grenze:** Dieser Befund erklärt den Importpfad der Bibliotheksrelokationen, aber noch nicht die Quellklasse-0-Kernelrelokationen. Die Routine bei `0x271C` darf nicht als LMem-Funktion missverstanden werden; sie ist Teil der Bibliotheksauflösung.
+
+### 2207.2 – Ein UI.GEO-Kernelrelokationseintrag liegt auf dem Operanden eines FAR-CALL
+
+In UI.GEO, Ressource R2, liegt ein Quellklasse-0-/Typ-0-Relokationseintrag bei Ressourcenoffset `0x0005`. Der dort gespeicherte WORD-Wert ist `0x01E9`. Die Bytes unmittelbar davor und danach lauten:
+
+```
+BF 40 00 50 9A E9 01 00 00
+```
+
+Das ist syntaktisch ein 16-Bit-FAR-CALL (`9A`) mit dem codierten Offset `0x01E9` und dem Segmentwort `0x0000`. Im Kernel-Load-Image befindet sich bei Offset `0x01E9` tatsächlich eine Instruktion. Dieser Befund zeigt eine konkrete Verbindung zwischen einer UI.GEO-Relokationsstelle und einem Kernelcode-Offset. Er beweist noch nicht, wie der Loader den Segmentanteil behandelt, ob der codierte Offset unverändert bleibt oder welche symbolische API-Funktion an dieser Stelle beginnt.
+
+Eine weitere Beobachtung in UI.GEO R16: Bei Offset `0x0016` steht eine FAR-JMP-Instruktion mit den beiden WORDs `0x00A9` und `0x00A9`. Auf diesen beiden WORD-Positionen liegen Quellklasse-0-Relokationen der Typen 1 und 2. Das ist ein Hinweis darauf, dass verschiedene Relokationstypen innerhalb eines FAR-Pointers auftreten. Ihre genaue Semantik wird ohne die entsprechende Relokationsroutine nicht festgelegt.
+
+### 2207.3 – Nächster Prüfpunkt
+
+Die Importauflösung ist nun vom Kernelcode her belegt. Für die eigentliche LMem-Frage muss als nächstes die Routine identifiziert werden, die die Relokationstypen der Quellklasse 0 verarbeitet und die bei UI.GEO gefundenen FAR-CALL-/FAR-JMP-Operanden korrigiert. Erst wenn dieser Pfad geklärt ist, kann man die Kernel-Offsets aus UI.GEO systematisch als API-Einstiegspunkte katalogisieren und nach LMem-Aufrufen suchen.
+
+**Quellenbasis:** Originaldatei `GEOWORKS/KERNEL.OLD` aus `GEOWORKS.zip`, Load-Image-Disassemblierung und Kontrollflussbereiche `0x2652–0x27D6` sowie `0x01E9`; Originaldatei `GEOWORKS/SYSTEM/UI.GEO`, Ressourcen R2 und R16 einschließlich ihrer Relokationstabellen. Die Disassemblierung ist statisch; symbolische API-Namen und die genaue Semantik der Relokationstypen 1/2 sind weiterhin unbestimmt. Keine Änderung an Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
