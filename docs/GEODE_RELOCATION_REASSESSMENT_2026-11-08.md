@@ -573,3 +573,124 @@ Die Routine unterscheidet im sichtbaren Code mindestens die Klassenwerte `0x00` 
 - Keine Kernel-, GEO- oder Parserdatei wurde geändert. Die Analyse ist statisch; ein Laufzeittest unter GeoManager steht aus.
 
 **Nächster Block 2081–2090:** Die Verzweigungen von `2153` werden vollständig verfolgt. Wir gleichen die Klassen-/Operationskombinationen mit echten NOTEPAD-, GROBJ- und SPLAY-Relocation-Datensätzen ab und bestimmen, welche Tabellen die Segment-/Ressourcenindizes liefern.
+
+## Untersuchungen 2081–2090 – Kontrollfluss des Relocation-Dispatchers
+
+**Untersuchungsbasis:** Original `KERNEL.OLD`, Ladeabbild `/tmp/geodework/KERNEL.OLD.LOAD`; 8086-Disassemblierung. Die Funktion wurde ausdrücklich ab ihrer tatsächlichen Einsprungadresse `0x2153` disassembliert. Ein Disassemblerstart mitten in der vorhergehenden Instruktion bei `0x2151` erzeugt irreführende Instruktionsgrenzen; deshalb gilt für diesen Block ausschließlich die ab `0x2153` ausgerichtete Folge.
+
+### 2081 – Eintritt und gesicherte Eingangsregister
+
+`20FE` lädt pro Datensatz das erste WORD nach `AX` und das zweite WORD nach `BX`, danach erfolgt `call 2153`. Zu Beginn von `2153`:
+
+```asm
+2153  push ds
+2154  mov  dx,ax
+2156  and  dl,F0
+2159  and  al,0F
+215B  mov  di,es:[bx]
+```
+
+Damit ist der Eingabewert an `ES:[BX]` bereits vor der Verzweigung als `DI` geladen. `DL` enthält die Klassenmaske des ersten Bytes; `AL` dessen Operationsnibble. `AH` bleibt zunächst das zweite Byte.
+
+### 2082 – Klasse 0x00
+
+Bei `DL=0` führt der Code aus:
+
+```asm
+2163  mov  si,cs
+2165  shl  di,1
+2167  mov  ds,cs:[2151]
+216C  jmp  21C4
+```
+
+Der ursprüngliche WORD-Wert aus der Ressource wird verdoppelt und dient als Index in einer WORD-Tabelle im durch `CS:[2151]` bezeichneten Segment. `SI` erhält den aktuellen Code-Segmentwert. Die Routine springt danach in die gemeinsame Operationsauswertung ab `21C4`.
+
+**Noch offen:** Welche konkrete Kernel-Tabelle das Segment `CS:[2151]` bezeichnet und welche symbolische GEODE-Relocation-Art Klasse 0x00 repräsentiert.
+
+### 2083 – Klasse 0x10: Segmenttabelle über Byte 1
+
+Bei `DL=0x10` springt der Dispatcher nach `21A7`:
+
+```asm
+21A7  xor  dx,dx
+21A9  mov  dl,ah
+21AB  shl  dx,1
+21AD  mov  si,[0036]
+21B1  add  si,dx
+21B3  mov  ds,[si]
+```
+
+Das zweite Datensatzbyte wird als WORD-Tabellenindex verwendet. Die Basisadresse dieser Segmenttabelle steht im Kernel-Arbeitsfeld `DS:[0036]`; der gelesene Tabellen-WORD wird anschließend in `DS` geladen. Damit ist die Indexfunktion des zweiten Bytes für diese Klasse unmittelbar durch den Code belegt.
+
+### 2084 – Sonderwert FFFFh in Klasse 0x10
+
+Unmittelbar danach prüft der Code den zuvor aus `ES:[BX]` geladenen Wert `DI` durch `inc di` und `je 2179`. Der Wert `FFFFh` ist somit ein eigener Sonderfall und führt nicht in die normale Ressourcen-/Exporttabelle. Für andere Werte wird `DI` wiederhergestellt und als Index weiterverarbeitet.
+
+### 2085 – Aufbau eines Vier-Byte-Tabelleneintrags
+
+Der normale Pfad bei `2179` berechnet `DI*4 + DS:[0030]` und liest aus dem Eintrag zwei WORDs:
+
+```asm
+2179  mov  si,[di]
+...
+21BD  add  di,[0030]
+21C1  mov  si,[di+2]
+21C4  mov  di,[di]
+```
+
+Damit ist für diesen Pfad ein Tabelleneintrag aus zwei WORD-Feldern belegt. Das erste Feld wird in `DI`, das zweite in `SI` übernommen. Die konkrete Feldbedeutung wird erst nach Rückverfolgung der Tabelle `DS:[0030]` festgelegt.
+
+### 2086 – Weitere Klassen benutzen eine andere Tabelle
+
+Klassen außer `0x00` und `0x10` laufen über `2173`. Dort wird der Ressourcen-/Exportwert aus `ES:[BX]` verdoppelt, zur Basis `DS:[003A]` addiert und ein WORD in `SI` gelesen. Danach folgt je nach Operation ein Sonderpfad oder der Aufruf `9630`. Anschließend wird ein WORD aus `[SI]` nach `DI` geladen.
+
+Das zeigt, dass mindestens ein weiterer Klassenbereich eine getrennte Tabelle über `DS:[003A]` verwendet. Die genaue Bedeutung der übrigen oberen Nibblewerte ist noch nicht bewiesen.
+
+### 2087 – Metadatenprüfungen vor bestimmten Operationen
+
+Im Pfad über `217F` werden zwei Eintragsmerkmale geprüft:
+
+```asm
+2184  test byte ptr [si+0A],80
+218A  cmp  byte ptr [si+0B],FF
+```
+
+Wenn Bit 7 des Bytes `SI+0x0A` gesetzt ist oder das Byte `SI+0x0B` gleich `FFh` ist, springt der Code zum gemeinsamen Schreibpfad. Andernfalls hängt die weitere Verarbeitung unter anderem von `AL` ab. Die Bedeutung dieser Metadatenbytes wird nicht ohne Struktur-Xref benannt.
+
+### 2088 – Gemeinsame Operationsauswertung
+
+Ab `21C4` unterscheidet der Code die unteren Nibblewerte:
+
+- `AL=2`: direkter Schreibpfad mit `DI` nach `ES:[BX]`.
+- `AL=1`: ebenfalls Schreibpfad `DI` nach `ES:[BX]`.
+- `AL=0`: schreibt abhängig von `SI` ein WORD nach `ES:[BX+2]`; bei `SI>=F000h` wird stattdessen `DI` geschrieben.
+- `AL=3`: eigener Pfad mit Prüfung `SI` gegen `F000h`; bei kleineren Werten folgt ein Aufruf `724B`, andernfalls wird ein anderer Rücksprung-/Trampolinpfad vorbereitet.
+
+Diese Beschreibung benennt nur die beobachteten Speicheroperationen und Kontrollflusswege, nicht die semantischen Namen der Relocation-Typen.
+
+### 2089 – Spezialpfad erzeugt Codebytes
+
+Für einen Zweig mit `AL=2` und den zuvor geprüften Metadaten wird bei `21E9` das Byte `CDh` an `ES:[BX-1]` geschrieben. Danach wird ein Wert aus `SI` um vier Bit nach rechts verschoben, mit `80h` verknüpft und als Teil des Wertes für `ES:[BX]` verwendet. Das ist eine konkrete Codepatch-Operation und kein gewöhnlicher WORD-Pointer-Patch.
+
+Der Aufruf bei `21E6` geht nach `220F`; diese kurze Hilfsroutine schiebt `SI` viermal nach links und kehrt zurück. Der genaue Zweck des gesamten erzeugten Byte-/WORD-Musters muss anhand der betroffenen GEODE-Datensätze und des Laufzeitkontexts weiter untersucht werden.
+
+### 2090 – Dispatcher-Karte und offene Punkte
+
+Der derzeit gesicherte Kontrollfluss lässt sich so zusammenfassen:
+
+| Erstes Byte: oberes Nibble | Beobachteter Pfad | Zweites Byte |
+|---|---|---|
+| `0x00` | Segment-/Tabellenbasis aus `CS:[2151]`; gemeinsamer Dispatcher | in diesem Pfad nicht verwendet |
+| `0x10` | Segment wird über Tabelle ab `DS:[0036]` geladen | Index in Segmenttabelle |
+| andere Werte | Tabelle ab `DS:[003A]`, danach ggf. Metadatenprüfung | in diesem Pfad nicht als Index nachgewiesen |
+
+Die unteren Nibblewerte `0` bis `3` steuern verschiedene Schreib- und Sonderpfade. Nicht alle Kombinationen sind gleichbedeutend, und einzelne Klassen verzweigen vor der gemeinsamen Operationsauswertung.
+
+**Noch nicht erledigt:**
+
+1. Xrefs und Aufbau der Tabellen `DS:[0030]`, `DS:[0036]`, `DS:[003A]` sowie des Segmentzeigers `CS:[2151]` bestimmen.
+2. Die Aufrufziele `9630` und `724B` untersuchen.
+3. Reale NOTEPAD-, GROBJ- und SPLAY-Datensätze nach Klassen-/Operationskombinationen gruppieren und ihre Zielwerte mit den Tabellen abgleichen.
+4. Erst danach symbolische Namen für die Relocation-Arten festlegen.
+
+**Status:** Ausschließlich statische Analyse. Keine Änderungen an `KERNEL.OLD`, `KERNEL.EXE`, GEO-Dateien oder `pcgeos1/geode.py`.
