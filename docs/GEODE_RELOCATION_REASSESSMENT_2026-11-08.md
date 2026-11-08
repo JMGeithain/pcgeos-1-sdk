@@ -708,23 +708,50 @@ Die Routine ab `1B45` berechnet `DS:[0030]` aus `DS:[0036]` und `DS:[0034]`:
 1B4F  mov [0030],dx
 ```
 
-Damit gilt exakt: `0030 = 0036 + 2 * 0034` (16-Bit-Arithmetik). Das ist ein abgeleiteter Zeiger hinter einem WORD-Array mit `0034` Einträgen. Die Bezeichnung des Arrays wird noch nicht festgelegt.
+Damit gilt exakt:
+
+`0030 = 0036 + 2 * 0034` (16-Bit-Arithmetik).
+
+Das ist ein abgeleiteter Zeiger hinter einem WORD-Array mit `0034` Einträgen. Die Bezeichnung des Arrays wird noch nicht festgelegt.
 
 ### 2092 – Der Bereich ab 0030 wird mit Vier-Byte-Einträgen dimensioniert
 
-Direkt anschließend liest `1B6B` die Anzahl aus `DS:[0032]`, multipliziert sie mit vier und verwendet `DS:[0030]` als Startadresse. Die Routine `1C04` wird für jedes Element mit einem Offset aufgerufen, der jeweils um vier Bytes steigt. Damit ist belegt, dass der Bereich ab `0030` mindestens `0032` Datensätze zu je vier Bytes enthält. Das passt strukturell zu den im Relocation-Dispatcher gelesenen Paaren aus zwei WORDs, beweist aber allein noch nicht, dass alle Datensätze identisch semantisch interpretiert werden.
+Direkt anschließend liest `1B6B` die Anzahl aus `DS:[0032]`, multipliziert sie mit vier und verwendet `DS:[0030]` als Startadresse. Die Routine `1C04` wird für jedes Element mit einem Offset aufgerufen, der jeweils um vier Bytes steigt.
+
+Damit ist belegt, dass der Bereich ab `0030` mindestens `0032` Datensätze zu je vier Bytes enthält. Das passt strukturell zu den im Relocation-Dispatcher gelesenen Paaren aus zwei WORDs, beweist aber allein noch nicht, dass alle Datensätze identisch semantisch interpretiert werden.
 
 ### 2093 – Der Zeiger 003A liegt hinter dem Vier-Byte-Array
 
-Routine `1C76` berechnet `003A = 0030 + 4 * 0032`. `003A` zeigt unmittelbar hinter das zuvor dimensionierte Vier-Byte-Array. Die Felder `0030` und `003A` verweisen damit auf benachbarte Bereiche einer gemeinsamen internen GEODE-Datenstruktur.
+Routine `1C76` berechnet:
+
+```asm
+1C76  mov ax,[0032]
+1C79  shl ax,1
+1C7B  shl ax,1
+1C7D  add ax,[0030]
+1C81  mov [003A],ax
+```
+
+Somit gilt exakt:
+
+`003A = 0030 + 4 * 0032`.
+
+`003A` zeigt unmittelbar hinter das zuvor dimensionierte Vier-Byte-Array. Dies bestätigt, dass die Felder `0030` und `003A` auf benachbarte Bereiche einer gemeinsamen internen GEODE-Datenstruktur verweisen.
 
 ### 2094 – Die nachfolgenden Bereiche 003C und 003E
 
-Im selben Aufbaupfad werden zwei weitere Zeiger berechnet: `003C = 003A + 2 * 0038` und `003E = 003C + 4 * 0038`. Die Routine reserviert danach weitere Bereiche anhand der Anzahl `0038`. Die exakten Feldinhalte sind anhand dieses Codes allein noch nicht festgelegt. Die Berechnungen belegen eine zusammenhängende Folge von Tabellenbereichen mit WORD- und DWORD-Elementbreiten.
+Im selben Aufbaupfad werden zwei weitere Zeiger berechnet:
+
+- `003C = 003A + 2 * 0038`
+- `003E = 003C + 4 * 0038`
+
+Die Routine reserviert danach weitere Bereiche anhand der Anzahl `0038`. Die exakten Feldinhalte sind anhand dieses Codes allein noch nicht festgelegt. Die Berechnungen belegen aber eine zusammenhängende Folge von Tabellenbereichen mit WORD- und DWORD-Elementbreiten.
 
 ### 2095 – 0036 ist ein Eingangszeiger, nicht bloß eine Relocation-Konstante
 
-Da `0030` aus `0036` plus `2*0034` gebildet wird, muss `0036` bereits vor `1B45` initialisiert sein. Der Wert ist Teil des zuvor aufgebauten GEODE-Kontexts. Der Dispatcher bei `21A7` benutzt `0036` als Basis einer WORD-Tabelle und lädt aus dieser Tabelle einen Segmentwert in `DS`. Die Verbindung zwischen Initialisierung und Dispatcher ist durch konkrete Lese-/Rechenoperationen nachgewiesen; der semantische Name des Arrays bleibt offen.
+Da `0030` aus `0036` plus `2*0034` gebildet wird, muss `0036` bereits vor `1B45` initialisiert sein. Der Wert ist daher Teil des zuvor aufgebauten GEODE-Kontexts. Der Dispatcher bei `21A7` benutzt `0036` als Basis einer WORD-Tabelle und lädt aus dieser Tabelle einen Segmentwert in `DS`.
+
+Die Verbindung zwischen Initialisierung und Dispatcher ist damit durch konkrete Lese-/Rechenoperationen nachgewiesen. Der semantische Name des Arrays bleibt offen.
 
 ### 2096 – Die Funktion 9630h ist ein Segmentkontext-Umschalter
 
@@ -733,25 +760,36 @@ Der Aufruf `9630h` beginnt tatsächlich mit dem Segmentpräfix an Adresse `9630`
 ```asm
 9630  2E 8E 1E 2E 96    mov ds,cs:[962E]
 9635  C3                ret
+```
+
+Die parallel verwendete Routine `9636h` lädt entsprechend `ES` aus demselben Kernelwort:
+
+```asm
 9636  2E 8E 06 2E 96    mov es,cs:[962E]
 963B  C3                ret
 ```
 
-Damit ist `9630h` keine allgemeine Datei- oder Tabellenlesefunktion. Sie setzt `DS` auf den durch `CS:[962E]` bezeichneten Segmentkontext.
+Damit ist `9630h` keine allgemeine Datei- oder Tabellenlesefunktion. Sie setzt `DS` auf den durch `CS:[962E]` bezeichneten Segmentkontext. Diese Präzisierung korrigiert jede weitergehende Funktionsvermutung aus den vorherigen Abschnitten.
 
 ### 2097 – 724Bh arbeitet mit einem übergebenen Segment-/Handle-Kontext
 
-Die Routine `724B` übernimmt `CX` als Segmentkontext, setzt `DS=CX`, liest dort ein Wort am Offset null und ruft anschließend `9630h` sowie `701Bh` auf. Danach prüft sie unter anderem Alignment, Grenzen und Einträge in Kernel-Verwaltungsstrukturen. Sie kann einen passenden Verwaltungs-/Handleeintrag finden und gibt einen Wert über `CX` zurück; in bestimmten Fällen setzt sie Carry. Sicher belegt ist eine Kernel-interne Segment-/Handle-Auflösung beziehungsweise -Prüfung. Eine präzisere Bezeichnung wie „Lock“, „Pin“ oder „Resource load“ wäre ohne zusätzliche Xrefs und Laufzeitbeobachtung nicht ausreichend abgesichert.
+Die Routine `724B` übernimmt `CX` als Segmentkontext, setzt `DS= CX`, liest dort ein Wort am Offset null und ruft anschließend `9630h` sowie `701Bh` auf. Danach prüft sie unter anderem Alignment, Grenzen und Einträge in Kernel-Verwaltungsstrukturen. Sie kann einen passenden Verwaltungs-/Handleeintrag finden und gibt einen Wert über `CX` zurück; in bestimmten Fällen setzt sie Carry.
+
+Sicher belegt ist damit eine Kernel-interne Segment-/Handle-Auflösung beziehungsweise -Prüfung. Eine präzisere Bezeichnung wie „Lock“, „Pin“ oder „Resource load“ wäre ohne zusätzliche Xrefs und Laufzeitbeobachtung nicht ausreichend abgesichert.
 
 ### 2098 – Der Relocation-Dispatcher nutzt 9630h für den Kernelkontext
 
-Im Zweig ab `217F` wird `9630h` aufgerufen, bevor `SI` dereferenziert und Metadaten bei `[SI+0A]` und `[SI+0B]` geprüft werden. Das bedeutet: `DS` wird vor diesen Zugriffen ausdrücklich auf den Segmentkontext `CS:[962E]` gesetzt. Die Metadatenprüfung erfolgt daher nicht mehr im zuvor für die Zielressource geladenen `DS`, sondern im Kernelkontext. Tabellen-/Metadatenadressen dürfen deshalb nicht pauschal als Felder im gerade relocatierten Ressourcenblock behandelt werden.
+Im Zweig ab `217F` wird `9630h` aufgerufen, bevor `SI` dereferenziert und Metadaten bei `[SI+0A]` und `[SI+0B]` geprüft werden. Nach dem neuen Befund bedeutet das: `DS` wird vor diesen Zugriffen ausdrücklich auf den Segmentkontext `CS:[962E]` gesetzt. Die Metadatenprüfung erfolgt daher nicht mehr im zuvor für die Zielressource geladenen `DS`, sondern im Kernelkontext.
+
+Das ist für die Interpretation der Tabellenfelder entscheidend: Die Tabellen-/Metadatenadressen dürfen nicht pauschal als Felder im gerade relocatierten Ressourcenblock behandelt werden.
 
 ### 2099 – Die GEODE-Headerzählungen und die internen Tabellenbereiche
 
+Die nachgewiesenen Größenbeziehungen lauten zusammengefasst:
+
 | Feld | Berechnung / Verwendung | Sicherer Befund |
 |---|---|---|
-| `0030` | `0036 + 2*0034` | Start eines Bereichs; danach folgen `0032` Vier-Byte-Einträge |
+| `0030` | `0036 + 2*0034` | Start eines WORD-vorangehenden Bereichs; danach folgen `0032` Vier-Byte-Einträge |
 | `0036` | Eingangszeiger | Basis einer WORD-Tabelle im Relocation-Pfad |
 | `003A` | `0030 + 4*0032` | Start des direkt folgenden Tabellenbereichs |
 | `003C` | `003A + 2*0038` | Start nach einem WORD-Bereich mit `0038` Elementen |
@@ -764,9 +802,139 @@ Diese Beziehungen sind aus den Maschinenbefehlen abgeleitet. Die Zähler `0032`,
 Der Tabellenaufbau ist jetzt in Teilen mathematisch rekonstruiert. Zusätzlich ist die Rolle von `9630h` eindeutig: `DS` wird aus `CS:[962E]` geladen. `724Bh` ist eine Segment-/Handle-Verwaltungsroutine, deren genaue Wirkung noch nicht abschließend benannt wird.
 
 **Nächste Schritte:**
+
 1. Den Initialisierungspfad vor `1B45` zurückverfolgen, um Herkunft und Bedeutung von `0034`, `0036`, `0032` und `0038` festzustellen.
 2. Die Aufrufstellen von `1B45`, `1C76` und `21A7` vergleichen, um die Lebensdauer der Tabellenbereiche zu verstehen.
 3. Den Wert `CS:[962E]` und seine Schreibstellen finden.
 4. Die realen GEODE-Dateitabellen aus NOTEPAD und GROBJ gegen die internen Tabellenbeziehungen spiegeln.
+
+**Status:** Statische Disassemblierung des deutschen Originalkernels `KERNEL.OLD`. Keine Änderung an Kerneldateien, GEO-Dateien oder `pcgeos1/geode.py`; keine Laufzeitbestätigung.
+
+## Untersuchungen 2101–2110 – Importtabelle und nachfolgende Verwaltungsarrays
+
+### 2101 – Rückverfolgung von Feld 0036
+
+Die Routine `2652` initialisiert `0036` explizit:
+
+```asm
+2652  mov ax,0046
+2655  test byte ptr [0003],80
+265A  je   265F
+265C  mov ax,005E
+265F  mov [0036],ax
+```
+
+Damit ist `0036` in diesem Loader-Kontext kein beliebig berechneter Zeiger, sondern ein ausgewählter Offset innerhalb der eingelesenen GEODE-Metadaten: entweder `0046h` oder `005Eh`, abhängig vom Flag `80h` in `[0003]`. Die genaue Bedeutung der beiden Header-Varianten muss separat anhand der Headerdaten belegt werden.
+
+### 2102 – Feld 0034 zählt 14-Byte-Importeinträge
+
+Unmittelbar danach liest `2652` den Wert `0034` und reserviert `14 * 0034` Bytes temporären Speicher. Die Schleife verarbeitet pro Durchlauf genau 14 Bytes:
+
+```asm
+2662  mov cx,[0034]
+2668  mov si,cx
+266A  mov ax,000E
+266D  mul cx
+...
+2693  mov ax,es:[di+0A]
+2698  mov bx,es:[di+0C]
+269C  mov cx,es:[di+08]
+26A4  mov dx,[0000]
+26A6  call 271C
+26AA  mov [bx],ax
+26AC  add di,000E
+26AF  add bx,0002
+26B2  dec si
+```
+
+Der Befund passt zur bereits aus den GEO-Dateien bekannten 14-Byte-Importstruktur. `0034` ist damit im untersuchten Kontext die Anzahl dieser Importeinträge. Die Routine löst jeden Eintrag über `271C` auf und schreibt das Ergebnis in eine WORD-Tabelle, deren Basis bei `0036` liegt.
+
+### 2103 – 0036 ist die Basis der aufgelösten Import-Segmentwerte
+
+Der Dispatcherzweig `21A7` verwendet `0036` als Basis und indexiert mit dem oberen Byte des Relocation-Feldes:
+
+```asm
+21A7  xor dx,dx
+21A9  mov dl,ah
+21AB  shl dx,1
+21AD  mov si,[0036]
+21B1  add si,dx
+21B3  mov ds,[si]
+```
+
+Zusammen mit dem Aufbau in `2652` ergibt sich: Die WORD-Tabelle ab Offset `0036` enthält die durch `271C` aufgelösten Segmentwerte der Imports. Der Index ist ein WORD-Index (Byteindex `2 * AH`). Das ist eine deutlich engere und besser belegte Aussage als die bisherige Bezeichnung „Eingangszeiger“.
+
+### 2104 – 0030 beginnt hinter der Import-Segmenttabelle
+
+`1B45` berechnet:
+
+```asm
+1B45  mov dx,[0034]
+1B49  shl dx,1
+1B4B  add dx,[0036]
+1B4F  mov [0030],dx
+```
+
+Damit liegt `0030` exakt `2 * Importanzahl` Bytes hinter der Basis `0036`. Das bestätigt die Tabellenfolge: zuerst die aufgelösten WORD-Segmentwerte der Imports, danach der nächste interne Tabellenbereich.
+
+### 2105 – 0032 zählt vier Byte breite Einträge im folgenden Bereich
+
+`1B6B` durchläuft `0032` Einträge. Für jeden Eintrag wird die Position um vier Bytes weitergeschoben:
+
+```asm
+1B6B  mov cx,[0032]
+1B71  mov di,[0030]
+1B75  add di,0002
+1B78  call 1C04
+1B7B  add di,0004
+1B7E  loop 1B78
+```
+
+Die Schleife überspringt jeweils die ersten zwei Bytes ab `0030` und ruft die Verarbeitung für die nachfolgenden Vier-Byte-Schritte auf. Sicher ist deshalb die Anzahl `0032` und der Vier-Byte-Abstand der Einträge. Eine fachliche Benennung als Export-, Ressource- oder Relocation-Anzahl wäre an dieser Stelle noch nicht gerechtfertigt.
+
+### 2106 – 003A, 003C und 003E bilden drei parallele Arrays
+
+Die Berechnung in `1C76` lautet:
+
+```asm
+1C76  mov ax,[0032]
+1C79  shl ax,1
+1C7B  shl ax,1
+1C7D  add ax,[0030]
+1C81  mov [003A],ax
+1C86  mov cx,[0038]
+1C8D  shl cx,1
+1C8F  add ax,cx
+1C91  mov [003C],ax
+1C94  shl cx,1
+1C96  add ax,cx
+1C98  mov [003E],ax
+```
+
+Somit gilt:
+
+- `003A = 0030 + 4 * 0032`
+- `003C = 003A + 2 * 0038`
+- `003E = 003C + 4 * 0038`
+
+Anschließend wird `8 * 0038` Bytes reserviert. Das entspricht drei unmittelbar aufeinanderfolgenden Arrays mit Elementbreiten 2, 2 und 4 Bytes. Die konkrete Semantik der drei Arrays ist noch nicht abschließend geklärt.
+
+### 2107 – Der Relocation-Dispatcher liest tatsächlich aus dem Import-Segmentarray
+
+Für Klasse `10h` wird das Indexbyte aus `AH` genommen und über `0036` in die gerade aufgebaute WORD-Tabelle umgesetzt. `DS` wird anschließend aus dem Tabellenwort geladen. Damit ist die Verbindung zwischen GEODE-Importauflösung und Relocation-Klassenpfad `10h` direkt im Code nachgewiesen.
+
+### 2108 – Die Klasse 00h bleibt ein anderer Segmentquellenpfad
+
+Der Dispatcherpfad für Klasse `00h` lädt `DS` nicht aus `0036`, sondern aus dem im Kernelcode hinterlegten Segmentwort `CS:[2151]`. Diese Klasse darf daher nicht mit dem Import-Segmentarray gleichgesetzt werden. Die Bedeutung der zugehörigen Tabelle und ihrer Einträge bleibt gesondert zu untersuchen.
+
+### 2109 – Korrektur der bisherigen Feldinterpretation
+
+Die bisherigen Abschnitte beschrieben `0036` zunächst nur als „Eingangszeiger“. Das ist jetzt präzisiert: Im Loader-Kontext wird `0036` auf `0046h` oder `005Eh` gesetzt und dient als Basis der WORD-Tabelle, in die `2652` die Ergebnisse der 14-Byte-Importauflösung schreibt. `0034` ist die Importanzahl. Diese Zuordnung ist durch Initialisierung, Schleifenschrittweite und Dispatcherzugriff gemeinsam belegt.
+
+### 2110 – Stand und nächste Prüfschritte
+
+**Neu gesichert:** `0034` = Anzahl der 14-Byte-Importeinträge; `0036` = Basis der WORD-Tabelle mit aufgelösten Import-Segmentwerten; `0030` = Ende dieser Tabelle und Beginn des nächsten Bereichs. `0032` zählt vier Byte weit auseinanderliegende Einträge. `0038` dimensioniert drei nachfolgende Arrays mit Elementbreiten 2, 2 und 4 Bytes.
+
+**Nächste Schritte:** (1) `271C` und seine Aufrufkonvention analysieren, um die Importauflösung zu benennen; (2) die Headerbytes bei `0046h` und `005Eh` mit echten GEODE-Dateien vergleichen; (3) die drei Arrays ab `003Ah` anhand aller Leser und Schreiber semantisch identifizieren; (4) den Klasse-00h-Pfad separat auflösen.
 
 **Status:** Statische Disassemblierung des deutschen Originalkernels `KERNEL.OLD`. Keine Änderung an Kerneldateien, GEO-Dateien oder `pcgeos1/geode.py`; keine Laufzeitbestätigung.
