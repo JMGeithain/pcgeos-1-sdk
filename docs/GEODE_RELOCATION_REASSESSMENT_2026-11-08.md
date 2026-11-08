@@ -1540,3 +1540,21 @@ Die Prüfung belegt ausschließlich, dass die vom Python-Code geschriebenen WORD
 Die LMem-Kopfbereiche der vier untersuchten Originalressourcen (SPINTEXT R3/R4 und VIEWER R12/R28) besitzen an den Offsets `0x00`, `0x02`, `0x04`, `0x06` und `0x0A` dieselben Grundwerte, die `lmem()` in `pcgeos1/ui.py` setzt: Ressourcen-ID, `0x20`, `0xE000`, `2` und die jeweilige Anzahl der Chunk-Tabelleneinträge. Auch die in den Originalressourcen vorhandenen Kennbytes im Flag-Chunk umfassen genau die Werte `0x00`, `0x02`, `0x03` und `0x07`; der Generator verwendet für seinen ersten Flag-Eintrag `0x00`, für Daten-Chunks `0x02`, für Objekt-Chunks `0x03` und für die als ignore-dirty markierten Objekte `0x07`. Die Werte und ihre Verwendung sind damit durch reale PC/GEOS-1.x-Dateien belegt. Aus diesem Vergleich allein wird keine weitergehende Bitfeld-Semantik abgeleitet. Die variierenden Kopfwerte an anderen Offsets (`0x08`, `0x14`) wurden nicht als identisch vorausgesetzt und bleiben gesondert zu untersuchen.
 
 **Quellenbasis:** Direkte Auswertung der ersten 32 Bytes und des Flag-Chunks der Ressourcen 3 und 4 aus `GEOWORKS/WORLD/SPINTEXT.GEO` sowie der Ressourcen 12 und 28 aus `GEOWORKS/WORLD/VIEWER.GEO`; Vergleich mit `lmem()` in `pcgeos1/ui.py`. Statische Analyse; keine Änderung an Originaldateien.
+
+
+### 2202 – Die LMem-Kopffelder bei Offsets 0x08 und 0x14 bleiben ein offener Kompatibilitätspunkt
+
+Die vier Originalressourcen zeigen für die WORD-Felder bei Offset `0x08` und `0x14` unterschiedliche Werte:
+
+| Originalressource | Ressourcengröße | WORD bei 0x08 | WORD bei 0x14 |
+|---|---:|---:|---:|
+| SPINTEXT R3 | 496 | `0x01EC` | `0x01E0` |
+| SPINTEXT R4 | 336 | `0x014C` | `0x0150` |
+| VIEWER R12 | 5.792 | `0x1698` | `0x1440` |
+| VIEWER R28 | 704 | `0x02C0` | `0x02C0` |
+
+Der Generator `lmem()` setzt Offset `0x08` auf die aktuelle Länge des erzeugten Blocks vor der abschließenden 16-Byte-Ausrichtung und Offset `0x14` auf die Länge nach dieser Ausrichtung. Diese Berechnung ist im Quelltext eindeutig. Die vier Originalwerte lassen sich damit jedoch nicht ohne Kenntnis der Feldsemantik als Bestätigung dieser Berechnung verwenden. Insbesondere ist bei SPINTEXT R3 der Wert bei `0x14` kleiner als das Ende des letzten ermittelten Chunks; bei VIEWER R12 weicht er deutlich vom Wert bei `0x08` ab. Die Bedeutung der beiden Felder ist daher aus den vorliegenden Vergleichen nicht sicher bestimmt.
+
+**Konsequenz:** Die bisherigen positiven Befunde zu den LMem-Grundfeldern und Flag-Bytes bestätigen nicht den vollständigen LMem-Header. Vor einem Build mit Laufzeitanspruch müssen die Felder `0x08` und `0x14` anhand des PC/GEOS-1.x-Kernels oder zusätzlicher sicher identifizierter Originalressourcen untersucht werden. Bis dahin bleibt die LMem-Konstruktion experimentell.
+
+**Quellenbasis:** Direkt gelesene LMem-Kopfbereiche und Chunk-Endpositionen aus `GEOWORKS/WORLD/SPINTEXT.GEO` (R3/R4) und `GEOWORKS/WORLD/VIEWER.GEO` (R12/R28); Quelltext `pcgeos1/ui.py`, Funktion `lmem()`. Keine Laufzeitannahme und keine Änderung an Originaldateien.
