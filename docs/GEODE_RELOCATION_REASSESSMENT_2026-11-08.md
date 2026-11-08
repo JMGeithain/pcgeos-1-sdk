@@ -1251,3 +1251,30 @@ Der gesetzte Bit-7-Zweig des Bytes `00C9h` addiert weiterhin `18h` zur Allokatio
 **Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `1AEAh–1B44h`, `1B45h–1C75h`, `1C76h–1D68h`, `6E87h–6E9Ah` und `2153h–21BDh`. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
+
+
+## Untersuchungen 2156–2160 – Ressourcenallokation und optionaler Zusatzblock
+
+### 2156 – Die Routine 1D51h legt einen einzelnen Ressourcenblock an
+
+Die Routine `1D51h` wird aus der Schleife ab `1D0Bh` aufgerufen, nachdem ein Eintrag aus dem bei `003Ah` adressierten Bereich gelesen wurde. Sie prüft zunächst `SI=2`; in diesem Sonderfall addiert sie den lokalen Wert bei `[BP-18h]` zur angeforderten Größe und setzt Bit `80h` in `CH`. Anschließend ruft sie mit `CALL 6E87h` die gleiche Speicherverwaltung wie der Hauptblock auf. Nach Erfolg werden Verwaltungsdaten in den neuen Block geschrieben und der zurückgegebene Blockzeiger in die bei `003Ah` adressierte Tabelle eingetragen. Damit ist belegt, dass der Loader neben dem zentralen GEODE-Verwaltungsblock weitere Speicherblöcke anlegt. Die genaue Bedeutung der Sondergröße bei `SI=2` bleibt offen.
+
+### 2157 – Der Loader speichert Blockverweise in einer indizierten Tabelle
+
+In `1D8Ah–1D98h` schreibt der Loader einen Wert aus dem Kernel-Segment an Blockoffset `0008h`, übernimmt den neuen Blockzeiger aus `BX` nach `AX` und speichert ihn bei `[003Ah + SI]`. Die Schleife erhöht `SI` jeweils um zwei. Das ist ein WORD-indiziertes Zeigerfeld. Welche konkrete Ressourcenkategorie die einzelnen Indizes repräsentieren, ist aus diesem Ausschnitt nicht abzuleiten.
+
+### 2158 – Die optionale 18h-Struktur besitzt mindestens Felder bei 46h und 48h
+
+Die Routine `1E1Fh` prüft den lokalen Wert `[BP-12h]`. Ist er ungleich null, schreibt sie ihn nach `DS:[0046h]`. Danach berechnet sie einen Tabellenindex aus `[BP-10h]`, liest den zugehörigen WORD-Wert aus der Tabelle ab `003Ah` und schreibt ihn nach `DS:[0048h]`. Beide Felder liegen direkt hinter dem festen 46h-Byte-Grundbereich und sind damit konkrete Bestandteile des optionalen Zusatzbereichs bzw. des erweiterten Verwaltungsblocks. Die Funktion dieser beiden Zeigerwerte ist noch nicht abschließend benannt.
+
+### 2159 – Der Aufbau des optionalen Bereichs greift zusätzlich auf Offset 56h zu
+
+Die Routine `1C16h` wird nur ausgeführt, wenn Bit `80h` im Statusbyte bei Blockoffset `0003h` gesetzt ist. Sie liest Werte über die Tabellen-/Segmentzeiger bei `003Ah` und `0036h`, schreibt zwei WORD-Werte in ein ermitteltes Segment bei Offsets `0008h` und `000Ah` und initialisiert anschließend vier WORDs ab `0056h`. Bei gesetztem globalen Zustand `WORD [0FB8h]` stammen diese vier WORDs aus dem Segment `SS:[0004h]`, andernfalls werden sie mit null gefüllt. Danach folgt ein weiterer Aufruf zur Initialisierung über `27D8h`. Damit ist die Nutzung des Zusatzbereichs bei `0056h` direkt belegt; die vier WORDs sind noch nicht symbolisch identifiziert.
+
+### 2160 – Zwischenstand: Allokation und Verwaltungsarrays getrennt betrachten
+
+Die Befunde zeigen zwei Ebenen: (1) den zentralen Verwaltungsblock mit festem Grundbereich `46h` und den daraus berechneten Tabellenbereichen; (2) zusätzliche, einzeln über `6E87h` angelegte Speicherblöcke, deren Verweise in einem WORD-indizierten Bereich abgelegt werden. Der optionale Zusatzbereich ab `46h` enthält mindestens die beschriebenen Felder bei `46h`, `48h` und `56h`; seine Gesamtstruktur bleibt offen. Eine endgültige Zuordnung der Tabellenindizes zu GEODE-Ressourcen, Importen oder Exporten wird erst nach Verfolgung der vorgelagerten Zähler- und Tabellenbefüllung vorgenommen.
+
+**Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `1C16h–1C75h`, `1D0Bh–1D68h`, `1D8Ah–1E37h` und `2300h–2355h`. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
