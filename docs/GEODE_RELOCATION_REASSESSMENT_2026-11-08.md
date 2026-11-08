@@ -998,3 +998,99 @@ Nach erfolgreicher Namensauflösung stellt `271C` die ursprünglichen Importwert
 ### 2120 – Abgleich mit Originaldateien und gesicherter Stand
 
 Der erste Importdatensatz von `NOTEPAD.GEO` (DOCUMENT und WORLD) sowie `GROBJ.GEO` beginnt bei `0120h` und lautet byteweise:
+
+```text
+75 69 20 20 20 20 20 20  00 40  B5 02  00 00
+u  i  [sechs Leerzeichen]  0040h 02B5h 0000h
+```
+
+Das bestätigt die 14-Byte-Schrittweite und die Feldpositionen `+08`, `+0A` und `+0C` anhand realer Dateien. Der sichtbare 8-Zeichenname `ui      ` stimmt mit dem Acht-Byte-Namensvergleich in `1EDE` überein. Die beiden Dateien liefern damit einen direkten Format-/Kernelabgleich; die semantischen Bezeichnungen der drei WORD-Felder bleiben bis zur weiteren Auswertung offen.
+
+**Ergebnis:** `271C` ist nicht nur eine abstrakte Import-Auflösung. Die Routine sucht zuerst in der Liste bereits geladener GEODEs anhand des 8-Byte-Namens, erzeugt bei Bedarf einen DOS-Basisnamen, stößt den Datei-Ladepfad an, prüft anschließend einen zweigliedrigen Kompatibilitätswert und gibt das GEODE-Segment zurück. `2652` speichert dieses Segment in der Importtabelle ab `0036`.
+
+**Quellenbasis:** Statische Disassemblierung des deutschen Originalkernels `KERNEL.OLD` (Load-Image-Offsets `1E7E–1F0D`, `197A–1AD3`, `2652–26BA`, `271C–27D6`) und Bytevergleich der Originaldateien `NOTEPAD.GEO` (DOCUMENT/WORLD) sowie `GROBJ.GEO` aus `GEOWORKS.zip`. Kein Laufzeittest.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
+
+## Untersuchungen 2121–2130 – DOS-Dateischnittstelle des GEODE-Laders
+
+### 2121 – `12F6` ist der zentrale Öffnungs-Einstieg
+
+```asm
+12F6  B4 3D       mov ah,3Dh
+12F8  E8 01 00    call 12FC
+12FB  CB          retf
+```
+
+Der Kernel setzt `AH=3Dh` und delegiert an `12FC`. DOS-Funktion `3Dh` ist der Dateiöffnungsaufruf. Der an `12F6` übergebene `AL`-Wert wird dabei nicht verändert. Im GEODE-Ladepfad setzt `197A` zuvor `AL=A0h`; dieser Wert darf nicht ohne weitere Prüfung als gültiger, gewöhnlicher DOS-Zugriffsmodus interpretiert werden, da `12FC` eine Kernelvermittlung mit zusätzlichen Prüfungen ausführt.
+
+### 2122 – `12FC` führt die Öffnung durch einen Kernelvermittler
+
+`12FC` sichert `CX`, `BX`, `DI` und `ES`, ruft `172F`, `15EB` und `17C3` auf und prüft danach über `AL & 03h` sowie `17F0` einen Pfad-/Statuszustand. Je nach Ergebnis wird `7A8`, `9636`, ein indirekter Callback über `ES:[05B8]` (mit `DI=4`) und gegebenenfalls `11CB` aufgerufen. Das ist mehr als ein unveränderter direkter DOS-Aufruf; die genaue Semantik der Vermittlungs- und Callback-Schritte wird separat verfolgt.
+
+### 2123 – `1088` ist der DOS-Lesevermittler
+
+```asm
+1088  call 0F7F
+108B  call 1891
+108E  mov ah,3Fh
+1090  call 0F63
+```
+
+DOS-Funktion `3Fh` liest Bytes von einem geöffneten Handle. Die Routine bereitet den Kontext vor und übergibt den eigentlichen DOS-Aufruf über `0F63`. Im GEODE-Kopftest wird `1088` mit `CX=0044h` und einem Stackpuffer als `DS:DX` aufgerufen.
+
+### 2124 – `10CA` ist der DOS-Seek-Vermittler
+
+```asm
+10CA  call 0F7F
+10CD  mov ah,42h
+10CF  call 0F6D
+```
+
+DOS-Funktion `42h` positioniert den Dateizeiger. Der Kernel reicht den Aufruf über `0F6D` weiter. Die Parameter in `CX:DX` werden von den Aufrufern bereitgestellt; die konkrete Offset-/Origin-Kombination muss je Aufruf verfolgt werden.
+
+### 2125 – `10D3` kombiniert Positionierung und anschließenden Lese-/Schreibpfad
+
+```asm
+10D3  call 0F7F
+10D6  mov al,00h
+10D8  call 10CA
+10DB  jb 10E2
+10DD  xor cx,cx
+10DF  call 10A4
+```
+
+Die Routine setzt `AL=0` für die Seek-Operation und ruft danach bei Erfolg `10A4` auf. `10A4` setzt `AH=40h` (DOS-Schreiben) und verwendet `0F56`. Diese Routine ist daher ein zusammengesetzter Seek-/Schreibpfad, nicht der GEODE-Leseweg.
+
+### 2126 – `1531` ist kein DOS-Open-Aufruf
+
+Der Einstieg `1531` ruft `29DC`, `17B5`, `1666`, `142C` und `1445` auf, aktualisiert Verwaltungsfelder und markiert ein Byte bei `SI+0Ah` mit Bit `10h`. Der Ablauf sichert und restauriert außerdem den aktuellen Kontext über `17BC` und `29EE`. Damit ist `1531` als GEODE-/Dateikontextverwaltung einzuordnen, nicht als unmittelbarer DOS-Dateiöffner.
+
+### 2127 – `15A0` baut einen Pfadpuffer auf
+
+`15A0` reserviert `68h` Bytes auf dem Stack, kopiert `34h` WORDs aus dem Puffer bei `04A4h` und ergänzt abhängig von `BP` gegebenenfalls einen Backslash sowie einen Pfadbestandteil aus einer Tabelle ab `DS:0544h`. Anschließend ruft es `14AA` mit `DS:DX` auf den Stackpuffer auf. Das belegt eine Pfad-/Verzeichnisstring-Konstruktion; welche Pfadklasse der Index in `BP` bezeichnet, bleibt offen.
+
+### 2128 – `197A` öffnet die Datei über `12F6` und liest den Header
+
+Der Ladepfad setzt `DX=SI`, `AL=A0h`, `CS` als Aufrufsegment und ruft `12F6`. Bei Erfolg wird das zurückgelieferte Handle in `BX` übernommen. Danach liest der Kernel zunächst einen 44h-Byte-Headerblock über `112C`/`1088` und prüft die GEODE-Kennung `C7 45 CF 53`. Später positioniert er die Datei über `10CA` auf `00C8h` und liest weitere `18h` Bytes.
+
+### 2129 – Die geprüften DOS-Funktionsnummern
+
+Für den untersuchten Pfad sind folgende DOS-Funktionsnummern direkt im Kernelcode sichtbar:
+
+- `AH=3Dh`: Datei öffnen (`12F6`)
+- `AH=3Fh`: aus Handle lesen (`1088`)
+- `AH=42h`: Dateizeiger positionieren (`10CA`)
+- `AH=40h`: in Handle schreiben (`10A4`)
+
+Die letzte Funktion ist ein allgemeiner Kernelvermittler und nicht als Bestandteil des GEODE-Lesevorgangs belegt.
+
+### 2130 – Ergebnis und offene Fragen
+
+**Gesichert:** Der GEODE-Lader öffnet über `12F6`/`12FC`, liest über `1088`/`0F63` und positioniert über `10CA`/`0F6D`. `1531` verwaltet GEODE-/Dateikontext; `15A0` baut einen Pfadpuffer auf. Der Header wird zunächst mit 44h Bytes gelesen, die GEODE-Kennung wird geprüft, anschließend wird zu `00C8h` positioniert und ein weiterer 18h-Byte-Block gelesen.
+
+**Offen:** (1) die genaue Kernelbedeutung des `AL=A0h`-Parameters beim Öffnen; (2) die durch `15A0` ausgewählten Pfadvarianten; (3) die exakte Funktion von `112C` und `14AA`; (4) die DOS-Fehlercodes und ihre Abbildung auf GEODE-Laderfehler.
+
+**Quellenbasis:** Statische Disassemblierung von `KERNEL.OLD` (Load-Image-Offsets `0F56–10DF`, `12F6–133A`, `14AA–15EA`, `197A–1AD3`, `271C–27D6`). DOS-Funktionsnummern sind anhand der DOS-API-Schnittstelle benannt. Keine Laufzeitbestätigung.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, sämtliche GEO-Dateien und `pcgeos1/geode.py`.
