@@ -1445,3 +1445,10 @@ Für den ersten Build sind jetzt vier Punkte erforderlich: (1) ein temporäres, 
 Die Dateien `GEOWORKS/WORLD/SPINTEXT.GEO` (3.764 Bytes) und `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` (3.748 Bytes) unterscheiden sich nicht nur im Archivpfad. Ein byteweiser Vergleich ergibt 1.335 unterschiedliche Bytepositionen innerhalb des gemeinsamen Längenbereichs; zusätzlich ist die Dateilänge um 16 Bytes verschieden. Daher darf eine der Varianten nicht allein aufgrund des gleichen Kernel- und UI-Protokolls als Ersatz für die SDK-Referenzvorlage ausgewählt werden. Vor einem Build muss geklärt werden, welche Variante die vom Packer erwarteten Objekt-/Ressourcenlayouts enthält.
 
 **Quellenbasis:** Direkter Bytevergleich der beiden SPINTEXT.GEO-Dateien aus `GEOWORKS.zip`. Keine Änderung an den Originaldateien.
+
+
+### 2189 – Die vom SDK tatsächlich übernommenen SPINTEXT-Ressourcen unterscheiden sich ebenfalls
+
+Der Packer übernimmt aus SPINTEXT.GEO ausdrücklich Ressourcen 3 und 4 als UI-Bestandteile. In den beiden Archivvarianten ist Ressource 3 unterschiedlich groß (496 gegenüber 480 Bytes) und hat unterschiedliche SHA-256-Werte; Ressource 4 ist in beiden 336 Bytes groß, besitzt aber ebenfalls unterschiedliche SHA-256-Werte. Damit ist die Abweichung genau in den vom Packer verwendeten Ressourcen vorhanden. Die Auswahl einer Variante kann deshalb nicht als reine Pfadkorrektur behandelt werden.
+
+**Quellenbasis:** Ressourcenverzeichnisse und Payload-Bytes der beiden SPINTEXT.GEO-Dateien aus `GEOWORKS.zip`; Packerzugriffe `resource_bytes(original,q,3)` und `resource_bytes(original,q,4)` in `pcgeos1/packer.py`. Keine Änderung an den Originaldateien.
