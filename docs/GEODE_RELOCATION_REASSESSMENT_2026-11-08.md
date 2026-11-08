@@ -1645,3 +1645,44 @@ Eine weitere Beobachtung in UI.GEO R16: Bei Offset `0x0016` steht eine FAR-JMP-I
 Die Importauflösung ist nun vom Kernelcode her belegt. Für die eigentliche LMem-Frage muss als nächstes die Routine identifiziert werden, die die Relokationstypen der Quellklasse 0 verarbeitet und die bei UI.GEO gefundenen FAR-CALL-/FAR-JMP-Operanden korrigiert. Erst wenn dieser Pfad geklärt ist, kann man die Kernel-Offsets aus UI.GEO systematisch als API-Einstiegspunkte katalogisieren und nach LMem-Aufrufen suchen.
 
 **Quellenbasis:** Originaldatei `GEOWORKS/KERNEL.OLD` aus `GEOWORKS.zip`, Load-Image-Disassemblierung und Kontrollflussbereiche `0x2652–0x27D6` sowie `0x01E9`; Originaldatei `GEOWORKS/SYSTEM/UI.GEO`, Ressourcen R2 und R16 einschließlich ihrer Relokationstabellen. Die Disassemblierung ist statisch; symbolische API-Namen und die genaue Semantik der Relokationstypen 1/2 sind weiterhin unbestimmt. Keine Änderung an Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
+
+
+## Untersuchung 2208 – Kernel-Relokationsdispatcher im Originalkernel identifiziert
+
+### 2208.1 – Aufrufpfad und Eintragsformat
+
+Die Verarbeitung der Ressourcenrelokationen ist im deutschen Originalkernel auf Load-Image-Offset `0x20FE` bis `0x2150` nachvollzogen. Die Routine ermittelt anhand der Ressourcentabelle den Relokationsbereich (Offset `DS:003E`), liest zuerst die Anzahl der Relokationseinträge und lädt die Einträge anschließend in temporären Blöcken von höchstens `0x100` Bytes. Die Schleife ab `0x2135` verarbeitet jeden Eintrag mit vier Bytes: WORD bei `[BP+SI]` in AX und WORD bei `[BP+SI+2]` in BX; danach Aufruf der Dispatcher-Routine bei `0x2153`. SI wird pro Eintrag um vier erhöht.
+
+Damit sind für diesen Kernel die vier Byte pro Relokationseintrag und die Zerlegung in ein Informationswort sowie ein Ziel-Offset durch den ausführenden Code bestätigt. Die im SDK verwendete Parserstruktur `<BBH>` ist die Byte-für-Byte-Sicht auf dasselbe 4-Byte-Format.
+
+### 2208.2 – Aufteilung des Informationsbytes in Quelle und Typ
+
+Die Dispatcher-Routine bei `0x2153` übernimmt das Informationswort in AX. Der Kontrollfluss maskiert DL mit `0xF0` und AL mit `0x0F`. Damit werden das obere Nibble des ersten Bytes als Quellenkennung und das untere Nibble als Relokationstyp getrennt ausgewertet. Die drei im SDK unterstützten Quellen sind im Kernelpfad unterscheidbar:
+
+- Quelle `0x00`: Kernelpfad. Der Dispatcher verwendet CS und eine kernelinterne Tabelle.
+- Quelle `0x10`: Bibliothekspfad. Der Dispatcher nimmt den Index aus dem aufgelösten Importbereich ab `DS:0036`.
+- Quelle `0x20`: Ressourcenpfad des aktuellen Geode. Der Dispatcher greift auf die Ressourcentabelle ab `DS:003A` zu.
+
+Damit ist die Zuordnung der im SDK verwendeten Quellenwerte 0, 1 und 2 zum Kernel-, Bibliotheks- und eigenen Ressourcenpfad durch den 1.x-Kernelcode gestützt. Dies ist eine wichtige Bestätigung für die Zerlegung `source = info >> 4` und `type = info & 0x0F` in `pcgeos1/geode.py`.
+
+### 2208.3 – Typzweige und Grenzen der Benennung
+
+Der Dispatcher enthält getrennte Zweige für die Typwerte 0, 1, 2 und 3. Die Typen 0, 1 und 2 führen zu unterschiedlichen Schreiboperationen am Relokationsziel; Typ 3 verzweigt in einen Sonderpfad bei `0x2205`, der unter anderem einen zusätzlichen Kernel-/Geode-Kontext berücksichtigt. Der Code enthält außerdem einen Pfad, der einen Aufrufstub im Zielbereich erzeugt bzw. verändert (Instruktionen ab `0x21E6` bis `0x21FA`). Aus diesem Grund werden die Typen hier zunächst nur anhand ihrer beobachteten Verarbeitungszweige katalogisiert. Die symbolischen Bezeichnungen aus späteren GEOS-Dokumentationen werden nicht ungeprüft auf GeoWorks 1.2 übertragen.
+
+### 2208.4 – Konkrete Probe aus UI.GEO
+
+UI.GEO, Ressource R2, enthält einen Relokationseintrag mit Informationsbyte `0x00`, Quellenkennung 0 und Typ 0, Zieloffset `0x0005`. An dieser Stelle liegen die Bytes:
+
+```
+50 9A E9 01 00 00 72 03
+```
+
+Der Operand ab Offset 0x0005 ist damit ein FAR-CALL mit codiertem Offset `0x01E9` und Segmentwort `0x0000`. Der Kernel-Load-Image-Offset `0x01E9` enthält ausführbaren Code. Die Probe ist daher ein konkretes Beispiel für einen Kernelquellen-Relokationseintrag, der einen FAR-CALL-Operand bearbeitet. Sie weist dem Ziel bei 0x01E9 noch keinen symbolischen API-Namen zu.
+
+UI.GEO R16 enthält am Zieloffset `0x0016` einen Relokationseintrag mit Info `0x01` (Quelle 0, Typ 1) und bei `0x0018` einen mit Info `0x02` (Quelle 0, Typ 2). Diese beiden Einträge liegen in einem Bereich mit FAR-JMP-Opcode `EA`; sie sind zusätzliche reale Proben für zwei getrennte Typzweige. Die exakte Bedeutung der beiden Typen bleibt bis zur vollständigen Nachverfolgung der jeweiligen Schreiboperationen offen.
+
+### 2208.5 – Konsequenz und nächster Schritt
+
+Die zentrale offene Frage aus Untersuchung 2207 ist nun eingegrenzt: Der Relokationsdispatcher ist gefunden, und die drei Quellenpfade sind im Kernel sichtbar. Als nächstes werden die Zieloperationen für die Typen 0–3 einzeln anhand von Originalrelokationen aus UI.GEO und weiteren 1.x-GEODEs verglichen. Danach können Kernel-Offsets, die durch Quelle 0 aufgelöst werden, als Kandidaten für API-Einstiegspunkte katalogisiert und ihre Aufrufpfade auf LMem-Operationen untersucht werden.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD` aus `GEOWORKS.zip`, Load-Image-Offsets `0x20FE–0x2217`; `GEOWORKS/SYSTEM/UI.GEO`, Ressourcen R2 und R16 sowie ihre originalen Relokationstabellen; `pcgeos1/geode.py`. Statische Analyse des Originalcodes, kein Laufzeittest. Keine Änderung an Kernel, Originaldateien oder SDK-Quelltexten.
