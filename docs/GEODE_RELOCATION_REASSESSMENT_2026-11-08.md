@@ -2462,3 +2462,106 @@ Damit sind gleich nummerierte Bits aus unterschiedlichen Bereichen ausdrücklich
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8329–0x838C), `0x8867–0x8913), `0x8A41–0x8A84), `0xA567–0xA574); SPINTEXT R3, LMem-Header und Flagtabellenbeleg aus Untersuchung 2214. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2223 – GEODE-Lader: interne Tabellen für Imports, Ressourcen und Relokationen
+
+### 2223.1 – Importtabellenaufbau (1B45h–1B80h)
+
+Die Laderoutine bei `0x1B45` berechnet den Start der Importfunktionsdatensätze:
+
+```asm
+1B45  mov dx,WORD PTR ds:0x34
+1B49  shl dx,1
+1B4B  add dx,WORD PTR ds:0x36
+1B4F  mov WORD PTR ds:0x30,dx
+1B53  mov cx,WORD PTR ds:0x32
+...
+1B5A  shl cx,1
+1B5C  shl cx,1
+1B5E  mov bx,WORD PTR ds:0x40
+1B62  xor al,al
+1B64  call 0x1088
+```
+
+Der berechnete Offset `DS:0030` liegt um `2 * DS:0034` WORDs hinter `DS:0036`. Der Lader liest anschließend `4 * DS:0032` Bytes in diesen Bereich. Danach durchläuft `0x1B6B–0x1B7E` genau `DS:0032` Einträge mit jeweils vier Byte Abstand und ruft für den zweiten WORD jedes Eintrags die Relokationsroutine `0x1C04` mit Quelle `0x22` auf.
+
+Damit sind die internen Größenrelationen nachgewiesen: `DS:0034` zählt WORD-Einträge vor der Importfunktionsliste; `DS:0032` zählt vier Byte große Importfunktionsdatensätze. `DS:0036` ist der Anfangsbezug für die vorhergehende WORD-Tabelle. Die genaue Benennung der vorhergehenden Einträge wird nicht über die Feldnummer allein festgelegt.
+
+### 2223.2 – Ressourcentabelle ist in drei parallele Bereiche gegliedert (1C76h–1CA3h)
+
+Der Lader berechnet:
+
+```asm
+1C76  mov ax,WORD PTR ds:0x32
+1C79  shl ax,1
+1C7B  shl ax,1
+1C7D  add ax,WORD PTR ds:0x30
+1C81  mov WORD PTR ds:0x3a,ax
+1C86  mov cx,WORD PTR ds:0x38
+1C8D  shl cx,1
+1C8F  add ax,cx
+1C91  mov WORD PTR ds:0x3c,ax
+1C94  shl cx,1
+1C96  add ax,cx
+1C98  mov WORD PTR ds:0x3e,ax
+1C9B  shl cx,1
+...
+1CA3  call 0x1088
+```
+
+Daraus folgt unmittelbar:
+
+- `DS:003A` = Anfang des Ressourcentabellenbereichs.
+- `DS:003C` = Anfang plus `2 * Ressourcenzahl`.
+- `DS:003E` = Anfang plus `6 * Ressourcenzahl`.
+- Gelesen werden insgesamt `8 * Ressourcenzahl` Bytes.
+
+Der Ressourcentabellenbereich enthält somit drei aufeinanderfolgende Arrays:
+
+1. `n` WORD-Einträge ab `DS:003A` (pro Ressource ein Laufzeit-/Segmentplatz);
+2. `n` Paare aus WORDs ab `DS:003C` (pro Ressource zwei WORD-Felder);
+3. `n` WORD-Einträge ab `DS:003E` (pro Ressource ein weiteres WORD-Feld).
+
+Die Zuordnung der zweiten und dritten Arrays wird durch die Verbraucher bestätigt: `0x2218` verwendet `DS:003C + 2*Index`, liest dort zwei WORDs und nutzt sie als Dateiposition und Lesegröße. `0x20FE` verwendet `DS:003E + 2*Index`, um die Anzahl der Relokationseinträge für die betreffende Ressource zu bestimmen.
+
+### 2223.3 – Ressourcen laden und Relokationen anwenden (20FEh–2150h, 2218h–223Fh)
+
+`0x2218` lädt eine Ressource anhand ihres Index:
+
+1. liest die beiden WORD-Felder aus dem Ressourcendatenarray bei `DS:003C`;
+2. verwendet `0x10CA` zum Positionieren im GEODE-Datei-Handle `DS:0040`;
+3. liest die Ressourcendaten in einen temporären Puffer;
+4. gibt das zugewiesene Segment an den Aufrufer zurück.
+
+`0x20FE` ruft zuerst `0x2218` auf, setzt ES auf das zurückgegebene Ressourcensegment und liest die Relokationsanzahl aus `DS:003E + 2*Index`. Die Relokationsdatensätze werden in Blöcken von maximal `0x100` Bytes gelesen. Jeder Datensatz besteht aus zwei WORDs; diese werden als AX und BX an den Dispatcher `0x2153` übergeben. Der Dispatcher verarbeitet Quellklasse und Relokationstyp getrennt.
+
+Damit ist die Ladefolge im Kernel belegt: Ressourcendaten laden, Zielsegment setzen, Relokationsanzahl lesen, Relokationsdatensätze blockweise einlesen und einzeln anwenden.
+
+### 2223.4 – Ressourcentabelle und LMem sind verschiedene Ebenen
+
+Die Ressourcentabelle beschreibt Ressourcen des GEODE und deren Laufzeitsegmente, Dateipositionen, Lesegrößen und Relokationszahlen. Sie ist nicht die LMem-Handle-Tabelle innerhalb einer einzelnen Ressource. Eine Ressource kann einen LMem-Block enthalten; die Ressourcentabelle selbst ist jedoch die übergeordnete Lade-/Relokationsebene.
+
+Für die SDK-Implementierung müssen daher zwei voneinander unabhängige Strukturen korrekt sein:
+
+- GEODE-Ressourcenverzeichnis und Relokationstabellen;
+- gegebenenfalls LMem-Header, Handle-Tabelle und Chunk-Flagtabelle innerhalb einer geladenen Ressource.
+
+### 2223.5 – Originaldatei-Kandidaten für die Gegenprüfung
+
+Aus dem deutschen GeoWorks-Archiv wurden zwei kleine Original-GEODEs als Vergleichskandidaten isoliert:
+
+| Datei | Größe | SHA-256 | Identifizierende Bytes |
+|---|---:|---|---|
+| `GEOWORKS/SYSTEM/SAVERS/BLANK.GEO` | 1.332 Bytes | `845b310069c51352242331c88531ef64f6b06d38dd9837a627b0333a82fac93f` | Signatur `C7 45 CF 53`; Typbytes bei Offset `0x14`: `SSAV`; Name `Blank`; sichtbare Ressourcennamen `saver`, `ui` |
+| `GEOWORKS/SYSTEM/DISK.GEO` | 910 Bytes | `6363699f0b9af45106b59e432f3b715f4e9c38d5e5c07a45fcce660f3f964be9` | Signatur `C7 45 CF 53`; Typbytes bei Offset `0x14`: `EMDM`; Name `Disk Swap Driver` |
+
+Die Dateien dienen zunächst nur als unveränderte Vergleichsobjekte. Ihre Dateiköpfe und Ressourcentabellen sind noch nicht vollständig auf die vom Lader erwarteten Felder abgebildet. Insbesondere wird BLANK.GEO nicht als „minimales GEODE“ bezeichnet, bevor Imports, Ressourcenflags, Relokationen und Startpfad vollständig geprüft sind.
+
+### 2223.6 – Konsequenz für den ersten Test-GEODE
+
+Der Kernel-Lader benötigt mindestens konsistente Importmetadaten, ein Ressourcenzählfeld, die drei parallelen Ressourcentabellenbereiche sowie zu jeder geladenen Ressource eine gültige Dateiposition, Größe und Relokationsliste. Daraus lässt sich noch kein vollständiger, gültiger Dateikopf ableiten: Die vorgelagerten Headerfelder, ihre Offsets im GEODE und die erforderlichen Ressourcenflags müssen als nächstes mit BLANK.GEO und einem zweiten Original-GEODE abgeglichen werden.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1B45–0x1B80), `0x1C76–0x1CA3), `0x20FE–0x2153), `0x2218–0x223F); Originaldateien aus `GEOWORKS.zip`: `GEOWORKS/SYSTEM/SAVERS/BLANK.GEO` und `GEOWORKS/SYSTEM/DISK.GEO`, jeweils SHA-256 oben. Statische Disassemblierung und Dateibyteprüfung; kein Laufzeittest.
+
+**Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
