@@ -1502,3 +1502,34 @@ Ressource 3 und Ressource 4 enthalten in beiden SPINTEXT-Dateien jeweils genau e
 Die vorhandene `WORLD/VIEWER.GEO` besitzt 37 Ressourcen. Die im SDK referenzierten Ressourcen 12 und 28 sind vorhanden. In Ressource 12 existieren die vom Generator verwendeten Chunk-Handles `0x22`, `0x32`, `0x36`, `0x3C`, `0x40`, `0x44` und `0x48`; in Ressource 28 existieren `0x56` und `0x5A`. Die beiden Ressourcen enthalten jeweils einen Relokationseintrag `(0x23,0x00,0x0000)`. Damit ist die strukturelle Voraussetzung „referenzierte Ressource und Chunk vorhanden“ für diese konkret verwendeten VIEWER-Vorlagen erfüllt. Die Übereinstimmung mit dem SDK-Referenzsatz und die Laufzeitkompatibilität sind damit weiterhin nicht bewiesen.
 
 **Quellenbasis für 2195–2197:** Direkte Auswertung der GEODE-Ressourcentabellen, Chunk-Verweise und Relokationstabellen aus `GEOWORKS/WORLD/SPINTEXT.GEO`, `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` und `GEOWORKS/WORLD/VIEWER.GEO` in `GEOWORKS.zip`; Quellcode `pcgeos1/ui.py` (Funktion `build_basic_ui`) und `pcgeos1/buildsys.py`. Die Originaldateien und SDK-Quellen blieben unverändert. Keine Laufzeitprüfung durchgeführt.
+
+
+## Untersuchungen 2198–2200 – Schreibgrenzen der UI-Objektvorlagen
+
+### 2198 – Alle neun von build_basic_ui() instanziierten Objektvorlagen bestehen den statischen Schreibgrenzencheck
+
+Die Funktion `build_basic_ui()` erzeugt neun Objektinstanzen aus den folgenden Original-Chunks: SPINTEXT R3/`0x24` (Primary), SPINTEXT R3/`0x3E` (GenView), VIEWER R28/`0x56` (Help-Trigger), VIEWER R12/`0x22` (Help-Dialog), VIEWER R12/`0x32` (Help-Textobjekt), VIEWER R12/`0x3C` (Button-Leiste) sowie VIEWER R12/`0x44`, `0x48` und `0x40` (Page-Up, Page-Down und Close). Für jede Instanz wurden die von `obj()` und die anschließend explizit gesetzten WORD-Felder gegen die tatsächliche Chunk-Länge geprüft. Kein Schreibbereich überschreitet die jeweilige Chunk-Grenze.
+
+| Objektvorlage | Chunk-Länge | Ende des letzten Schreibzugriffs (exklusiv) | verbleibende Bytes |
+|---|---:|---:|---:|
+| Primary | 33 | 26 | 7 |
+| GenView | 71 | 58 | 13 |
+| Help-Trigger | 34 | 34 | 0 |
+| Help-Dialog | 29 | 26 | 3 |
+| Help-Textobjekt | 50 | 48 | 2 |
+| Button-Leiste | 29 | 26 | 3 |
+| Page-Up | 34 | 34 | 0 |
+| Page-Down | 34 | 34 | 0 |
+| Close | 34 | 34 | 0 |
+
+Die drei 34-Byte-Vorlagen für Trigger/Buttons werden bis einschließlich Byteoffset `0x21` beschrieben; der Schreibzugriff endet exakt bei Chunk-Länge 34. Das ist innerhalb der Grenzen, lässt aber keinen unbeschriebenen Nachlauf.
+
+### 2199 – Gemeinsame Objektfelder und klassenspezifische Zusatzfelder sind getrennt erfasst
+
+Der Hilfsbaustein `obj()` schreibt sieben WORD-Werte an den Offsets `0x0C`, `0x0E`, `0x10`, `0x12`, `0x14`, `0x16` und `0x18`. Danach verändert `build_basic_ui()` abhängig vom Objekt weitere Felder: beim Primary Offset `0x0E`; bei der GenView Offsets `0x2E`, `0x32`, `0x34`, `0x36` und `0x38`; beim Help-Trigger Offsets `0x16`, `0x1C`, `0x1E` und `0x20`; beim Help-Textobjekt Offsets `0x1C`, `0x1E`, `0x26`, `0x2C` und `0x2E`; bei den drei Buttons Offsets `0x1C`, `0x1E` und `0x20`. Die Feldbereiche sind in Untersuchung 2198 vollständig in die Längenprüfung eingegangen. Insbesondere wird beim Help-Trigger Offset `0x16` nach dem allgemeinen Objektaufbau nochmals überschrieben.
+
+### 2200 – Schreibgrenzen beweisen keine semantische Richtigkeit der Feldbelegung
+
+Die Prüfung belegt ausschließlich, dass die vom Python-Code geschriebenen WORD-Bereiche innerhalb der jeweiligen Original-Chunks liegen. Sie belegt nicht, dass alle Offsets die beabsichtigten PC/GEOS-1.x-Instanzfelder darstellen, dass die gesetzten Bitwerte für die deutsche GeoWorks-1.2-UI korrekt sind oder dass die erzeugten Objektbäume zur Laufzeit fehlerfrei geöffnet werden. Für einen semantischen Nachweis sind passende PC/GEOS-1.x-Klassendefinitionen bzw. ein Abgleich mit bekannten, funktionierenden 1.x-Objektressourcen erforderlich. Allgemeine oder spätere FreeGEOS-/PC/GEOS-2.x-Dokumentation wird hierfür ausdrücklich nicht als ABI-Beleg verwendet.
+
+**Quellenbasis für 2198–2200:** Repository-Quelltext `pcgeos1/ui.py`, insbesondere `obj()` und `build_basic_ui()`; direkt extrahierte Chunk-Längen und Payloads aus `GEOWORKS/WORLD/SPINTEXT.GEO` und `GEOWORKS/WORLD/VIEWER.GEO` im vorliegenden `GEOWORKS.zip`; unabhängige Bounds-Prüfung aller neun Objektvorlagen. Statische Analyse; kein Laufzeittest und keine Änderung an Originaldateien.
