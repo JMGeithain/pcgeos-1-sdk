@@ -1686,3 +1686,26 @@ UI.GEO R16 enthält am Zieloffset `0x0016` einen Relokationseintrag mit Info `0x
 Die zentrale offene Frage aus Untersuchung 2207 ist nun eingegrenzt: Der Relokationsdispatcher ist gefunden, und die drei Quellenpfade sind im Kernel sichtbar. Als nächstes werden die Zieloperationen für die Typen 0–3 einzeln anhand von Originalrelokationen aus UI.GEO und weiteren 1.x-GEODEs verglichen. Danach können Kernel-Offsets, die durch Quelle 0 aufgelöst werden, als Kandidaten für API-Einstiegspunkte katalogisiert und ihre Aufrufpfade auf LMem-Operationen untersucht werden.
 
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD` aus `GEOWORKS.zip`, Load-Image-Offsets `0x20FE–0x2217`; `GEOWORKS/SYSTEM/UI.GEO`, Ressourcen R2 und R16 sowie ihre originalen Relokationstabellen; `pcgeos1/geode.py`. Statische Analyse des Originalcodes, kein Laufzeittest. Keine Änderung an Kernel, Originaldateien oder SDK-Quelltexten.
+
+
+## Untersuchung 2209 – Typ-3-Relokation durch zweite Originalanwendung belegt
+
+### 2209.1 – UI.GEO allein deckt nicht alle Dispatcherzweige ab
+
+Die Typen 0, 1 und 2 konnten anhand konkreter Relokationseinträge in UI.GEO R2 und R16 untersucht werden. In den beiden geprüften UI-Ressourcen wurde kein Typ-3-Eintrag als Probe verwendet. Die Existenz des Typ-3-Zweigs im Kernel war damit zwar sichtbar, aber noch nicht durch eine passende Probe aus dem installierten Originalbestand belegt.
+
+### 2209.2 – Probe aus NPLAYGCM.GEO
+
+In `GEOWORKS/NPLAYGCM.GEO`, Ressource R3, wurde ein Relokationseintrag mit Informationsbyte `0x03` gefunden: Quellenkennung 0, Typ 3, Zusatzbyte `0x0A`, Zieloffset `0x0000`. Die Ressource hat eine deklarierte Größe von `0x17C0` Bytes; der Zieloffset liegt damit innerhalb der Ressource. Die Bytes am Ziel beginnen:
+
+```
+50 53 51 52 56 1E 06 BF
+```
+
+Dies ist eine reale Typ-3-Probe aus einem zweiten PC/GEOS-1.x-GEODE im bereitgestellten Archiv. Sie bestätigt, dass der Kernelzweig für Quelle 0 / Typ 3 nicht nur ungenutzter Code ist. Die Probe erlaubt jedoch noch keine vollständige symbolische Benennung des Typs. Die Zusatzinformation `0x0A` und die genaue Wirkung des Zweigs `0x2205` müssen über weitere gleichartige Relokationen und den dortigen Zielcode untersucht werden.
+
+### 2209.3 – Arbeitsfolge
+
+Die nächste Analyse vergleicht die NPLAYGCM-Ressource mit dem Typ-3-Dispatcherpfad `0x21C6–0x2217`, insbesondere dem Sonderpfad `0x2205`, und verfolgt die Hilfsroutine `0x724B`. Parallel werden Typ-4- und höhere Typwerte nicht pauschal interpretiert: Sie werden erst dann in die unterstützte SDK-Formatmenge aufgenommen, wenn ihre Behandlung im 1.x-Kernel und anhand gültiger Originalproben einzeln bestätigt ist.
+
+**Quellenbasis:** `GEOWORKS/NPLAYGCM.GEO`, Ressource R3 und deren Relokationstabelle; `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x21C6–0x2217` und `0x724B`. Statische Auswertung. Keine Änderung an Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
