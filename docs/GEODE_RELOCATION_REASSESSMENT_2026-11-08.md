@@ -1828,3 +1828,47 @@ Die Untersuchung konzentriert sich zunächst auf die stark verwendeten Ziele `0x
 **Quellenbasis:** `GEOWORKS/SYSTEM/UI.GEO` aus dem bereitgestellten `GEOWORKS.zip`, alle 28 Ressourcentabellen und Relocation-Streams; `GEOWORKS/KERNEL.OLD`, MZ-korrigierter Kernel-Tabellenbereich ab `0x0DEC0` und die aufgelösten Kernel-Offsets. Statische Byteanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2213 – Häufiger UI.GEO-Verweis auf den allgemeinen Handle-Lock-Pfad
+
+### 2213.1 – Tabellenindex 491 führt zu Kerneloffset 8216h
+
+Aus der in Untersuchung 2212 erstellten UI.GEO-Inventur ergibt sich für Tabellenindex `0x1EB` (491) eine Häufigkeit von 30 Relokationseinträgen. Der Kernel-Tabellenwert für diesen Index ist `0x8216`. Dort beginnt:
+
+```asm
+8216  1E             push ds
+8217  E8 16 14       call 9630
+821A  E8 87 ED       call 6FA4
+821D  72 02          jb 8221
+821F  1F             pop ds
+8220  CB             retf
+8221  E8 FB 03       call 861F
+8224  1F             pop ds
+8225  CB             retf
+```
+
+Der Exportpfad sichert DS, ruft zunächst den Segment-/Datenkontext-Helfer bei `0x9630` und anschließend die Speicherverwaltungsroutine bei `0x6FA4` auf. Bei gesetztem Carry folgt ein zusätzlicher Fehler-/Nachladepfad bei `0x861F`.
+
+### 2213.2 – Die Routine 6FA4h prüft einen Speicherhandle und erhöht den Lock-Zähler
+
+Die Routine `0x6FA4` sichert DS und setzt DS auf das Kernel-Datensegment `0x0E35`. Sie prüft BX auf 16-Byte-Ausrichtung und auf den zulässigen Bereich zwischen `0x15B0` und dem in `DS:0x0E4C` gespeicherten Grenzwert. Anschließend sperrt sie kurz die Interrupts und liest den WORD-Wert bei `DS:[BX]`.
+
+- Ist dieser WORD-Wert ungleich null, erhöht sie das BYTE-Feld bei `DS:[BX+0x0B]` und kehrt zurück.
+- Ist der WORD-Wert null, ruft sie `0x7306` auf und versucht danach denselben Prüfpfad erneut.
+
+Damit ist die Funktion von `0x6FA4` als allgemeiner Speicherhandle-Lock-/Residentmachungspfad eingegrenzt: Ein Handleeintrag wird geprüft, sein Lock-Zähler wird erhöht oder ein noch nicht residenter Block wird über den Ladepfad angefordert.
+
+### 2213.3 – Abgrenzung zur LMem-Frage
+
+Der UI.GEO-Tabellenindex 491 verweist somit auf einen Kernelpfad, der den allgemeinen Speicherhandle verwaltet. Die beobachteten Felder `[BX]` und `[BX+0x0B]` gehören in diesem Kontrollfluss zu einem Kernel-Handleeintrag. Sie sind nicht die zuvor gesuchten LMem-Headerfelder bei `0x08` oder `0x14`.
+
+Dieser Befund ist wichtig, weil ein häufig verwendeter Kernelaufruf mit Speicherbezug nicht automatisch eine LMem-Operation ist. Die genaue symbolische API-Bezeichnung von `0x8216` bleibt offen; sie wird nicht aus dem Verhalten allein geraten.
+
+### 2213.4 – Nächster Schritt
+
+Die Ziele `0x8000` und `0x8027` bleiben die nächsten Kandidaten für eine getrennte Kontrollflussanalyse. Dabei wird insbesondere geprüft, ob die dort verwendeten Strukturen mit den allgemeinen Handleeinträgen aus `0x6FA4` zusammenhängen oder eine andere Ebene (z. B. Objekt-/Ressourcenreferenzen) darstellen. Eine LMem-Zuordnung erfolgt nur bei einem nachweisbaren Zugriff auf den LMem-Blockkopf oder die Chunk-Handle-Tabelle.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Kerneloffsets `0x8216–0x8225`, `0x9630–0x9635`, `0x6FA4–0x6FD1` und `0x7306`; UI.GEO-Quelle-0-/Typ-0-Relokationen mit Tabellenindex `0x1EB`. Statische Analyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
