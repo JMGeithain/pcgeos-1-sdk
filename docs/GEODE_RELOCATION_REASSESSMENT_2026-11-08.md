@@ -337,3 +337,96 @@ Daher werden keine Typnummern semantisch neu zugeordnet. Insbesondere bleibt die
 5. Erst danach die Source-/Type-/Extra-Felder der GEODE-Relocations endgültig benennen.
 
 Keine Kerneldatei, GEO-Datei oder Parserdatei wurde geändert. Dies ist statische Disassemblierungs- und Headeranalyse, kein GeoManager-Laufzeittest.
+
+## Untersuchungen 2061–2070 – Segmentstruktur des DOS-Kernelabbilds
+
+### 2061 – DOS-Relocation-Einträge nach Segmentziel gruppiert
+
+Die MZ-Relocationstabelle von `KERNEL.OLD` wurde vollständig gelesen. Jeder DOS-Relocation-Eintrag besteht aus Offset und Segmentziel. Gruppierung nach dem Segment-WORD:
+
+| Segmentziel | Anzahl | Offsetbereich |
+|---|---:|---|
+| `0000h` | 60 | `0162h–D225h` |
+| `0E35h` | 57 | `0004h–0F8Dh` |
+| `0F90h` | 156 | `0004h–1CC6h` |
+| **Gesamt** | **273** | |
+
+Dies sind ausschließlich MZ-/DOS-Fixups. Die Gruppierung beschreibt, auf welche im Kernelabbild enthaltenen Segmente DOS beim Laden Segmentwerte addieren muss.
+
+### 2062 – Segmentziel 0F90h und Bootstrap-Kopierlänge
+
+Die 156 MZ-Fixups für Segment `0F90h` liegen im Offsetbereich `0004h` bis `1CC6h`. Der Bootstrap bei `0F90:0000` kopiert `1CE0h` Bytes. Damit liegen alle 156 zugehörigen Fixup-Offets innerhalb des kopierten Segmentblocks.
+
+Das ist konsistent mit dem Befund, dass `0F90h` einen zusammenhängenden, selbstverlagerten Kernelblock bezeichnet. Es beweist noch nicht, dass dieser Block die GEODE-Laderoutine enthält.
+
+### 2063 – Segmentziel 0E35h
+
+Die 57 MZ-Fixups für `0E35h` liegen zwischen Offset `0004h` und `0F8Dh`. Der MZ-Header von `KERNEL.OLD` initialisiert außerdem `SS=0E35h` und `SP=15B0h`.
+
+Die Übereinstimmung von `SS` und dem häufigen Fixup-Segmentziel ist ein starker Hinweis, dass `0E35h` eine zentrale Kernel-Daten-/Stacksegmentrolle hat. Die genaue Aufteilung von Stack und globalen Daten wird hier noch nicht festgelegt.
+
+### 2064 – Gepatchter Kernel: verschobene Segmentziele
+
+Die gleiche Gruppierung für `KERNEL.EXE` ergibt:
+
+| Segmentziel | Anzahl | Offsetbereich |
+|---|---:|---|
+| `0000h` | 61 | `0162h–D216h` |
+| `0E34h` | 59 | `0004h–0FCBh` |
+| `0F93h` | 156 | `0004h–1CCFh` |
+| **Gesamt** | **276** | |
+
+Die Segmente sind gegenüber dem deutschen Original verschoben: `0E35h` wird zu `0E34h`, `0F90h` zu `0F93h`. Die 156 Fixups im großen Segmentblock bleiben in der Anzahl gleich. Das unterstreicht, warum Segmentnummern des gepatchten Kernels nicht ungeprüft auf `KERNEL.OLD` übertragen werden dürfen.
+
+### 2065 – Interner GEODE-Signaturtreffer im Kernel
+
+Die Bytefolge `C7 45 CF 53` wurde im Ladeabbild von `KERNEL.OLD` einmal gefunden:
+
+- MZ-Dateioffset: `F9C6h`
+- Offset relativ zum Beginn des MZ-Ladebereichs (`0600h`): `F3C6h`
+- Rohkontext ab Ladebereichoffset `F3B0h`:
+
+```text
+00 00 00 00 00 03 71 9F 43 9F B5 9F 7B 9F BB 9F
+C8 9F 01 00 00 00 C7 45 CF 53 01 00 00 00 00 00
+```
+
+Die Signatur steht nach mehreren WORD-Werten, die wie Offset-/Segmentpaare aussehen können, und vor Nullbytes. Das ist ein Datenkontext, kein nachgewiesener Ausführungspfad.
+
+### 2066 – Vergleich des Signaturfunds im gepatchten Kernel
+
+In `KERNEL.EXE` wurde die gleiche vier Byte lange Folge ebenfalls einmal gefunden, jedoch an einer anderen Position:
+
+- MZ-Dateioffset: `F9F6h`
+- Ladebereichoffset: `F3F6h`
+
+Der Abstand gegenüber `KERNEL.OLD` beträgt `30h` Bytes. Ohne die umgebende Struktur vollständig zu dekodieren, darf daraus nicht geschlossen werden, dass die Kernel-GEODE-Struktur inhaltlich geändert wurde. Gesichert ist nur die Verschiebung der Fundstelle.
+
+### 2067 – Keine direkte Code-Xref auf die Signatur behauptet
+
+Die bisherige Suche hat die Signatur als Rohbytefolge gefunden, aber keine gesicherte Instruktion identifiziert, die diese vier Bytes unmittelbar vergleicht. Ein Code-Xref kann über Segmentregister, Tabellen oder indirekte Zeiger erfolgen. Solange diese Wege nicht rekonstruiert sind, bleibt die Signatur ein Suchanker und kein Beweis für den GEODE-Loader.
+
+### 2068 – Segmentmodell als Arbeitskarte
+
+Für `KERNEL.OLD` ist aus dem MZ-Header und der Fixup-Tabelle derzeit folgende Arbeitskarte belegt:
+
+- `CS:IP = 0000:02B1`: DOS-Einstiegspunkt.
+- `0F90:0000`: Far-Call-Ziel des Einstiegs; Bootstrap-/Selbstverlagerung, Kopierlänge `1CE0h`.
+- `SS:SP = 0E35:15B0`: initialer Stackzeiger.
+- 156 MZ-Fixups referenzieren Segment `0F90h`.
+- 57 MZ-Fixups referenzieren Segment `0E35h`.
+- 60 MZ-Fixups referenzieren Segment `0000h`.
+
+Dies ist eine Segment-/Ladeabbildkarte, noch keine vollständige Karte der Kernelmodule oder ihrer öffentlichen Funktionen.
+
+### 2069 – Konsequenz für die GEODE-Loader-Suche
+
+Die GEODE-Loaderfunktion ist weiterhin nicht identifiziert. Die MZ-Fixup-Tabelle hilft, die internen Kernel-Segmente auseinanderzuhalten, ist aber nicht selbst die GEODE-Relocation-Tabelle. Der nächste Suchschritt muss von Kernel-Codepfaden ausgehen, die Dateiressourcen einlesen und die GEODE-Ressourcenverzeichnisse verarbeiten.
+
+### 2070 – Zwischenstand
+
+- Der originale Kernel-MZ-Einstieg und die Bootstrap-Selbstverlagerung sind bytegenau lokalisiert.
+- Die DOS-MZ-Fixups sind in drei Segmentzielgruppen aufgeteilt.
+- Der gepatchte Kernel besitzt verschobene Segmentziele und darf nicht als Offsetreferenz für den Originalkernel verwendet werden.
+- Die GEODE-Signatur kommt im Kernelabbild vor; ihre Funktion und der zugehörige Code-Xref sind noch offen.
+- Keine GEODE-Relocation-Typsemantik wurde neu festgelegt; keine Dateien wurden gepatcht.
