@@ -1354,3 +1354,51 @@ Die Offsets `[3Ch]` und `[3Eh]` markieren innerhalb des Ressourcenbereichs Grenz
 **Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `1B45h–1B7Eh`, `1C76h–1CA5h`, `1D9Ch–1E1Bh`, `2153h–2217h` und `2652h–26AFh`; GEODE-Headerzähler D0h/D2h/D4h und die 14-Byte-Importdatensatzstruktur. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
+
+
+
+## Untersuchungen 2171–2180 – Ressourcenpfad und kleinste Vergleichs-GEODEs
+
+### 2171 – Nach dem Tabellenaufbau folgt ein zweistufiger Ressourcenpfad
+
+Die Routine bei `1B81h` prüft Statusbits im GEODE-Verwaltungsblock (`DS:[0003h]`). Bei gesetztem Bit `20h` wird über die bei `28h/2Ah` gespeicherte Callback-Adresse ein weit entfernter Aufruf ausgeführt; bei gesetztem Bit `40h` wird zusätzlich die Routine `2630h` aufgerufen. Danach folgen `1C16h` und `2329h`. Damit ist belegt, dass die Ressourcenverarbeitung nicht allein aus dem Lesen der Ressourcentabelle besteht: Callback- und Nachbearbeitungspfade sind Teil des Ladevorgangs. Die Bedeutung der Statusbits wird hier noch nicht über ihre beobachtete Kontrollflusswirkung hinaus benannt.
+
+### 2172 – Callback-Aufruf verwendet einen GEODE-eigenen Funktionszeiger
+
+Bei `1B90h–1BB8h` wird die Adresse aus den Verwaltungsfeldern `28h/2Ah` als FAR-Prozedur aufgerufen. Vorher werden `CX` und `DX` aus dem aktuellen Stackframe übernommen; `DI` wird auf null gesetzt. Ein gesetztes Carry führt anschließend zum Fehlercode `0Dh`, andernfalls wird Statusbit `01h` gesetzt. Das ist ein konkreter Loader-Callback-Pfad, aber noch kein Beleg dafür, dass jede Anwendung diesen Callback bereitstellen muss.
+
+### 2173 – Importdatensätze werden mit 14 Byte eingelesen und einzeln aufgelöst
+
+Die Routine `2652h–26B3h` liest je Import genau `0Eh` Bytes. Aus jedem Datensatz werden die WORDs bei Offset `+08h`, `+0Ah` und `+0Ch` an die Auflösungsroutine `271Ch` übergeben. Das Ergebnis wird in der internen Importtabelle ab `[36h]` als WORD gespeichert. Die 14-Byte-Größe und die Position der drei übergebenen WORDs sind direkt aus den Instruktionen belegt; symbolische Feldnamen werden noch nicht vergeben.
+
+### 2174 – Importauflösung prüft vorhandene GEODEs anhand von Eigenschaften und Namen
+
+Die Routine `271Ch` ruft `1EBCh` auf. Der dortige Suchpfad bei `1EDEh–1F0Dh` vergleicht zunächst die GEODE-Eigenschaften bei `ES:[0002h]` mit den übergebenen Masken und prüft optional einen weiteren WORD-Wert bei `ES:[0004h]`. Danach werden 20 Bytes zwischen einem Suchdatensatz und dem GEODE-Namensbereich verglichen. Damit ist eine Eigenschafts-/Namensprüfung bei der Suche nach einer passenden geladenen GEODE belegt. Die vollständige Bedeutung der Masken und des 20-Byte-Feldes bleibt offen.
+
+### 2175 – Die Importtabelle enthält aufgelöste WORD-Verweise, nicht die 14-Byte-Datensätze
+
+Nach erfolgreicher Auflösung schreibt `2652h–26B3h` nur AX an die jeweilige WORD-Position der Tabelle `[36h]`; der temporäre 14-Byte-Datensatz wird mit Schrittweite `0Eh` weitergeschaltet. Die interne Tabelle ist daher eine kompakte Folge aufgelöster WORD-Werte. Die vollständigen Importdatensätze dienen dem Such-/Auflösungsvorgang und werden nicht unverändert in diese Tabelle kopiert.
+
+### 2176 – Ressourcenzugriffe bestätigen getrennte Laufzeitbereiche, aber noch keine symbolischen Feldnamen
+
+Die Zugriffe bei `1D9Ch–1E1Bh` verwenden den über `[3Ah]` erreichbaren Bereich mit WORD-Schrittweite und lesen daraus Verweise, über die anschließend separate Speicherblöcke angesprochen werden. Die Grenzen `[3Ch]` und `[3Eh]` teilen den Gesamtbereich weiterhin in Teilbereiche von `2R`, `4R` und `2R` Bytes. Die statische Analyse reicht noch nicht aus, diese drei Teilbereiche zuverlässig als Segment, Größe, Dateiposition oder Flags zu benennen. Diese Bedeutungen bleiben ausdrücklich unbestimmt.
+
+### 2177 – Kleinste gefundene Anwendung im GEOWORKS.zip: FONT.GEO
+
+Im Archiv ist `GEOWORKS/WORLD/FONT.GEO` mit 1.910 Bytes die kleinste gefundene GEODE vom Typ 1 (Anwendung). Der Header enthält `R=4`, `I=1`, `E=0`, Attributwort `0001h` und Protokollpaar `026Eh:0000h`. Der einzige Importname ist `ui`; sein 14-Byte-Datensatz enthält die WORD-Werte `4000h`, `02B5h` und `0000h` an den Positionen `+08h/+0Ah/+0Ch`. Das ist ein konkreter Minimalvergleich für eine Anwendung, nicht der Beweis, dass jede Anwendung genau diese Werte verwenden muss.
+
+### 2178 – FONT.GEO hat vier Ressourceneinträge und keine Exporte
+
+Die Ressourcentabelle von FONT.GEO beginnt bei Datei-Offset `012Eh` und endet bei `0156h`. Die vier Ressourcen haben (ID, Größe, Dateiposition, Relokationsbytes, Flags): `(0,0,0156h,0,0880h)`, `(1,224,0156h,36,0080h)`, `(2,448,025Ah,104,0A72h)` und `(3,752,0482h,4,145Ah)`. Die Anwendung besitzt keine Exporte. Die Daten zeigen, dass selbst die kleinste gefundene Anwendung mehr als einen trivialen leeren Ressourcenblock enthält; die Funktion der einzelnen Ressourcen wird hier nicht allein aus den Größen abgeleitet.
+
+### 2179 – BOUNCE.GEO ist ein größeres Anwendungsbeispiel, aber kein Minimalgerüst
+
+`GEOWORKS/WORLD/BOUNCE.GEO` ist Typ 1 mit `R=11`, `I=1`, `E=0` und einer Dateigröße von 3.572 Bytes. Der Importname ist ebenfalls `ui`. Gegenüber FONT.GEO enthält BOUNCE.GEO sieben zusätzliche Ressourcen und ist deshalb für einen ersten Minimalaufbau weniger geeignet. Es bleibt ein nützlicher Vergleich für eine bereits bekannte, kleine Anwendung.
+
+### 2180 – Importfreie Bibliotheken und Treiber sind keine Ersatzvorlage für eine Anwendung
+
+Im selben Archiv gibt es kleinere importfreie GEODEs anderer Typen, beispielsweise `SWAP.GEO` (Typ 2, 4 Ressourcen, 6 Exporte, 1.068 Bytes) und `STREAM.GEO` (Typ 3, 3 Ressourcen, 4 Exporte, 2.410 Bytes). Sie zeigen, dass der Kernel auch GEODEs ohne Imports verarbeitet; wegen ihres anderen GEODE-Typs und ihrer Exporttabellen sind sie jedoch keine direkte Vorlage für ein Typ-1-Anwendungsprogramm. Für einen ersten Anwendungstest ist FONT.GEO der passendere strukturelle Vergleich.
+
+**Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `1B81h–1C16h`, `1D9Ch–1E1Bh`, `1EBCh–1F0Dh`, `2630h–26B3h` und `271Ch–2788h`; Originaldateien aus `GEOWORKS.zip` (`FONT.GEO`, `BOUNCE.GEO`, `SWAP.GEO`, `STREAM.GEO`). Alle Größen, Zähler, Tabellenpositionen und Bytes wurden direkt aus den Dateien gelesen. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
