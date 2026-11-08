@@ -2296,6 +2296,6 @@ Für eine minimale LMem-Implementierung sind jetzt folgende Eigenschaften direkt
 
 Die Befunde beschreiben die beobachteten Kernelpfade. Sie legen noch keine vollständige öffentliche LMem-API fest und sind keine Freigabe, die SDK-Implementierung ohne weitere Vergleichstests zu ändern.
 
-**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x7977–0x7A37`, `0x7A38–0x7B41`, `0x7B42–0x7B75`, `0x7B76–0x7E50). Ergänzend die LMem-Header-/Handle-/Flagtabellenbelege aus den Untersuchungen 2214 und 2218. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x7977–0x7A37`, `0x7A38–0x7B41`, `0x7B42–0x7B75`, `0x7B76–0x7E50`. Ergänzend die LMem-Header-/Handle-/Flagtabellenbelege aus den Untersuchungen 2214 und 2218. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
