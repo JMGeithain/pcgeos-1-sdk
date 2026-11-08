@@ -2349,3 +2349,66 @@ Die Untersuchung bestätigt die internen Regeln für Chunk-Handles und Datenbere
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8226–0x828D), `0x3076–0x3093), `0x8877–0x88AC), sowie die LMem-Routinen `0x7977`, `0x7A38`, `0x7A5D`, `0x7ACA`, `0x7B08`. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2221 – Chunk-Flag-Schnittstelle und konkrete Aufrufer
+
+### 2221.1 – Getter und Setter der Chunk-Flagtabelle
+
+Die Routinen `0x8329` und `0x833C` greifen auf dieselbe Flagtabelle zu, deren Lage in Untersuchung 2214 anhand von SPINTEXT R3 bytegenau nachgewiesen wurde.
+
+- `0x8329`: AX enthält den Handleoffset. Die Routine berechnet aus `DS:0002` und dem Handleoffset den Byteindex, liest das Flagbyte und gibt es in AL zurück.
+- `0x833C`: AX enthält den Handleoffset. BH ist die zu löschende Bitmaske, BL die zu setzende Bitmaske. Die Operation lautet exakt `new = (old AND NOT BH) OR BL`.
+
+Der Setter ruft danach `0x835C` auf. Diese Nachbehandlung hängt vom resultierenden Flagbyte ab.
+
+### 2221.2 – Nachbehandlung in 835Ch
+
+`0x835C` kehrt sofort zurück, wenn Bit `0x04` gesetzt ist oder Bit `0x08` nicht gesetzt ist. Nur wenn Bit 0x04 gelöscht und Bit 0x08 gesetzt ist, prüft die Routine zusätzlich:
+
+1. `DS:0005`, Bit `0x01`;
+2. den über `DS:0000` referenzierten Kernel-Handleeintrag;
+3. dort Byteoffset `+0x0A`, Bit `0x20`.
+
+Wenn auch diese letzte Bedingung zutrifft, ruft sie `0xA567` auf. Diese Routine löscht Bit `0x20` im betreffenden Kernel-Handleeintrag und ruft anschließend `0xAE4C` auf. Die Bedeutung von Bit 0x20 und die vollständige Wirkung von AE4C bleiben offen.
+
+### 2221.3 – Direkter Aufrufer 8FD3h: Flagprüfung und Freigabepfad
+
+Die Routine `0x8FD3` führt folgende Schritte aus:
+
+1. ruft `0x838C` auf;
+2. liest über `0x8329` das Flagbyte für den Handleoffset in SI;
+3. prüft Bit `0x02`;
+4. wenn Bit 0x02 gesetzt ist, setzt sie über `0x833C` zusätzlich Bit `0x08`, setzt CX auf null und ruft `0x7A5D` auf;
+5. wenn Bit 0x02 nicht gesetzt ist, springt sie zu `0x7A38`, das den Chunk freigibt und den Handleeintrag auf null setzt.
+
+Das ist ein direkter Beleg dafür, dass Bit 0x02 einen anderen Freigabe-/Resizepfad auswählt. Die Routine benennt die Semantik des Bits nicht; deshalb wird es hier ausdrücklich nicht als „shared“, „locked“ oder „discardable“ bezeichnet.
+
+### 2221.4 – Weitere Setter-Aufrufer
+
+- `0x87A1` setzt Bit `0x08` im Flagbyte des über SI referenzierten Handles, nachdem der zugehörige Datenbereich kopiert wurde.
+- `0x9328` und `0x9336` setzen ebenfalls Bit `0x08`; die Aufrufe liegen im Pfad `0x9323`, der einen DS-Kontext sichert, den Flagzustand ändert und danach weitere Verwaltungsroutinen aufruft.
+- `0x8FF8` ist ein Getter-Weiterleiter: CX wird nach AX kopiert und anschließend `0x8329` ausgeführt.
+- `0x8FFD` ist ein Setter-Weiterleiter: CX wird nach AX, DX nach BX kopiert und anschließend `0x833C` ausgeführt.
+
+Damit sind die Registerkonventionen der Getter-/Setter-Wrapper und mehrere reale Bit-Setzstellen belegt.
+
+### 2221.5 – Präzisierung der Größenrundung aus Untersuchung 2219
+
+Eine erneute Prüfung des Allokationscodes `0x79FB` präzisiert die dortige Größenrechnung:
+
+- Vor dem Aufruf von `0x7A32` wird CX um zwei erhöht.
+- Für die Allokation wird zusätzlich drei addiert und mit `0xFFFC` maskiert.
+- Der zuvor um zwei erhöhte Wert wird anschließend als WORD bei `ChunkOffset-2` gespeichert.
+
+Damit ist die gespeicherte Chunkgröße nicht einfach die gerundete Allokationsgröße: Das gespeicherte WORD entspricht der angeforderten Nutzgröße plus dem zwei Byte großen Größenpräfix; die für die Heapreservierung verwendete Größe wird separat auf eine Vier-Byte-Grenze aufgerundet. Diese Präzisierung ersetzt die vereinfachte Formulierung in Untersuchung 2219.1/2219.2.
+
+### 2221.6 – Ergebnis und offene Fragen
+
+Gesichert sind jetzt die Byteposition der Flagtabellen, die Rechenformel des Setters, die Getter-/Setter-Registerkonvention und konkrete Aufrufpfade, in denen Bit 0x02 geprüft und Bit 0x08 gesetzt wird.
+
+Nicht gesichert sind die offiziellen symbolischen Namen beziehungsweise Bedeutungen der Bits 0x02, 0x04 und 0x08. Ebenso bleibt offen, ob alle Chunktypen dieselbe Flagsemantik verwenden. Diese Bezeichnungen werden erst nach einer weiteren unabhängigen Gegenprobe vergeben.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8329–0x838C), `0x87A1), `0x8FD3–0x9001), `0x9323–0x933F), `0x79FB–0x7A37), `0xA567–0xA574). Ergänzend SPINTEXT R3, Untersuchung 2214. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
