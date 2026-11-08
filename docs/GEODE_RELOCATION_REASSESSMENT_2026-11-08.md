@@ -1452,3 +1452,36 @@ Die Dateien `GEOWORKS/WORLD/SPINTEXT.GEO` (3.764 Bytes) und `GEOWORKS/WORLD/PROG
 Der Packer übernimmt aus SPINTEXT.GEO ausdrücklich Ressourcen 3 und 4 als UI-Bestandteile. In den beiden Archivvarianten ist Ressource 3 unterschiedlich groß (496 gegenüber 480 Bytes) und hat unterschiedliche SHA-256-Werte; Ressource 4 ist in beiden 336 Bytes groß, besitzt aber ebenfalls unterschiedliche SHA-256-Werte. Damit ist die Abweichung genau in den vom Packer verwendeten Ressourcen vorhanden. Die Auswahl einer Variante kann deshalb nicht als reine Pfadkorrektur behandelt werden.
 
 **Quellenbasis:** Ressourcenverzeichnisse und Payload-Bytes der beiden SPINTEXT.GEO-Dateien aus `GEOWORKS.zip`; Packerzugriffe `resource_bytes(original,q,3)` und `resource_bytes(original,q,4)` in `pcgeos1/packer.py`. Keine Änderung an den Originaldateien.
+
+
+## Untersuchungen 2190–2194 – Ressourcenvergleich und Build-Voraussetzungen
+
+### 2190 – SPINTEXT-Ressourcen 1 und 2 sind zwischen den Archivvarianten identisch
+
+Der Bytevergleich der Ressourcen aus `WORLD/SPINTEXT.GEO` und `WORLD/PROGRAMM.E/SPINTEXT.GEO` ergibt für Ressourcen 1 und 2 identische Inhalte (160 bzw. 592 Bytes) und identische Relokationsdaten. Die Abweichung beginnt bei Ressource 3. Damit ist die Differenz der beiden GEODEs nicht pauschal auf alle Ressourcen verteilt.
+
+### 2191 – Die UI-Ressourcen 3 und 4 sind in beiden Varianten verschieden
+
+Ressource 3 hat 496 Bytes in `WORLD/SPINTEXT.GEO` und 480 Bytes in `WORLD/PROGRAMM.E/SPINTEXT.GEO`; die SHA-256-Präfixe der Inhalte lauten `ee6af314cce86bdb` bzw. `a22b1c6cd61a46c8`. Ressource 4 hat in beiden Dateien 336 Bytes, aber unterschiedliche Inhalte (SHA-256-Präfixe `c5d151805a8e34a0` bzw. `0df160360cf91ef3`). Da `buildsys.py` diese beiden Ressourcen ausdrücklich an `build_basic_ui()` übergibt, betrifft die Abweichung direkt den UI-Template-Eingang des SDK-Builds.
+
+### 2192 – Weitere Ressourcen sind ebenfalls nicht vollständig austauschbar
+
+Außer Ressourcen 3 und 4 unterscheiden sich auch die Inhalte der Ressourcen 5, 7, 9 und 10. Ressourcen 6 und 8 sind bytegleich. Die beiden SPINTEXT-Dateien sind somit keine bloß unterschiedlich langen Container mit identischem Anwendungskern; mehrere weitere Ressourcen weichen voneinander ab. Eine pauschale Übernahme von Ressourcen zwischen den Varianten wäre nicht gerechtfertigt.
+
+### 2193 – VIEWER, NOTEPAD und TERM im Archiv erfüllen die SDK-Hashbindung nicht
+
+Die im GEOWORKS.zip gefundenen Dateien haben folgende SHA-256-Werte:
+- `WORLD/VIEWER.GEO`: `c884b76cdc4f9119d4794f7830d5438e0abcc1d92d3cc248aa912bde85ed43e7`
+- `WORLD/NOTEPAD.GEO`: `a1ebd0cb84712a126b1f67f5fd1ca6b57f8bda2e9038e9224ba16ebc008f9ea9`
+- `DOCUMENT/NOTEPAD.GEO`: `3d0bbaf6640eecca7c884a3351ddd957435096af6ff0b6b02793fa9eb7286b29`
+- `WORLD/TERM.GEO`: `a62ebc0fb3c01acb4b59c8172d20d520653822a6d42f0bec4831dfdb93e1cf3a`
+
+Keiner dieser Werte stimmt mit den in `pcgeos1/target.py` hinterlegten Referenzhashes überein. Für NOTEPAD liegen zwei Archivvarianten vor, die ebenfalls unterschiedliche Hashes besitzen. Der Standard-Build kann das vorhandene Archiv daher nicht unverändert als bekanntes Zielprofil akzeptieren.
+
+### 2194 – Host-Toolchain ist grundsätzlich vorhanden; der fehlende Baustein ist die Zielprofil-Kompatibilität
+
+In der aktuellen Arbeitsumgebung sind GCC, GNU ld, nm und objcopy vorhanden. Damit ist die im SDK dokumentierte GNU-Toolchain grundsätzlich verfügbar. Für den Windows-LLVM-Pfad fehlt hier `llvm-nm`; dies ist für einen Linux-GCC-Build unerheblich. Der nächste Engpass ist nicht die Host-Toolchain, sondern die nicht bestätigte Kompatibilität der UI-Vorlagen und die abweichende Archivpfadstruktur.
+
+**Konsequenz für geoTest.geo:** Noch keinen produktiven Build auslösen. Zuerst muss eine der folgenden Grundlagen hergestellt werden: (A) das exakt zum SDK-Referenzsatz passende Zielarchiv beschaffen/identifizieren oder (B) ein eigenes, ausdrücklich als experimentell markiertes Zielprofil aus dem vorliegenden GEOWORKS.zip rekonstruieren und die verwendeten UI-Ressourcen gegen die Originalanwendung prüfen. Der bloße Hash-Bypass ist kein Ersatz für diesen Kompatibilitätsnachweis.
+
+**Quellenbasis:** Direkter Ressourcen- und Relokationsvergleich beider SPINTEXT.GEO-Dateien aus `GEOWORKS.zip`; SHA-256-Prüfung der im Archiv vorhandenen VIEWER.GEO-, NOTEPAD.GEO- und TERM.GEO-Varianten; Quellcode `pcgeos1/buildsys.py`, `pcgeos1/packer.py`, `pcgeos1/target.py`; Prüfung der verfügbaren Host-Programme mit der Systempfadsuche. Keine GEO-Datei und kein SDK-Quelltext wurde verändert.
