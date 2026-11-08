@@ -1709,3 +1709,18 @@ Dies ist eine reale Typ-3-Probe aus einem zweiten PC/GEOS-1.x-GEODE im bereitges
 Die nächste Analyse vergleicht die NPLAYGCM-Ressource mit dem Typ-3-Dispatcherpfad `0x21C6–0x2217`, insbesondere dem Sonderpfad `0x2205`, und verfolgt die Hilfsroutine `0x724B`. Parallel werden Typ-4- und höhere Typwerte nicht pauschal interpretiert: Sie werden erst dann in die unterstützte SDK-Formatmenge aufgenommen, wenn ihre Behandlung im 1.x-Kernel und anhand gültiger Originalproben einzeln bestätigt ist.
 
 **Quellenbasis:** `GEOWORKS/NPLAYGCM.GEO`, Ressource R3 und deren Relokationstabelle; `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x21C6–0x2217` und `0x724B`. Statische Auswertung. Keine Änderung an Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
+
+
+## Untersuchung 2210 – Hilfsroutine 0x724B im Typ-3-Pfad
+
+Die in Untersuchung 2209 offene Hilfsroutine `0x724B` wurde weiter verfolgt. Sie übernimmt den Segmentwert in CX, setzt DS auf dieses Segment und liest den WORD-Wert am Blockanfang (`DS:0000`) als Handle-/Blockbezug. Anschließend ruft sie `0x701B` auf. Auf dem Rückweg folgt `0x7014`.
+
+Die beiden Hilfsfunktionen lassen sich im Kernel weiter auflösen: `0x701B` verzweigt zur gemeinsamen Speicherverwaltungsroutine `0x971D`; diese aktualisiert unter gesperrten Interrupts einen Zähler im Handleeintrag bei `[BX+4]` und aktualisiert bei Bedarf den zugehörigen Verwaltungszustand. `0x7014` verzweigt zu `0x9754`; diese Routine vermindert denselben Zähler und führt beim Übergang in den freizugebenden Zustand die entsprechende Freigabe-/Bereinigungsroutine aus. Das ist ein Lock-/Unlock- bzw. Referenzzählpfad des allgemeinen Kernel-Speichermanagers.
+
+Innerhalb von `0x724B` werden außerdem Segment- und Handlebezüge gegen mehrere Kernel-Verwaltungsbereiche verglichen. Bei einem Treffer wird der gefundene Verwaltungsbezug in CX zurückgegeben; der Sperrzustand wird vor der Rückkehr wieder aufgehoben. Das passt zum Aufruf aus dem Typ-3-Dispatcher: Der Relokationscode prüft bzw. normalisiert einen Segment-/Blockbezug über den allgemeinen Speichermanager, statt unmittelbar einen LMem-Chunk zu bearbeiten.
+
+**Wichtige Abgrenzung:** `0x724B`, `0x701B` und `0x7014` sind damit als allgemeiner Speicherverwaltungs-/Handlepfad eingegrenzt. Sie sind keine nachgewiesenen LMem-Initialisierungs- oder Chunk-Allocator-Funktionen. Der Typ-3-Relokationszweig allein liefert folglich noch keinen Beleg für die Felder 0x08 oder 0x14 des LMem-Headers.
+
+**Nächster Schritt:** Den Dispatcherzweig für Typ 0 und die von ihm gelesene Kernel-Tabelle weiter zurückverfolgen. Dort liegen die direkten Kernelverweise, die für die API-Kandidatenliste relevant sind. Anschließend gezielt nach Funktionen suchen, die LMem-Blockkopf und Handle-Tabelle initialisieren, statt allgemeine Speicherhandle-Locks mit LMem zu verwechseln.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x724B–0x72B3`, `0x7014–0x701F` und `0x971D–0x9775`; Aufruf aus dem Relokationsdispatcher `0x21FC–0x2205`. Statische Analyse. Keine Änderung an Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
