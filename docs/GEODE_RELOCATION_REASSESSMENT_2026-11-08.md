@@ -2105,3 +2105,102 @@ Die Funktionen `0x8329` und `0x833C` bleiben dagegen direkte LMem-Kandidaten, we
 **Quellenbasis:** `GEOWORKS/SYSTEM/UI.GEO`, Originalressourcen R2, R7 und R8, Aufrufstellen bei `0x0000`, `0x01B4`, `0x021F`, `0x0719` und `0x0767`; `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8027–0x8176`, `0x8226–0x82D3`. Statische Analyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2218 – Direkte LMem-Blockverwaltung im Kernel (7903h–7E93h)
+
+### 2218.1 – LMem-Blockinitialisierung
+
+Der Kernelcode `0x78B2–0x796E` legt einen neuen LMem-Block an und initialisiert dessen Kopfstruktur. Der Blocksegmentwert wird nach DS/ES geladen; danach erfolgen direkte Schreibzugriffe auf die Kopfstruktur:
+
+```asm
+7903  mov WORD PTR ds:0x0000,bx
+7907  mov WORD PTR ds:0x0002,dx
+790C  mov WORD PTR ds:0x0008,ax
+790F  mov WORD PTR ds:0x000A,cx
+...
+7933  mov WORD PTR ds:0x0004,ax
+7937  mov WORD PTR ds:0x0006,ax
+...
+7947  mov WORD PTR ds:0x0004,0x8800
+794F  mov WORD PTR ds:0x0012,ax
+7952  mov WORD PTR ds:0x0010,ax
+7955  mov WORD PTR ds:0x0014,ax
+```
+
+Die genaue Zuordnung der Registerwerte folgt aus dem Kontrollfluss: DX wird zuvor aus der berechneten Strukturgröße/Tabellenposition abgeleitet; CX wird aus den Handle-/Tabellenparametern aufgebaut; AX enthält die berechnete Blockgröße. Der Pfad mit `AX==2` initialisiert zusätzlich die Felder `0x10`, `0x12` und `0x14` auf null.
+
+### 2218.2 – Feld 0002h: Handle-Tabellenoffset bestätigt
+
+Mehrere unabhängige Routinen lesen `DS:0002` und verwenden den Wert als Basisadresse der Handle-Tabelle:
+
+- `0x7977`: DI = WORD `DS:0002`; scannt danach CX WORD-Einträge.
+- `0x79C8`: berechnet Tabellenende aus `DS:0002 + 2*DS:000A`.
+- `0x7A1A–0x7A28`: verwendet `DS:0002`, um aus einem Handleoffset den Index der Chunk-Flagtabelle zu berechnen.
+- `0x7C89–0x7CA0`: durchläuft die Handle-Tabelle und passt Einträge bei einer Vergrößerung des Blocks an.
+- `0x7DDD–0x7E1F`: durchläuft die Handle-Tabelle bei der Neuordnung/Verlagerung des freien Speicherbereichs.
+
+Dies bestätigt die bereits in Untersuchung 2214 anhand von SPINTEXT R3 nachgewiesene Bedeutung von `DS:0002`: Offset der Handle-Tabelle innerhalb des LMem-Blocks.
+
+### 2218.3 – Feld 000Ah: Anzahl der Handle-Einträge
+
+`DS:000A` wird in den genannten Routinen als Schleifenzähler beziehungsweise Anzahl der WORD-Einträge verwendet. Beispielsweise liest `0x7977` den Wert nach CX und scannt ab `DS:0002` genau diese Anzahl WORD-Einträge. `0x79C8` multipliziert ihn mit zwei, um das Tabellenende zu bestimmen. Bei Erweiterungen wird der Wert in `0x7CB1–0x7CB6` um `0x18` erhöht.
+
+Damit ist die Funktion als Anzahl der Handle-Tabelleneinträge direkt belegt.
+
+### 2218.4 – Feld 0008h: Blockgröße/-grenze
+
+`DS:0008` wird bei der Anlage mit einer berechneten Größe beschrieben. Die Speicherverwaltung verwendet es anschließend als obere Grenze beziehungsweise Größenlimit:
+
+- `0x7B4A–0x7B52`: vergleicht Handle-/Offset plus angeforderte Größe mit `DS:0008`.
+- `0x7CCE–0x7CE0`: berechnet benötigten Platz relativ zu `DS:0008` und prüft Überlauf/Größenlimit.
+- `0x7D42–0x7D58`: berechnet eine neue Größe und schreibt sie nach `DS:0008`.
+- `0x7E23–0x7E2B`: prüft den berechneten Endoffset gegen `DS:0008-1`.
+
+Die vorsichtige Bezeichnung lautet daher: LMem-Blockgrößen-/Grenzwert. Ob das Feld in allen Zuständen exakt die physische Segmentgröße oder eine logische Heapgrenze repräsentiert, wird noch weiter geprüft.
+
+### 2218.5 – Felder 000Ch und 000Eh: Heap-/Freispeicherverwaltung
+
+`DS:000C` und `DS:000E` werden zusammen in der Speicherplatzverwaltung verwendet:
+
+- `0x7919–0x7930`: initialisiert den Bereich ab `DS:000C` und schreibt einen Größenwert vor den Bereich.
+- `0x7B8B–0x7B95`: setzt `DS:000E` auf null und aktualisiert `DS:000C`.
+- `0x7C89–0x7CB6`: verschiebt die Handle-Tabelle und aktualisiert beide Felder.
+- `0x7D42–0x7D70`: verwendet `DS:000E` bei der Größenberechnung und aktualisiert `DS:000C`/`DS:000E`.
+
+Die Felder gehören damit nachweislich zur Verwaltung des freien Heapbereichs. Ihre exakte Einzelbedeutung (Cursor, Freiraumgröße oder Grenze) wird noch nicht endgültig festgelegt.
+
+### 2218.6 – Feld 0010h: verkettete Hilfsliste
+
+`0x7E7B–0x7E92` ruft die Routine `0x7977` zur Anlage eines Eintrags auf, schreibt den bisherigen Wert von `DS:0010` in das zweite WORD des neuen Eintrags und setzt `DS:0010` auf den neuen Eintrag. `0x7E93–0x7EAF` durchläuft diese verketteten Einträge und vergleicht deren erstes WORD mit dem gesuchten Wert.
+
+Damit ist `DS:0010` der Kopf einer verketteten Hilfsliste. Die semantische Rolle der gelisteten Einträge bleibt offen.
+
+### 2218.7 – Felder 0012h und 0014h: noch keine sichere Semantik
+
+Beide Felder werden im Initialisierungspfad für den betreffenden Blocktyp auf null gesetzt. `DS:0012` wird außerdem in `0x8385` inkrementiert und in `0x838C` dekrementiert; bei Übergang auf null folgt eine Zustandsprüfung und gegebenenfalls ein Aufruf bei `0x900C`. An anderen Stellen wird der Wert vorübergehend gesichert und ersetzt. Das spricht für einen Zustands-/Verschachtelungswert, reicht aber noch nicht für eine eindeutige Benennung.
+
+`DS:0014` wird unter anderem in `0x87B4` gelesen, gesichert und nach einem Bereinigungs-/Prüfpfad wieder in die ursprüngliche Struktur zurückgeschrieben. Eine vollständige Definition ist noch nicht bewiesen.
+
+### 2218.8 – Bedeutung für den SDK-Aufbau
+
+Die Originalkernelanalyse bestätigt nun mindestens diese Strukturmerkmale des LMem-Headers:
+
+| Offset | Gesicherter Befund |
+|---|---|
+| `0x00` | WORD wird als Block-/Owner-Bezug initialisiert; genaue Semantik offen |
+| `0x02` | Offset der Handle-Tabelle |
+| `0x04` | Zustands-/Typfeld; im Typ-2-Pfad auf `0x8800` gesetzt |
+| `0x06` | Initialisierungsparameter/Typwert; genaue Semantik offen |
+| `0x08` | Blockgrößen-/Grenzwert |
+| `0x0A` | Anzahl der Handle-Tabelleneinträge |
+| `0x0C`, `0x0E` | Freispeicher-/Heapverwaltung |
+| `0x10` | Kopf einer verketteten Hilfsliste |
+| `0x12` | Zustands-/Verschachtelungswert; genaue Semantik offen |
+| `0x14` | wird gesichert und wiederhergestellt; genaue Semantik offen |
+
+Diese Befunde stammen aus dem Originalkernel und sind unabhängig von der SDK-Implementierung. Sie sind noch keine Freigabe, die SDK-Headerstruktur zu ändern: Vor einer Änderung müssen die Felder in mehreren realen LMem-Blöcken und über weitere Kernelpfade gegengeprüft werden.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x78B2–0x7EAF`, `0x8329–0x838C), `0x87AC–0x8913); ergänzend Original `GEOWORKS/WORLD/SPINTEXT.GEO`, Ressource R3, Header/Handle-/Flagtabellenwerte aus Untersuchung 2214. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
