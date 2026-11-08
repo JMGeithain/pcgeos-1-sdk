@@ -84,3 +84,19 @@ Der deutsche GeoWorks-1.x-Originalkernel bestätigt nun den Importtabellenpfad: 
 ## Kernel-confirmed import resolution (GeoWorks 1.x original)
 
 In `KERNEL.OLD`, routine `2652` reads 14-byte import records and calls `271C` with the WORD fields at offsets `+08h`, `+0Ah`, and `+0Ch` in `CX`, `AX`, and `BX` respectively. `271C` first searches the loaded-GEODE list through `1EBC`/`1E7E`; callback `1EDE` compares eight name bytes against the candidate object's name at offset `14h` and applies a flag-mask filter. If no loaded match is found, `271C` copies and normalizes the eight-byte name into `CS:05E8` and enters the file-loading path (`1531`, `15A0`, `197A`). After loading, the original `AX:BX` pair is checked against words at `[000E]` and `[0010]` through comparator `1AD4`; the resulting GEODE segment is returned in `AX` and stored by `2652` in the WORD import-segment array based at `0036`. Real import records in NOTEPAD.GEO and GROBJ.GEO confirm the eight-byte name followed by WORD fields at `+08h/+0Ah/+0Ch`. Semantic names for those WORD fields and the exact DOS path policy remain under investigation. Static disassembly only; no runtime test. Full evidence: [reassessment dossier, investigations 2111–2120](GEODE_RELOCATION_REASSESSMENT_2026-11-08.md).
+
+## Loader-confirmed metadata fields at file offset 00C8h (GeoWorks 1.x)
+
+The original German `KERNEL.OLD` reads 24 bytes at file offset `00C8h`. Static disassembly confirms these fields in the loader path:
+
+| Offset | Meaning established by kernel use |
+|---|---|
+| `00CAh` | GEODE type; caller-supplied expected WORD must match (samples: 1 application, 2 library, 3 driver) |
+| `00CCh:00CEh` | 32-bit protocol/compatibility pair; accepted only when `<= 026Eh:0003h` |
+| `00D0h` | Resource count |
+| `00D2h` | Import count |
+| `00D4h` | Export count |
+| `00DAh` | Attribute WORD tested against caller-required and caller-forbidden masks |
+| byte `00C9h`, bit 7 | Adds `18h` bytes to the loader's internal metadata allocation |
+
+The internal allocation request is `46h + 8*R + 4*E + 2*I`, plus `18h` when bit 7 of `00C9h` is set. This is a kernel-side management allocation, not the file size or the serialized GEODE header length. The exact symbolic names of the type, protocol fields, attribute bits, and the optional 18h-byte extension remain unconfirmed. See the 2141–2150 section in the reassessment dossier. No parser changes were made.
