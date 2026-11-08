@@ -2594,7 +2594,7 @@ Damit ist die interne Importstruktur präzisiert:
 
 ### 2224.3 – Relokationsquelle 10h bestätigt den Bibliotheksindex
 
-Der Relokationsdispatcher `0x2153` behandelt Quellklasse `0x10` gesondert. Er nimmt den Bibliotheksindex aus AH, berechnet `DS:0036 + 2*AH`, lädt aus diesem WORD das Segment der betreffenden Bibliothek und verwendet anschließend den Importfunktionsdatensatzbereich ab `DS:0030). Damit stimmt die Laufzeitauflösung direkt mit der in `0x2652–0x26B5` aufgebauten Segmenttabelle überein.
+Der Relokationsdispatcher `0x2153` behandelt Quellklasse `0x10` gesondert. Er nimmt den Bibliotheksindex aus AH, berechnet `DS:0036 + 2*AH`, lädt aus diesem WORD das Segment der betreffenden Bibliothek und verwendet anschließend den Importfunktionsdatensatzbereich ab `DS:0030`. Damit stimmt die Laufzeitauflösung direkt mit der in `0x2652–0x26B5` aufgebauten Segmenttabelle überein.
 
 ### 2224.4 – Korrektur/Präzisierung zu Untersuchung 2223
 
