@@ -1485,3 +1485,20 @@ In der aktuellen Arbeitsumgebung sind GCC, GNU ld, nm und objcopy vorhanden. Dam
 **Konsequenz für geoTest.geo:** Noch keinen produktiven Build auslösen. Zuerst muss eine der folgenden Grundlagen hergestellt werden: (A) das exakt zum SDK-Referenzsatz passende Zielarchiv beschaffen/identifizieren oder (B) ein eigenes, ausdrücklich als experimentell markiertes Zielprofil aus dem vorliegenden GEOWORKS.zip rekonstruieren und die verwendeten UI-Ressourcen gegen die Originalanwendung prüfen. Der bloße Hash-Bypass ist kein Ersatz für diesen Kompatibilitätsnachweis.
 
 **Quellenbasis:** Direkter Ressourcen- und Relokationsvergleich beider SPINTEXT.GEO-Dateien aus `GEOWORKS.zip`; SHA-256-Prüfung der im Archiv vorhandenen VIEWER.GEO-, NOTEPAD.GEO- und TERM.GEO-Varianten; Quellcode `pcgeos1/buildsys.py`, `pcgeos1/packer.py`, `pcgeos1/target.py`; Prüfung der verfügbaren Host-Programme mit der Systempfadsuche. Keine GEO-Datei und kein SDK-Quelltext wurde verändert.
+
+
+## Untersuchungen 2195–2197 – Präzisierung der tatsächlich verwendeten UI-Chunks
+
+### 2195 – Die sieben von build_basic_ui() verwendeten SPINTEXT-Chunks sind byteidentisch
+
+Die beiden SPINTEXT-Varianten unterscheiden sich zwar in den Gesamtinhalten von Ressourcen 3 und 4, jedoch nicht in den vom SDK-UI-Generator tatsächlich ausgelesenen Chunks. Für Ressource 3 sind dies die Handles `0x24`, `0x26` und `0x3E`; für Ressource 4 die Handles `0x22`, `0x24`, `0x26` und `0x28`. Alle sieben Chunk-Payloads haben in beiden Varianten dieselbe Länge und denselben SHA-256-Wert. Die Chunk-Längen betragen in R3: 33, 8 und 71 Bytes; in R4: 198, 42, 8 und 22 Bytes. Damit ist die zuvor festgehaltene Schlussfolgerung aus Untersuchung 2191 zu präzisieren: Die Ressourcen als Ganzes unterscheiden sich, aber die konkret vom aktuellen UI-Generator verwendeten Objektvorlagen sind in diesen beiden Archivvarianten identisch.
+
+### 2196 – Auch die Relokationsdaten der SPINTEXT-Ressourcen 3 und 4 stimmen überein
+
+Ressource 3 und Ressource 4 enthalten in beiden SPINTEXT-Dateien jeweils genau einen 4-Byte-Relokationseintrag. Der Eintrag ist in allen vier Fällen identisch: `(info=0x23, extra=0x00, target=0x0000)`. Die Gleichheit der verwendeten Chunk-Payloads wird somit nicht durch abweichende Relokationstabellen relativiert. Dies belegt die Gleichheit dieser beiden Ressourcen im Hinblick auf die vom SDK gelesenen Chunks und die zugehörigen Ressourcenrelokationen; es beweist nicht die vollständige Binär- oder Laufzeitkompatibilität der gesamten SPINTEXT-GEODEs.
+
+### 2197 – Die vom UI-Generator benötigten VIEWER-Chunks sind im Archiv vorhanden
+
+Die vorhandene `WORLD/VIEWER.GEO` besitzt 37 Ressourcen. Die im SDK referenzierten Ressourcen 12 und 28 sind vorhanden. In Ressource 12 existieren die vom Generator verwendeten Chunk-Handles `0x22`, `0x32`, `0x36`, `0x3C`, `0x40`, `0x44` und `0x48`; in Ressource 28 existieren `0x56` und `0x5A`. Die beiden Ressourcen enthalten jeweils einen Relokationseintrag `(0x23,0x00,0x0000)`. Damit ist die strukturelle Voraussetzung „referenzierte Ressource und Chunk vorhanden“ für diese konkret verwendeten VIEWER-Vorlagen erfüllt. Die Übereinstimmung mit dem SDK-Referenzsatz und die Laufzeitkompatibilität sind damit weiterhin nicht bewiesen.
+
+**Quellenbasis für 2195–2197:** Direkte Auswertung der GEODE-Ressourcentabellen, Chunk-Verweise und Relokationstabellen aus `GEOWORKS/WORLD/SPINTEXT.GEO`, `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` und `GEOWORKS/WORLD/VIEWER.GEO` in `GEOWORKS.zip`; Quellcode `pcgeos1/ui.py` (Funktion `build_basic_ui`) und `pcgeos1/buildsys.py`. Die Originaldateien und SDK-Quellen blieben unverändert. Keine Laufzeitprüfung durchgeführt.
