@@ -1971,3 +1971,43 @@ Die Kernel-Tabelle ordnet Index `0x1F2` (498) dem Codeoffset `0x8329` und Index 
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8329–0x835C) und Kernel-Tabelle ab `0x0DEC0`; `GEOWORKS/WORLD/SPINTEXT.GEO`, Ressource R3, Bytes bei `0x0000–0x0051); `GEOWORKS/SYSTEM/UI.GEO`, Quelle-0-/Typ-0-Relokationen. Ausschließlich statische Analyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2215 – Zusatzbehandlung der LMem-Chunk-Flags
+
+### 2215.1 – Bedingungspfad bei 835Ch
+
+Die von der Flag-Änderungsroutine `0x833C` aufgerufene Routine `0x835C` wurde vollständig bis zu ihrem Rücksprung verfolgt. Sie prüft das resultierende Flagbyte in AL:
+
+- Ist Bit `0x04` gesetzt, endet die Zusatzbehandlung sofort.
+- Ist Bit `0x04` nicht gesetzt, aber Bit `0x08` ebenfalls nicht gesetzt, endet sie ebenfalls sofort.
+- Nur wenn Bit `0x04` aus und Bit `0x08` an ist, wird zusätzlich Byte `DS:0005` auf Bit `0x01` geprüft.
+- Ist auch dieses Bit gesetzt, wird über den bei `DS:0000` referenzierten Kernel-Handleeintrag die BYTE-Information bei `[SI+0x0A]` geprüft.
+- Wenn dort Bit `0x20` gesetzt ist, wird die Routine `0xA567` aufgerufen.
+
+### 2215.2 – Wirkung von A567h
+
+Die Routine `0xA567` sichert BX und ES, übergibt BP in BX und ruft `0x9636` auf. Danach löscht sie Bit `0x20` im BYTE-Feld `ES:[BX+0x0A]` und ruft `0xAE4C` auf.
+
+Damit ist die Zusatzwirkung präzise beschrieben: Unter den oben genannten Bedingungen wird ein Bit im zugehörigen Kernel-Handleeintrag gelöscht und eine weitere Kernelroutine ausgeführt. Die symbolische Bedeutung des Bits `0x20` und der Folgeroutine `0xAE4C` ist in dieser Untersuchung noch nicht abschließend benannt.
+
+### 2215.3 – Aufrufstellen der Flag-API
+
+Die statische Suche nach direkten Aufrufen der beiden Flagroutinen ergibt unter anderem:
+
+- `0x8FDB` ruft `0x8329` auf und prüft anschließend Bit `0x02` des zurückgegebenen Flagbytes. Bei gesetztem Bit wird über `0x833C` Bit `0x08` gesetzt.
+- `0x87A1` ruft `0x833C` mit `BX=0x0008` auf, setzt also Bit `0x08`, nachdem zuvor ein WORD-Block kopiert wurde.
+- `0x9328` und `0x9336` rufen ebenfalls `0x833C` mit `BX=0x0008` auf.
+- `0x8FF8` und `0x8FFD` sind kurze Weiterleitungen zu den Flag-Lese- und Flag-Änderungsroutinen.
+
+Die Aufrufstellen belegen, dass Bit `0x08` in mehreren Kernelpfaden gezielt gesetzt wird. Seine offizielle symbolische Bedeutung bleibt offen; insbesondere wird es nicht ohne Beleg als „dirty“, „locked“ oder „discardable“ bezeichnet.
+
+### 2215.4 – Konsequenz für die LMem-Rekonstruktion
+
+Die Chunk-Flagtabelle ist nicht nur ein statisches Bytearray im Original-GEODE: Der Kernel liest und verändert ihre Einträge über dedizierte Routinen. Damit ist ein weiterer Teil der LMem-Verwaltung konkret nachvollzogen. Die Strukturbeobachtung aus SPINTEXT R3 ist durch die tatsächlichen Kernelzugriffe bestätigt.
+
+Die Felder `0x08` und `0x14` des LMem-Kopfes werden von diesem Pfad nicht erklärt. Auch die Funktionen `0x8000` und `0x8027` bleiben getrennte Untersuchungskandidaten; ihre Codepfade werden nicht allein aufgrund der Nähe zu den LMem-Flagroutinen als LMem-Funktionen klassifiziert.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x833C–0x8384`, `0xA567–0xA578`, `0x87A1`, `0x8FDB–0x9001` und `0x9323–0x933F). Statische Kontrollfluss- und Datenflussanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
