@@ -2806,3 +2806,58 @@ Diese Korrektur ersetzt ausdrücklich die Dateiposition-/Leselängen-Zuordnung i
 **Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1D9C–0x1DC1`, `0x209C–0x20BC`, `0x20FE–0x214F`, `0x2218–0x223F`, `0x10CA`, `0x1088`; Originaldateien BLANK.GEO, DISK.GEO, DOCUMENT/NOTEPAD.GEO und SYSTEM/UI.GEO. Statische Disassemblierung, Register-/Stack-Datenflussanalyse und Bytevergleich; kein Laufzeittest.
 
 **Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte. Kein `geoTest.geo` erstellt.
+
+
+## Untersuchung 2228 – Erste Ressourcentabelle: angeforderte Speichergrößen
+
+### 2228.1 – Wertefluss aus der ersten WORD-Tabelle
+
+Die erste WORD-Tabelle ab `DS:003A` wird in `0x1CF7–0x1D98` nicht als Dateioffsettabelle verwendet. Der Loader durchläuft sie mit `SI` in Zweierschritten. Der aktuelle WORD-Wert wird in `0x1D0B–0x1D14` aus `[DS:003A + SI]` gelesen und zusammen mit dem zugehörigen Flag-WORD aus dem temporären Stackbereich an `0x1D51` übergeben. `0x1D62` ruft anschließend `0x6E87` auf.
+
+`0x6E87` holt den Speicherhandle aus `SS:0002` und führt `0x6E8C` aus. Diese Routine ruft `0x701B`, `0x7363` und `0x7014` auf. `0x7363` ruft `0x72EC` zur Prüfung/Anforderung auf und berechnet anschließend aus der angeforderten Bytezahl in AX die Absatzanzahl:
+
+```asm
+736B  call 0x72ec
+7370  push cx
+7372  add  ax,0x0f
+7374  mov  cl,0x04
+7376  shr  ax,cl
+7378  pop  cx
+```
+
+Damit ist die erste WORD-Tabelle als Tabelle angeforderter Speichergrößen in Byte identifiziert; die Speicherverwaltung rundet diese Größe für die Absatzanforderung auf 16-Byte-Einheiten auf. Die vollständige Semantik der Flag-Bits im zugehörigen CH bleibt davon getrennt und weiterhin offen.
+
+### 2228.2 – Sonderfall Größe null
+
+Bei AX=0 setzt `0x1D5F–0x1D61` AX auf 1, bevor `0x6E87` aufgerufen wird:
+
+```asm
+1D5C  push cx
+1D5D  or   ax,ax
+1D5F  jne  0x1d62
+1D61  inc  ax
+1D62  call 0x6e87
+```
+
+Ein Tabelleneintrag mit Größe null führt daher nicht zu einer Null-Byte-Anforderung, sondern zu einer Mindestanforderung von einem Byte, die nachfolgend auf einen 16-Byte-Absatz gerundet wird.
+
+### 2228.3 – Werte der Originaldateien
+
+Aus den bereits lokalisierten Ressourcentabellen ergeben sich folgende angeforderte Größen:
+
+| Datei | Index 0 | Index 1 | Index 2 | Index 3 |
+|---|---:|---:|---:|---:|
+| BLANK.GEO | 0 Byte | 16 Byte | 32 Byte | 880 Byte (`0x0370`) |
+| DISK.GEO | 0 Byte | 16 Byte | 160 Byte (`0x00A0`) | 272 Byte (`0x0110`) |
+
+Diese Werte sind die Eingaben in den Speicheranforderungspfad. Für Index 0 wird wegen des Null-Sonderfalls tatsächlich mindestens ein Byte angefordert; die nachfolgende Absatzumrechnung ergibt einen 16-Byte-Absatz.
+
+### 2228.4 – Ressourcen mit identischem Dateioffset
+
+BLANK.GEO weist für Ressource 0 und 1 denselben DWORD-Dateioffset `0x00000180` auf. DISK.GEO zeigt ebenfalls für Ressource 0 und 1 denselben Dateioffset `0x00000156`. Daraus darf nicht geschlossen werden, dass es sich um denselben Laufzeit-Ressourceneintrag handelt: Die beiden Indizes besitzen getrennte Größenwerte, getrennte Flag-WORDs und getrennte Relokationszähler. Die Loader-Schleife verarbeitet die Einträge indexweise und speichert die resultierenden Laufzeitwerte in getrennten WORD-Slots der ersten Tabelle.
+
+Warum die beiden Ressourcen desselben GEODEs auf denselben Dateioffset zeigen und welche Rolle die unterschiedlichen Laufzeitgrößen spielen, bleibt offen. Ebenso ist noch nicht geklärt, ob die Nullgröße bei Index 0 einen bewusst leeren/Platzhalter-Ressourceneintrag oder eine andere Sonderform bezeichnet.
+
+**Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1CF7–0x1D98`, `0x6E87–0x6E9A`, `0x7363–0x73A1`, `0x72EC`; Originaldateien BLANK.GEO und DISK.GEO. Statische Disassemblierung und Register-/Datenflussanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte. Kein `geoTest.geo` erstellt.
