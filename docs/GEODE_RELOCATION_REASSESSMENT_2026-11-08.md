@@ -2605,3 +2605,44 @@ Die Ressourcentabelle ab `DS:003A` folgt wiederum nach den vier Byte großen Imp
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x2652–0x26B5), `0x1B45–0x1B80), `0x2153–0x21C6), `0x1C04–0x1C15). Statische Disassemblierung und Register-/Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2225 – GEODE-Kopfbereich und Import-/Ressourcenzähler
+
+### 2225.1 – Zweistufiges Einlesen des Dateikopfs
+
+Die Kernelroutine `0x1A56` liest zunächst `0x44` Bytes ab Dateianfang in einen lokalen Stackpuffer. Sie prüft darin die Signaturbytes `C7 45 CF 53` und ein nachfolgendes WORD auf null. Anschließend positioniert sie das GEODE-Dateihandle mit `0x10CA` auf Dateioffset `0x00C8` und liest dort genau `0x18` Bytes in den lokalen Puffer.
+
+Nach der Prüfung dieses zweiten Kopfbereichs berechnet `0x1AEA` die Größe des für die GEODE-Verwaltung benötigten Speicherblocks. Danach legt `0x1B11` den Speicherbereich an und liest ab der aktuellen Dateiposition – damit ab Dateioffset `0x00E0` – genau `0x40` Bytes in dessen Anfang. Diese 64 Bytes bilden den internen Verwaltungs-/Tabellenkopf, auf den die folgenden Routinen mit DS-relativen Offsets zugreifen.
+
+### 2225.2 – Zählerfelder anhand des 64-Byte-Blocks bestätigt
+
+Der Abgleich der Bytes ab Dateioffset `0x00E0` mit den nachfolgenden Kernelzugriffen ergibt:
+
+| Kernel-Feld | Datei-Offset | BLANK.GEO | DISK.GEO | Durch Code belegte Verwendung |
+|---|---:|---:|---:|---|
+| `DS:0032` | `0x0112` | 7 | 0 | Anzahl der Importfunktionsdatensätze |
+| `DS:0034` | `0x0114` | 2 | 1 | Anzahl der importierten Bibliotheken |
+| `DS:0038` | `0x0118` | 4 | 4 | Anzahl der Ressourcen |
+
+Die Zuordnung folgt aus den konkreten Verbrauchern:
+
+- `0x1B45–0x1B80` berechnet die Importfunktionsliste mit `DS:0034` und liest anschließend `4 * DS:0032` Bytes. Es durchläuft genau `DS:0032` Datensätze zu je vier Bytes.
+- `0x1C76–0x1CA3` verwendet `DS:0038` zur Berechnung der drei Ressourcen-Tabellenbereiche und liest insgesamt `8 * DS:0038` Bytes.
+- `0x2652–0x26B5` baut die WORD-Segmenttabelle der importierten Bibliotheken mit `DS:0034` Einträgen auf.
+
+Damit ist unabhängig von bloßer Feldposition nachgewiesen: BLANK.GEO deklariert sieben Importfunktionsdatensätze, zwei importierte Bibliotheken und vier Ressourcen. DISK.GEO deklariert null Importfunktionsdatensätze, eine importierte Bibliothek und vier Ressourcen.
+
+### 2225.3 – Noch nicht vollständig geklärte Felder
+
+Der 64-Byte-Block enthält weitere Werte, darunter die Felder bei `DS:0036` sowie die Dateikopfwerte vor `0x00C8`. `DS:0036` wird durch `0x2652` als Laufzeitadresse der Bibliothekssegmenttabelle gesetzt; der ursprüngliche Dateiwert ist daher nicht ohne Weiteres als Laufzeitzeiger zu interpretieren.
+
+Auch die genaue Bedeutung aller 24 Bytes bei `0x00C8–0x00DF` und der übrigen Felder im 64-Byte-Block ist noch nicht vollständig rekonstruiert. Insbesondere sind Ressourcenflags und der vollständige GEODE-Start-/Entry-Pfad noch offen. Aus diesen Ergebnissen folgt deshalb weiterhin nicht, dass BLANK.GEO bereits als minimaler Test-GEODE nachgebaut werden kann.
+
+### 2225.4 – Ergebnis und Projektstatus
+
+Der Lader liest den Dateikopf in mindestens drei unterscheidbaren Schritten: den anfänglichen 0x44-Byte-Bereich, den Zusatzbereich ab 0x00C8 und den 0x40-Byte-Verwaltungsblock ab 0x00E0. Die Zähler für Bibliotheken, Importfunktionen und Ressourcen sind jetzt für zwei originale PC/GEOS-1.x-GEODEs durch Kernelcode und Bytevergleich belegt.
+
+**Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1A56–0x1AEA`, `0x1B11–0x1B80`, `0x1C76–0x1CA3`, `0x2652–0x26B5`; Originaldateien `GEOWORKS/SYSTEM/SAVERS/BLANK.GEO` (1.332 Bytes, SHA-256 `845b310069c51352242331c88531ef64f6b06d38dd9837a627b0333a82fac93f`) und `GEOWORKS/SYSTEM/DISK.GEO` (910 Bytes, SHA-256 `6363699f0b9af45106b59e432f3b715f4e9c38d5e5c07a45fcce660f3f964be9`). Statische Disassemblierung und Bytevergleich; kein Laufzeittest.
+
+**Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte. Kein `geoTest.geo` erstellt.
