@@ -198,3 +198,142 @@ Dies ist statische Byteanalyse. Es ist kein GeoManager-Laufzeittest und keine vo
 - `docs/GEODE_FORMAT.md` – Überblick über Container- und Relocationformat.
 - `docs/GEODE_RELOCATION_ALIGNMENT_AUDIT_2026-11-04.md` – Nachweis der Absatz-Ausrichtung anhand SPLAY und weiterer Donor-Dateien.
 - `docs/GEODE_RELOCATION_SPECIAL_CASES_ELVISBYE_EXPRSRTL_2026-11-04.md` – offene Sonderfälle ELVISBYE / EXPRSRTL.
+
+# Untersuchung 2051–2060 – Kernel-Einstieg und Loader-Suche
+
+Datum: 2026-11-08  
+Geltungsbereich: GeoWorks / PC/GEOS 1.x. Statische Analyse der beiden Kernel-Dateien aus dem bereitgestellten `GEOWORKS.zip`. Keine Änderungen an Kernel- oder GEO-Dateien.
+
+## 2051 – Originaldateien und Prüfsummen
+
+Die beiden Kernel-Dateien wurden direkt aus `GEOWORKS/KERNEL.OLD` und `GEOWORKS/KERNEL.EXE` extrahiert und mit SHA-256 geprüft:
+
+| Datei | Bytes | SHA-256 | Provenienz im Projekt |
+|---|---:|---|---|
+| `KERNEL.OLD` | 72.688 | `bd4d680b15f8dd66b2b09b506de96672972f716a11e0a38220477bf07b6c1e9b` | Originaler deutscher Kernel |
+| `KERNEL.EXE` | 72.736 | `c2cc8952cdb01d0f459bf281ee3b78f8ce9464aba0b58c3758f8c73e24fb6eb5` | Gepatchter englischer Kernel, im Projekt als DOSBox-kompatible Fassung geführt |
+
+Die Dateien werden als getrennte Beweisobjekte behandelt. `KERNEL.EXE` wird nicht als unveränderte Referenz für den deutschen Originalkernel verwendet.
+
+## 2052 – MZ-Header von KERNEL.OLD
+
+Aus dem DOS-MZ-Header von `KERNEL.OLD` wurden folgende Felder gelesen:
+
+| Feld | Wert |
+|---|---:|
+| `e_cparhdr` | `0x0060` Paragraphen |
+| Headerlänge | `0x0600` Bytes |
+| `e_crlc` | `0x0111` = 273 DOS-Relocation-Einträge |
+| `e_lfarlc` | `0x003C` |
+| `e_ip` | `0x02B1` |
+| `e_cs` | `0x0000` |
+| `e_ss` | `0x0E35` |
+| `e_sp` | `0x15B0` |
+| Dateigröße | 72.688 Bytes (`0x11BF0`) |
+| nach MZ-Header verbleibender Ladebereich | 71.152 Bytes (`0x115F0`) |
+
+Die 273 Einträge im MZ-Header sind DOS-EXE-Relocations. Sie sind nicht mit den vier Byte langen GEODE-Ressourcenrelocations gleichzusetzen. Diese Trennung ist für die weitere Untersuchung zwingend.
+
+## 2053 – MZ-Header von KERNEL.EXE
+
+Die gepatchte Datei hat einen ähnlichen, aber nicht identischen Header:
+
+| Feld | Wert |
+|---|---:|
+| `e_cparhdr` | `0x0060` Paragraphen |
+| Headerlänge | `0x0600` Bytes |
+| `e_crlc` | `0x0114` = 276 DOS-Relocation-Einträge |
+| `e_lfarlc` | `0x003C` |
+| `e_ip` | `0x02B1` |
+| `e_cs` | `0x0000` |
+| `e_ss` | `0x0E34` |
+| `e_sp` | `0x15F0` |
+| Dateigröße | 72.736 Bytes (`0x11C20`) |
+| nach MZ-Header verbleibender Ladebereich | 71.200 Bytes (`0x11620`) |
+
+Obwohl der DOS-Einstieg `CS:IP = 0000:02B1` bei beiden Dateien gleich ist, unterscheiden sich Stackwerte, Anzahl der DOS-Relocations und die Dateigröße. Gleiche Einstiegsoffsets beweisen keine identische Kernelversion oder identischen Code.
+
+## 2054 – Einstiegscode im Originalkernel
+
+Der MZ-Einstieg liegt im Ladebereich bei Offset `0x02B1`. Dort stehen in `KERNEL.OLD` die Bytes:
+
+```asm
+02B1  9A 00 00 90 0F    lcall 0F90:0000
+02B6  2E 01 06 C8 02    add   ax,cs:[02C8]
+02BB  B0 04             mov   al,04
+02BD  BB 02 00          mov   bx,0002
+02C0  33 C9             xor   cx,cx
+02C2  E8 E2 FE          call 01A7
+```
+
+Der erste Schritt ist somit ein Far-Call in Segment `0x0F90`, Offset `0x0000`. Das ist der tatsächliche DOS-Einstiegspfad; er darf nicht mit einer GEODE-Relocation-Routine verwechselt werden.
+
+## 2055 – Bootstrap-Routine bei Segment 0F90h
+
+Die Far-Call-Zieladresse `0F90:0000` entspricht innerhalb des geladenen MZ-Abbilds dem linearen Ladebereich-Offset `0x0F900`.
+
+Der dortige Code beginnt:
+
+```asm
+F900  FC                cld
+F901  8C D8             mov   ax,ds
+F903  BB 35 0E          mov   bx,0E35
+F906  8E DB             mov   ds,bx
+F908  8C 16 40 00       mov   [0040],ss
+F90C  89 26 42 00       mov   [0042],sp
+F910  C6 06 46 00 00    mov   byte ptr [0046],00
+F915  8E D8             mov   ds,ax
+...
+F92D  B9 90 0F          mov   cx,0F90
+F930  8E D9             mov   ds,cx
+F932  33 F6             xor   si,si
+F934  33 FF             xor   di,di
+F936  B9 E0 1C          mov   cx,1CE0
+F939  D1 E9             shr   cx,1
+F93B  F3 A5             rep movsw
+F93D  8C C0             mov   ax,es
+F93F  2D 90 0F          sub   ax,0F90
+F942  1F                pop   ds
+F943  CB                retf
+```
+
+Die Routine kopiert `0x1CE0` Bytes aus `0F90:0000` in einen neu berechneten Zielbereich und liefert anschließend eine Segmentdifferenz in `AX` zurück. Die Kopierlänge ist durch `CX=1CE0h` und `rep movsw` belegt: `0x1CE0 / 2 = 0x0E70` WORDs, also 7.392 Bytes.
+
+**Interpretation mit Beleggrenze:** Dies ist eine Bootstrap-/Selbstverlagerungsroutine des Kernels. Die genaue Rolle des Zielbereichs ist aus diesem Ausschnitt allein noch nicht vollständig erklärt. Es ist keine nachgewiesene GEODE-Relocation-Verarbeitung.
+
+## 2056 – Trennung von DOS- und GEODE-Relocations
+
+Es liegen zwei unabhängige Ebenen vor:
+
+1. DOS-MZ-Relocationstabelle im EXE-Header: 273 Einträge bei `KERNEL.OLD`, 276 bei `KERNEL.EXE`; Eintragsformat und Verarbeitung gehören zum DOS-EXE-Lader.
+2. GEODE-Relocationstabellen in `.GEO`-Dateien: je Ressource ein durch die Ressourcentabellen referenzierter Stream mit vier Byte langen Datensätzen `<BBH>`.
+
+Aus der DOS-Relocation-Anzahl oder aus einzelnen MZ-Relocation-Adressen darf nicht auf GEODE-Relocationtypen geschlossen werden.
+
+## 2057 – Original und gepatchte Kerneldatei nicht vermischen
+
+Die beiden Kerneldateien unterscheiden sich in Dateigröße, DOS-Relocation-Anzahl, Stackinitialisierung und in zahlreichen Bytes des Ladebereichs. Die Differenz ist nicht auf eine einzelne Text- oder Sprachressource beschränkt.
+
+Folgerung: Die Loaderanalyse muss primär auf `KERNEL.OLD` als deutschem Originalkernel aufbauen. `KERNEL.EXE` bleibt ein Vergleichsobjekt zur späteren Erkennung von Patchänderungen. Eine Routine darf nicht allein deshalb als Original-1.x-Loaderfunktion bezeichnet werden, weil sie in der gepatchten Datei gefunden wurde.
+
+## 2058 – String- und Signatursuche
+
+Im Kernelabbild wurden unter anderem die ASCII-Zeichenfolge `Could not load data block` sowie die Bytefolge `C7 45 CF 53` gefunden. Die Fundstellen liegen im hinteren Bereich des MZ-Ladeabbilds.
+
+Eine bloße Fundstelle ist kein Beweis für die zugehörige Loaderfunktion: Die Signatur kann in einer Tabelle oder Datenstruktur liegen; die Fehlermeldung kann über eine indirekte Nachrichten-/Stringtabelle referenziert werden. Ohne gesicherte Code-Xrefs werden diese Fundstellen nur als Suchanker festgehalten.
+
+## 2059 – GEODE-Loader noch nicht identifiziert
+
+Die Disassemblierung des MZ-Einstiegs und der Far-Call-Zielroutine `0F90:0000` zeigt zunächst den Kernel-Bootstrap und die Selbstverlagerung. In diesem Untersuchungsblock wurde keine Routine nachgewiesen, die `GRI_info`, das Zusatzbyte oder den Zieloffset eines GEODE-Relocation-Eintrags liest und verarbeitet.
+
+Daher werden keine Typnummern semantisch neu zugeordnet. Insbesondere bleibt die Behandlung der dokumentierten Sonderfälle (DOCUMENT/SPLAY und Root-NPLAYGCM) offen.
+
+## 2060 – Nächste technische Schritte
+
+1. Den MZ-Ladebereich und die internen Kernel-Segmente von `KERNEL.OLD` vollständig kartieren.
+2. Den Aufrufpfad zu Datei-/GEODE-Ladefunktionen anhand tatsächlicher Code-Xrefs rekonstruieren.
+3. Kandidatenroutinen darauf prüfen, ob sie Ressourcentabellen, Import-/Exportverzeichnisse oder die vier Byte langen Relocation-Datensätze lesen.
+4. Register, Segmentannahmen und Speicheränderungen an jeder gefundenen Routine dokumentieren.
+5. Erst danach die Source-/Type-/Extra-Felder der GEODE-Relocations endgültig benennen.
+
+Keine Kerneldatei, GEO-Datei oder Parserdatei wurde geändert. Dies ist statische Disassemblierungs- und Headeranalyse, kein GeoManager-Laufzeittest.
