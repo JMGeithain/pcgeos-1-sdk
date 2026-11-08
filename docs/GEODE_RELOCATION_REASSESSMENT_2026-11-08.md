@@ -430,3 +430,146 @@ Die GEODE-Loaderfunktion ist weiterhin nicht identifiziert. Die MZ-Fixup-Tabelle
 - Der gepatchte Kernel besitzt verschobene Segmentziele und darf nicht als Offsetreferenz für den Originalkernel verwendet werden.
 - Die GEODE-Signatur kommt im Kernelabbild vor; ihre Funktion und der zugehörige Code-Xref sind noch offen.
 - Keine GEODE-Relocation-Typsemantik wurde neu festgelegt; keine Dateien wurden gepatcht.
+
+## Untersuchungen 2071–2080 – GEODE-Lader und Relocation-Dispatcher im deutschen Originalkernel
+
+**Untersuchungsbasis:** `GEOWORKS/KERNEL.OLD` aus dem bereitgestellten `GEOWORKS.zip`. MZ-Headergröße `0x0600`; die nachfolgenden Adressen sind Ladeabbild-Offsets ab dem ersten Byte nach dem MZ-Header, sofern nicht ausdrücklich eine Segmentadresse angegeben ist. Die Disassemblierung erfolgte im 8086-Modus. Es wurde keine Binärdatei verändert.
+
+### 2071 – Aufrufpfad zum GEODE-Lader
+
+Im Kernel-Ladeabbild bei `0x1970` liegt ein Far-Call-Wrapper:
+
+```asm
+1970  call 1F0E
+1973  call 197A
+1976  call 1F15
+1979  retf
+```
+
+Die zentrale Routine `197A` nimmt den Dateinamen über `DS:SI` entgegen, setzt `DX=SI`, `AL=A0` und ruft über `12F6` die DOS-Dateiöffnung auf. `12F6` setzt `AH=3Dh`; der tatsächliche DOS-Aufruf erfolgt in der darunterliegenden Dateifunktionsschicht.
+
+Der Pfad `0F90:0645` im Kernel-Initialisierungscode ruft `0000:1970` auf. In diesem Kontext wird unter anderem `local.geo` vorbereitet. Der Aufrufpfad belegt damit, dass `1970` als GEODE-Ladepfad verwendet wird; er ist nicht bloß ein allgemeiner DOS-Dateiöffner.
+
+### 2072 – Headerprüfung liest zunächst 0x44 Bytes
+
+Die Routine `1A56` liest zunächst `CX=0x44` Bytes in den Stackpuffer `SS:[BP-0x6A]`:
+
+```asm
+1A56  push ss
+1A57  pop  ds
+1A58  mov  cx,0044
+1A5B  lea  dx,[bp-006A]
+1A5E  xor  al,al
+1A60  call 1088
+```
+
+`1088` ist der kernelinterne Leseweg; in seinem Unterpfad wird DOS-Funktion `AH=3Fh` verwendet. Die Routine prüft danach die ersten Headerfelder, bevor weitere Daten verarbeitet werden.
+
+### 2073 – GEODE-Signatur bytegenau bestätigt
+
+Die Vergleiche bei `1A6B` und `1A72` lauten:
+
+```asm
+cmp word ptr [bp-006A],45C7
+cmp word ptr [bp-0068],53CF
+```
+
+Auf x86-Little-Endian entsprechen diese Werte den Dateibytes:
+
+```text
+C7 45 CF 53
+```
+
+Das ist die GEODE-Kennung, die wir zuvor in NOTEPAD.GEO, GROBJ.GEO und weiteren Dateien gefunden haben. Damit ist die Signaturprüfung im Originalkernel unmittelbar belegt.
+
+### 2074 – Headerfeld bei Offset 0x04
+
+Die Prüfung bei `1A7C` verlangt, dass das WORD an Dateioffset `0x04` Null ist. Ein von Null abweichender Wert führt in den Fehlerpfad. Die genaue semantische Bezeichnung dieses Feldes wird hier noch nicht festgelegt.
+
+### 2075 – Protokollprüfung über die Felder bei 0xCC und 0xCE
+
+Nach erfolgreicher Signaturprüfung positioniert der Lader den Dateizeiger mit DOS-Seek `AH=42h` auf Offset `0x00C8` und liest `0x18` Bytes:
+
+```asm
+1A82  xor  al,al
+1A84  xor  cx,cx
+1A86  mov  dx,00C8
+1A89  call 10CA
+1A8C  mov  cx,0018
+1A8F  lea  dx,[bp-0026]
+1A92  xor  al,al
+1A94  call 1088
+```
+
+Danach werden die WORD-Felder bei Dateioffset `0xCC` und `0xCE` mit dem Paar `0x026E` und `0x0003` verglichen. Für NOTEPAD.GEO stehen dort tatsächlich `6E 02 03 00`. Die Routine `1AD4` prüft die zulässige Versions-/Protokollrelation. Die genaue textuelle Benennung des Protokolls bleibt bis zum Abgleich mit weiteren GEODE-Versionen offen.
+
+### 2076 – Aufbau der Ressourcendaten-Verarbeitung
+
+Die Routine `1AEA` berechnet aus den zuvor gelesenen Headerfeldern eine Größe und fordert über `6E87` Speicher an. Anschließend wird ein 0x40-Byte-Block eingelesen. Die Routinen `1B45`, `1C76`, `1B6B` und `1B81` arbeiten danach mit daraus abgeleiteten Tabellenpositionen und Zählern.
+
+Die Berechnungen zeigen, dass der Loader Tabellenbereiche anhand der im Header gespeicherten Zähler adressiert. Die vollständige Zuordnung jedes internen Arbeitsfeldes zu den vier Dateitabellen ist noch nicht abgeschlossen; insbesondere werden die internen Offsets `[0x30]` bis `[0x40]` nicht vorschnell mit gleichnamigen Dateioffsets gleichgesetzt.
+
+### 2077 – Ressourcendaten werden über eine 32-Bit-Dateiposition gelesen
+
+Die Hilfsroutine `2218` verwendet den aktuellen Ressourcenindex `SI`, berechnet einen Eintrag in der Positionstabelle und liest zwei WORD-Werte als Dateiposition `CX:DX`. Danach wird der DOS-Dateizeiger mit `10CA` auf diese Position gesetzt. Der von der aufrufenden Routine übergebene Leseumfang bleibt über den Seek-Aufruf erhalten; anschließend liest `1088` die Ressourcendaten in den Zielsegmentbereich.
+
+Der Codepfad ist damit ein direkter Beleg, dass der Kernel Ressourcendaten über eine tabellengestützte Dateiposition lädt.
+
+### 2078 – Relocation-Daten werden unmittelbar nach dem Ressourcendaten-Lesen verarbeitet
+
+Die Routine `20FE` ruft zuerst `2218` auf und erhält das Zielsegment in `AX`, das anschließend nach `ES` übernommen wird. Danach liest sie die Relocation-Größe aus der zum Ressourcenindex gehörenden Tabelle. Sie führt keinen neuen Dateiseek zwischen dem Ende des Ressourcendaten-Lesens und dem Beginn des Relocation-Lesens aus.
+
+Der Relocation-Bereich wird in Blöcken von höchstens `0x100` Bytes eingelesen. Da `2218` zuvor den Dateizeiger auf den Beginn der Ressource gesetzt und die Ressourcendaten gelesen hat, verarbeitet `20FE` anschließend die direkt folgenden Bytes. Dies bestätigt für diesen Loaderpfad die bereits an NOTEPAD und NOTEPADG beobachtete Anordnung: Ressourcendaten und zugehörige Relocation-Daten folgen in der Datei unmittelbar aufeinander.
+
+### 2079 – Vier-Byte-Datensatz wird vom Kernel als zwei WORDs eingelesen
+
+Die Schleife in `20FE` verarbeitet jeden Datensatz mit vier Bytes Schrittweite:
+
+```asm
+2135  mov  ax,[bp+si]
+2138  mov  bx,[bp+si+2]
+213B  call 2153
+213F  add  si,0004
+```
+
+Damit liest der Kernel das erste WORD in `AX` und das zweite WORD in `BX`. `BX` wird in `2153` unmittelbar als Patchposition verwendet:
+
+```asm
+215B  mov  di,es:[bx]
+```
+
+Das letzte WORD des Datensatzes ist folglich der Offset in der gerade bearbeiteten Ressource, an dem der Loader den vorhandenen WORD-Wert liest und gegebenenfalls ändert. Dies ist jetzt nicht mehr nur aus den Datenmustern abgeleitet, sondern durch den ausführbaren Loadercode bestätigt.
+
+### 2080 – Korrektur der bisherigen Typ-/Zusatzfeld-Deutung
+
+Die Routine `2153` zerlegt das erste WORD in weitere Felder:
+
+```asm
+2154  mov  dx,ax
+2156  and  dl,F0
+2159  and  al,0F
+```
+
+Bei Little Endian bedeutet dies:
+
+- `AL` enthält das erste Byte des Datensatzes; sein niederes Nibble (`byte0 & 0x0F`) wird als Operationsauswahl verwendet.
+- `DL` enthält zunächst ebenfalls das erste Byte; sein höheres Nibble (`byte0 & 0xF0`) wählt den Verarbeitungszweig.
+- `AH` ist das zweite Byte. In einem Verarbeitungszweig wird es als Index verwendet (`mov dl,ah`, danach `shl dx,1`).
+- `BX` enthält das letzte WORD und bezeichnet die Patchposition.
+
+Damit war die frühere Beschreibung „Byte 0 = vollständiger Typ, Byte 1 = allgemeines Zusatzfeld“ zu grob. Die Datenstruktur kann weiterhin als `<BBH>` gespeichert werden, aber die Semantik des ersten Bytes ist mindestens in Operations-Nibble und Klassen-Nibble aufzuteilen. Das zweite Byte ist in bestimmten Klassen ein Index und darf nicht als bedeutungsloses Zusatzbyte behandelt werden.
+
+Die Routine unterscheidet im sichtbaren Code mindestens die Klassenwerte `0x00` und `0x10` im oberen Nibble des ersten Bytes und Operationswerte `0`, `1`, `2` und `3` im unteren Nibble. Weitere Zweige sowie die vollständige Bedeutung der Kombinationen werden im nächsten Untersuchungsblock verfolgt. Noch nicht entschlüsselte Typen werden ausdrücklich nicht benannt.
+
+### Zwischenstand nach 2080
+
+- GEODE-Loader-Einstieg `0000:1970` und Hauptpfad `197A` sind im deutschen Originalkernel gefunden.
+- Die GEODE-Signatur `C7 45 CF 53` wird bei `1A6B`/`1A72` geprüft.
+- Die Headerprüfung liest zunächst 0x44 Bytes und danach 0x18 Bytes ab Dateioffset 0xC8.
+- `20FE` ist der Relocation-Verarbeitungspfad; er liest 4-Byte-Datensätze und ruft für jeden `2153` auf.
+- Das letzte WORD ist durch `ES:[BX]` als Patchoffset innerhalb der Ressource bestätigt.
+- Das erste WORD enthält mindestens zwei Nibble-Felder; das zweite Byte liefert in einem Zweig einen Index.
+- Die bisherige Deutung als „erstes Byte vollständiger Typ / zweites Byte bloßes Zusatzfeld“ ist korrigiert.
+- Keine Kernel-, GEO- oder Parserdatei wurde geändert. Die Analyse ist statisch; ein Laufzeittest unter GeoManager steht aus.
+
+**Nächster Block 2081–2090:** Die Verzweigungen von `2153` werden vollständig verfolgt. Wir gleichen die Klassen-/Operationskombinationen mit echten NOTEPAD-, GROBJ- und SPLAY-Relocation-Datensätzen ab und bestimmen, welche Tabellen die Segment-/Ressourcenindizes liefern.
