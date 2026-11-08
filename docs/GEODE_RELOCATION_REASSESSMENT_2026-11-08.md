@@ -1198,7 +1198,7 @@ Die Instruktionsfolge in 20EAh ergibt exakt:
 
 `0x46 + 8 * Ressourcenanzahl + 4 * Exportanzahl + 2 * Importanzahl`
 
-Bei gesetztem Bit 7 in 00C9h kommen weitere 0x18 Bytes hinzu. Das Ergebnis wird an den Speichervermittler 7487h übergeben (Aufruf mit CX=8080h). Diese Formel beschreibt die angeforderte interne Verwaltungsgröße; sie ist nicht die Dateigröße und auch nicht die Länge des GEODE-Dateikopfs.
+Bei gesetztem Bit 7 in 00C9h kommen weitere 0x18 Bytes hinzu. Das Ergebnis wird an die Kernelroutine 6E87h übergeben (Aufruf mit CX=8080h). Die frühere Adressangabe 7487h war falsch; sie wurde durch erneute Disassemblierung des Load-Image korrigiert. Diese Formel beschreibt die angeforderte interne Verwaltungsgröße; sie ist nicht die Dateigröße und auch nicht die Länge des GEODE-Dateikopfs.
 
 ### 2148 – Die Felder 00D6h und 00D8h–00DEh werden in diesem Prüfpfad nicht ausgewertet
 
@@ -1215,5 +1215,39 @@ Der Abgleich wurde nicht nur an NOTEPAD und GROBJ durchgeführt. Im Archiv zeige
 **Offen:** (1) offizielle symbolische Namen und Bedeutung aller Bits im WORD 00C8h/Attributfeld 00DAh; (2) genaue Struktur der zusätzlichen 18h Bytes; (3) Semantik der übrigen Felder 00D6h und 00D8h–00DEh; (4) offizielle Benennung des Protokollpaares 00CCh:00CEh.
 
 **Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets 1A56h–1AE9h und 20EAh–210Ah (die Speichergrößenberechnung liegt im Load-Image-Bereich 20EAh–210Ah); Original-GEODE-Dateien im `GEOWORKS.zip`, insbesondere NOTEPAD.GEO, GROBJ.GEO, CUA.GEO, EGA.GEO, DOS5.GEO und NOTEPADG.GEO; vorhandene `pcgeos1/geode.py`-Parserdefinition. Statische Analyse, keine Laufzeitbestätigung.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
+
+## Untersuchungen 2151–2155 – Verwaltungsblock und Allokationspfad
+
+### 2151 – Korrektur der Allokationsadresse aus Untersuchung 2147
+
+Die erneute Prüfung der Bytes im tatsächlich extrahierten `KERNEL.OLD.LOAD` korrigiert die frühere Zieladresse: Die Routine bei Load-Image-Offset `7487h` ist nicht das Ziel des Aufrufs in der GEODE-Laderoutine. Der Aufruf liegt bei `1B09h` und hat das relative Ziel `6E87h` (`E8 7B 53`). Die Größenformel aus 2147 bleibt unverändert belegt; ausschließlich die Zieladresse war falsch dokumentiert.
+
+### 2152 – Aufrufkonvention der Allokationsroutine 6E87h
+
+Vor `CALL 6E87h` enthält `AX` die berechnete Verwaltungsgröße und `CX` den Wert `8080h`. Die Routine `6E87h` liest zunächst `SS:[0002h]` nach `BX` und fällt anschließend in den gemeinsamen Verwaltungs-/Speicherpfad ab `6E8Ch`. Bei Rückkehr aus dem Aufruf prüft der GEODE-Loader das Carry-Flag. Im Erfolgszweig wird `AX` als Segment in `DS` übernommen; `BX` wird als Verwaltungswert weiterverwendet. Die genaue symbolische API-Bezeichnung ist durch diese statische Analyse allein nicht gesichert.
+
+### 2153 – Initialisierung der festen ersten 40h Bytes
+
+Nach erfolgreicher Allokation setzt der Loader `DS=AX`, ruft die Dateileseroutine `1088h` mit `CX=0040h`, `DX=0000h` und `AL=0` auf und initialisiert damit die ersten `40h` Bytes des neuen Blocks auf null. Danach folgen diese WORD-Schreibzugriffe:
+
+| Blockoffset | Eingetragener Wert |
+|---|---|
+| `0000h` | `SI` (aus dem vorherigen Allokations-/Verwaltungspfad) |
+| `0040h` | `BX` (zurückgekehrter Verwaltungswert) |
+| `0042h` | `SS:[0002h]` |
+
+Zusätzlich wird der globale WORD-Zähler bei `0026h` inkrementiert. Die Offsets sind direkte Speicheroperanden der Instruktionen bei `1B1Fh–1B32h`; die fachlichen Namen der Felder bleiben offen.
+
+### 2154 – Die Bereiche ab 30h werden aus den GEODE-Zählern berechnet
+
+Die Folge ab `1B45h` berechnet im neuen Block zunächst `WORD [0030h] = 2 * WORD [0034h] + WORD [0036h]`. Der Wert bei `0032h` wird anschließend als Schleifenzähler verwendet. In `1C76h–1C9Dh` wird aus `WORD [0032h]` ein Vierfacher gebildet und zu `WORD [0030h]` addiert; das Ergebnis wird bei `003Ah` abgelegt. Aus `WORD [0038h]` werden weitere, aufeinanderfolgende Bereichsgrenzen `003Ch` und `003Eh` berechnet. Diese Werte dienen danach als Ziel-/Grenzpositionen beim Nullsetzen und beim Aufbau von Zeiger-/Tabellenbereichen. Eine abschließende Zuordnung der Zähler bei `0032h`, `0034h`, `0036h` und `0038h` zu Ressourcen, Importen oder Exporten ist aus diesem Ausschnitt allein noch nicht sicher; sie wird nicht vorweggenommen.
+
+### 2155 – Der 18h-Zusatzbereich wird nicht als einfacher Tabellenanhang behandelt
+
+Der gesetzte Bit-7-Zweig des Bytes `00C9h` addiert weiterhin `18h` zur Allokationsgröße. Spätere Initialisierung verwendet außerdem das Bit `80h` im Statusbyte bei Blockoffset `0003h` und greift dann auf zusätzliche Metadaten/Zeiger zu, unter anderem auf `00A`/`008` in einem über einen Zeiger ermittelten Segment sowie auf einen Bereich ab `0056h`. Das zeigt, dass der Zusatzbereich mit einer gesonderten Initialisierungslogik zusammenhängt. Seine vollständige Struktur und sein offizieller Zweck sind damit noch nicht bewiesen.
+
+**Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `1AEAh–1B44h`, `1B45h–1C75h`, `1C76h–1D68h`, `6E87h–6E9Ah` und `2153h–21BDh`. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
