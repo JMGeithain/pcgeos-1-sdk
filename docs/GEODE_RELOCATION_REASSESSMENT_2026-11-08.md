@@ -1584,3 +1584,35 @@ Bei der Suche nach direkten speicherbezogenen Operanden mit Displacement `0x14` 
 Damit ist derzeit weder die Bedeutung des LMem-WORD-Feldes bei `0x14` noch die des Feldes bei `0x08` aus dem Kernelcode bewiesen. Insbesondere wird aus dem bloßen Auftreten eines Displacements nicht geschlossen, dass der jeweilige Zeiger auf einen LMem-Block zeigt. Der nächste notwendige Schritt ist die Identifikation der zuständigen Kernel-API-/Dispatch-Einstiegspunkte und die Rückverfolgung ihrer Aufrufpfade, statt weitere Displacement-Treffer ohne Kontext zu sammeln.
 
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD` aus `GEOWORKS.zip`; MZ-Headerauswertung und 16-Bit-x86-Disassemblierung des Load-Images; Vergleich der Trefferumgebung an `0x8C0C–0x8C45` und `0x9892–0x9967`. Die lineare Disassemblierung wird nicht als vollständige Code-/Daten-Trennung gewertet. Keine Änderung an Kernel, Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
+
+
+
+## Untersuchung 2206 – Originales UI.GEO und Abgleich der SDK-LMem-Konstruktion
+
+### 2206.1 – GEODE-Metadaten der deutschen GeoWorks-1.2-UI
+
+Die Datei `GEOWORKS/SYSTEM/UI.GEO` wurde direkt aus dem bereitgestellten Archiv gelesen. Sie ist 87.900 Bytes groß und besitzt die GEODE-1.x-Signatur `C7 45 CF 53`. Der vorhandene SDK-Parser liest daraus 28 Ressourcen, 2 importierte Bibliotheken und 262 Exporte. Die beiden Importnamen lauten `im` und `dbase`; beide Importdatensätze enthalten die Protokoll-WORDs 601 und 0. Die UI.GEO-Metadaten liefern damit einen konkreten 1.x-Systembestand zum weiteren Vergleich, aber keine symbolischen Namen der Kernelroutinen.
+
+Die Relokationstabellen enthalten in mehreren Ressourcen Einträge der vom SDK als Kernel-Relokationen behandelten Quellklasse 0. Beispiele: R2 enthält 120, R3 114, R4 23 und R12 18 solcher Einträge. R2 enthält daneben 93 Bibliotheksrelokationen (8 gegen Importindex 0 und 85 gegen Importindex 1). Diese Zahlen sind reine Zählungen der 4-Byte-Relokationseinträge nach dem vorhandenen Parser; sie identifizieren weder LMem-Funktionen noch deren Parameter oder Einsprungadressen. Die in den Relokationsfeldern gespeicherten WORD-Werte sind ohne Auflösung des Kernel-Dispatch-/Relokationsverfahrens keine Funktionsnamen.
+
+### 2206.2 – Direkter Abgleich der von ui.py erzeugten LMem-Struktur
+
+Die Funktion `pcgeos1/ui.py:lmem()` erzeugt zunächst 32 Byte Kopfbereich, legt ab Offset 0x20 eine WORD-Handle-Tabelle an und fügt die Chunkdaten anschließend hinzu. Der Chunk für Handle 0x20 enthält eine Byte-Tabelle mit einem Eintrag pro Handle. Das lässt sich direkt an SPINTEXT R3 aus beiden Archivvarianten prüfen: Der über Handle 0x20 adressierte Chunk hat in beiden Fällen 16 Bytes Nutzdaten und lautet:
+
+```
+00 02 03 02 03 02 07 02 02 07 02 07 02 03 02 07
+```
+
+Damit ist die konkrete Chunk-Anordnung der SDK-Funktion in diesem Teil mit dem Originalbestand vereinbar. Das ist jedoch keine Bestätigung der Bedeutung der einzelnen Flagwerte 0x02, 0x03 und 0x07.
+
+Die vier ersten WORD-Felder der geprüften SPINTEXT-Ressourcen beginnen jeweils mit Ressourcen-ID, 0x0020, 0xE000 und 0x0002. Auch die Handleanzahl bei Offset 0x0A stimmt für SPINTEXT R3 (16) und R4 (6) mit der Zahl der WORD-Einträge ab Offset 0x20 überein. Diese beobachteten Werte entsprechen den entsprechenden Konstanten und der Handle-Tabellenkonstruktion in `lmem()`.
+
+Die Felder bei Offset 0x08 und 0x14 bleiben dagegen ungeklärt. Ein wichtiger Kontrollbefund: SPINTEXT R4 hat 336 Bytes Ressourcendaten, den Wert 0x014C bei Offset 0x08 und 0x0150 bei Offset 0x14. Das passt zahlenmäßig zur SDK-Strategie „Länge vor Ausrichtung“ (332 Bytes) und „Länge nach 16-Byte-Ausrichtung“ (336 Bytes). SPINTEXT R3 aus `WORLD/PROGRAMM.E` hat 480 Bytes und bei beiden Offsets 0x01E0. Die andere SPINTEXT-R3-Datei unter `WORLD` ist 496 Bytes groß, enthält bei Offset 0x08 den Wert 0x01EC und bei Offset 0x14 den Wert 0x01E0; das Ende des zuletzt ermittelten Chunks liegt bei 0x01EC. Diese Abweichung zeigt, dass die beiden Headerfelder nicht pauschal als „vorherige und nachfolgende Gesamtlänge“ erklärt werden dürfen. Sie könnte mit Unterschieden in der konkreten Blockbelegung oder zusätzlichen Bytes zusammenhängen; die Ursache ist mit dem derzeitigen Befund nicht bewiesen.
+
+### 2206.3 – Konsequenz für den ersten Testbuild
+
+Der Originalvergleich stützt die Grundform der vom SDK verwendeten LMem-Handle-Tabelle und die konkreten ersten Headerwerte. Er bestätigt nicht den vollständigen 32-Byte-Header, nicht die Semantik der Flagwerte und insbesondere nicht die Berechnung der Felder 0x08 und 0x14 für beliebige neu erzeugte Ressourcen. Die Kernel-Relokationszählung in UI.GEO ist ein neuer Suchansatz, aber noch keine Identifikation der LMem-API.
+
+**Arbeitsentscheidung:** Noch keinen `geoTest.geo`-Build mit Laufzeitanspruch freigeben. Als nächstes sind die Relokationsziele und Aufrufstellen der UI.GEO-Ressourcen mit den Kernel-Dispatch-Einstiegspunkten abzugleichen. Dabei muss zuerst geklärt werden, wie die Quellklasse-0-Relokationen vom GeoWorks-1.2-Loader aufgelöst werden. Erst danach kann eine gefundene Routine als LMem-Initialisierung, -Allokation oder -Freigabe klassifiziert werden.
+
+**Quellenbasis:** `GEOWORKS/SYSTEM/UI.GEO`, `GEOWORKS/WORLD/SPINTEXT.GEO`, `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` aus dem bereitgestellten `GEOWORKS.zip`; `pcgeos1/geode.py`, `pcgeos1/ui.py` und `pcgeos1/packer.py` im Repository. Ausschließlich statische Auswertung; keine Änderung an Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
