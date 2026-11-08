@@ -1781,3 +1781,50 @@ Als nächstes werden weitere Quelle-0-/Typ-0-Relokationen aus UI.GEO und unabhä
 **Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, MZ-Header und MZ-Relocationstabelle (Fixup für Load-Image-Offset `0x2151`), Load-Image-Offsets `0x2153–0x21DA`, Tabellenbereich ab `0x0DEC0` und Code bei `0x8027`; Originaldatei `GEOWORKS/SYSTEM/UI.GEO`, Ressource R2, Relokationsziel `0x0005`. Statische Analyse; kein Laufzeittest.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien, `pcgeos1/geode.py` und alle SDK-Quelltexte.
+
+
+## Untersuchung 2212 – Quelle-0-/Typ-0-Verweise in UI.GEO inventarisiert
+
+### 2212.1 – Vollständige Auswertung der 28 UI-Ressourcen
+
+Die 28 Ressourcen von `GEOWORKS/SYSTEM/UI.GEO` wurden anhand der Ressourcentabelle und der jeweils 16-Byte-ausgerichteten Relocation-Streams erneut durchlaufen. Berücksichtigt wurden ausschließlich Einträge mit `source=0` und `type=0`. Es ergeben sich 1.125 solche Relokationseinträge. Das Zusatzbyte `extra` ist bei allen 1.125 Einträgen `0x00`.
+
+Die 1.125 Einträge verwenden 188 verschiedene WORD-Indizes. Der kleinste beobachtete Index ist 0, der größte 572. Für jeden dieser Indizes wurde der WORD-Wert aus der Kernel-Tabelle ab Load-Image-Offset `0x0DEC0` gelesen. Alle 188 resultierenden Offsets liegen innerhalb des 71.152 Byte großen Kernel-Load-Images.
+
+### 2212.2 – Häufigste Indizes und aufgelöste Codeoffsets
+
+| Kernel-Tabellenindex | Vorkommen in UI.GEO | Tabellenwert / Kernel-Codeoffset |
+|---:|---:|---:|
+| `0x1E6` (486) | 121 | `0x8000` |
+| `0x0A9` (169) | 116 | `0x2AD3` |
+| `0x006` | 60 | `0x6FE8` |
+| `0x1E9` (489) | 31 | `0x8027` |
+| `0x1EB` (491) | 30 | `0x8216` |
+| `0x095` (149) | 30 | `0x2015` |
+| `0x005` | 26 | `0x6FDF` |
+| `0x186` (390) | 23 | `0xA505` |
+| `0x187` (391) | 22 | `0xA551` |
+| `0x208` (520) | 22 | `0x83CE` |
+
+Die Vorkommenszahlen beziehen sich auf die 1.125 Quelle-0-/Typ-0-Einträge in UI.GEO. Sie sind keine Häufigkeiten über das gesamte GEOWORKS-Archiv.
+
+### 2212.3 – Erste Codeproben
+
+Die beiden häufigsten Tabellenindizes werden auf folgende Stellen abgebildet:
+
+- Index `0x1E6` → Kerneloffset `0x8000`; dort beginnt die Bytefolge `53 56 57 06 8B 3C` (unter anderem `push bx`, `push si`, `push di`, `push es`).
+- Index `0x1E9` → Kerneloffset `0x8027`; dort beginnt die in Untersuchung 2211 gezeigte Bytefolge `53 56 57 06 26 8B`.
+
+Diese beiden Ziele liegen im selben zusammenhängenden Kernelcodebereich. Das ist ein sinnvoller Schwerpunkt für die nächste Kontrollfluss- und Aufrufkonventionsanalyse. Die Nähe der Offsets und die Häufigkeit der Aufrufe reichen jedoch nicht aus, um eine gemeinsame API-Familie oder LMem-Zugehörigkeit zu behaupten.
+
+### 2212.4 – Aussagegrenzen
+
+Die Inventur bestätigt für UI.GEO die wiederholte Nutzung der Kernel-Tabelle durch Quelle 0 / Typ 0. Sie liefert eine priorisierte Liste von 188 Kernel-Codeoffsets. Nicht jeder Offset wurde bereits als eigenständiger Funktionsanfang disassembliert; die lineare Disassemblierung kann überlappende Einsprungpunkte und eingebettete Daten falsch darstellen. Daher sind die Tabellenwerte zunächst als aufgelöste Relokationsziele zu behandeln, nicht pauschal als vollständig klassifizierte API-Funktionen.
+
+### 2212.5 – Nächster Schritt
+
+Die Untersuchung konzentriert sich zunächst auf die stark verwendeten Ziele `0x8000`, `0x8027` und die benachbarten Tabellenziele `0x8216`. Dazu werden Aufrufkonvention, Registereingaben, Segmentannahmen, Rückgabewerte und die tatsächlichen Schreibzugriffe auf die adressierten Strukturen verfolgt. Parallel werden die betroffenen UI.GEO-Aufrufstellen und weitere Original-1.x-GEODEs verglichen. Erst diese Datenflussanalyse kann entscheiden, ob eine Funktion LMem, Objektblöcke oder einen anderen Kernel-Verwaltungsbereich bearbeitet.
+
+**Quellenbasis:** `GEOWORKS/SYSTEM/UI.GEO` aus dem bereitgestellten `GEOWORKS.zip`, alle 28 Ressourcentabellen und Relocation-Streams; `GEOWORKS/KERNEL.OLD`, MZ-korrigierter Kernel-Tabellenbereich ab `0x0DEC0` und die aufgelösten Kernel-Offsets. Statische Byteanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
