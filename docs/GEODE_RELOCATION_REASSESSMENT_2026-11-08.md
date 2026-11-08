@@ -694,3 +694,79 @@ Die unteren Nibblewerte `0` bis `3` steuern verschiedene Schreib- und Sonderpfad
 4. Erst danach symbolische Namen für die Relocation-Arten festlegen.
 
 **Status:** Ausschließlich statische Analyse. Keine Änderungen an `KERNEL.OLD`, `KERNEL.EXE`, GEO-Dateien oder `pcgeos1/geode.py`.
+
+## 2091–2100 – Rückverfolgung der GEODE-internen Tabellenfelder
+
+### 2091 – Die drei Tabellenzeiger werden im GEODE-Kontext aufgebaut
+
+Die Routine ab `1B45` berechnet `DS:[0030]` aus `DS:[0036]` und `DS:[0034]`:
+
+```asm
+1B45  mov dx,[0034]
+1B49  shl dx,1
+1B4B  add dx,[0036]
+1B4F  mov [0030],dx
+```
+
+Damit gilt exakt: `0030 = 0036 + 2 * 0034` (16-Bit-Arithmetik). Das ist ein abgeleiteter Zeiger hinter einem WORD-Array mit `0034` Einträgen. Die Bezeichnung des Arrays wird noch nicht festgelegt.
+
+### 2092 – Der Bereich ab 0030 wird mit Vier-Byte-Einträgen dimensioniert
+
+Direkt anschließend liest `1B6B` die Anzahl aus `DS:[0032]`, multipliziert sie mit vier und verwendet `DS:[0030]` als Startadresse. Die Routine `1C04` wird für jedes Element mit einem Offset aufgerufen, der jeweils um vier Bytes steigt. Damit ist belegt, dass der Bereich ab `0030` mindestens `0032` Datensätze zu je vier Bytes enthält. Das passt strukturell zu den im Relocation-Dispatcher gelesenen Paaren aus zwei WORDs, beweist aber allein noch nicht, dass alle Datensätze identisch semantisch interpretiert werden.
+
+### 2093 – Der Zeiger 003A liegt hinter dem Vier-Byte-Array
+
+Routine `1C76` berechnet `003A = 0030 + 4 * 0032`. `003A` zeigt unmittelbar hinter das zuvor dimensionierte Vier-Byte-Array. Die Felder `0030` und `003A` verweisen damit auf benachbarte Bereiche einer gemeinsamen internen GEODE-Datenstruktur.
+
+### 2094 – Die nachfolgenden Bereiche 003C und 003E
+
+Im selben Aufbaupfad werden zwei weitere Zeiger berechnet: `003C = 003A + 2 * 0038` und `003E = 003C + 4 * 0038`. Die Routine reserviert danach weitere Bereiche anhand der Anzahl `0038`. Die exakten Feldinhalte sind anhand dieses Codes allein noch nicht festgelegt. Die Berechnungen belegen eine zusammenhängende Folge von Tabellenbereichen mit WORD- und DWORD-Elementbreiten.
+
+### 2095 – 0036 ist ein Eingangszeiger, nicht bloß eine Relocation-Konstante
+
+Da `0030` aus `0036` plus `2*0034` gebildet wird, muss `0036` bereits vor `1B45` initialisiert sein. Der Wert ist Teil des zuvor aufgebauten GEODE-Kontexts. Der Dispatcher bei `21A7` benutzt `0036` als Basis einer WORD-Tabelle und lädt aus dieser Tabelle einen Segmentwert in `DS`. Die Verbindung zwischen Initialisierung und Dispatcher ist durch konkrete Lese-/Rechenoperationen nachgewiesen; der semantische Name des Arrays bleibt offen.
+
+### 2096 – Die Funktion 9630h ist ein Segmentkontext-Umschalter
+
+Der Aufruf `9630h` beginnt tatsächlich mit dem Segmentpräfix an Adresse `9630`:
+
+```asm
+9630  2E 8E 1E 2E 96    mov ds,cs:[962E]
+9635  C3                ret
+9636  2E 8E 06 2E 96    mov es,cs:[962E]
+963B  C3                ret
+```
+
+Damit ist `9630h` keine allgemeine Datei- oder Tabellenlesefunktion. Sie setzt `DS` auf den durch `CS:[962E]` bezeichneten Segmentkontext.
+
+### 2097 – 724Bh arbeitet mit einem übergebenen Segment-/Handle-Kontext
+
+Die Routine `724B` übernimmt `CX` als Segmentkontext, setzt `DS=CX`, liest dort ein Wort am Offset null und ruft anschließend `9630h` sowie `701Bh` auf. Danach prüft sie unter anderem Alignment, Grenzen und Einträge in Kernel-Verwaltungsstrukturen. Sie kann einen passenden Verwaltungs-/Handleeintrag finden und gibt einen Wert über `CX` zurück; in bestimmten Fällen setzt sie Carry. Sicher belegt ist eine Kernel-interne Segment-/Handle-Auflösung beziehungsweise -Prüfung. Eine präzisere Bezeichnung wie „Lock“, „Pin“ oder „Resource load“ wäre ohne zusätzliche Xrefs und Laufzeitbeobachtung nicht ausreichend abgesichert.
+
+### 2098 – Der Relocation-Dispatcher nutzt 9630h für den Kernelkontext
+
+Im Zweig ab `217F` wird `9630h` aufgerufen, bevor `SI` dereferenziert und Metadaten bei `[SI+0A]` und `[SI+0B]` geprüft werden. Das bedeutet: `DS` wird vor diesen Zugriffen ausdrücklich auf den Segmentkontext `CS:[962E]` gesetzt. Die Metadatenprüfung erfolgt daher nicht mehr im zuvor für die Zielressource geladenen `DS`, sondern im Kernelkontext. Tabellen-/Metadatenadressen dürfen deshalb nicht pauschal als Felder im gerade relocatierten Ressourcenblock behandelt werden.
+
+### 2099 – Die GEODE-Headerzählungen und die internen Tabellenbereiche
+
+| Feld | Berechnung / Verwendung | Sicherer Befund |
+|---|---|---|
+| `0030` | `0036 + 2*0034` | Start eines Bereichs; danach folgen `0032` Vier-Byte-Einträge |
+| `0036` | Eingangszeiger | Basis einer WORD-Tabelle im Relocation-Pfad |
+| `003A` | `0030 + 4*0032` | Start des direkt folgenden Tabellenbereichs |
+| `003C` | `003A + 2*0038` | Start nach einem WORD-Bereich mit `0038` Elementen |
+| `003E` | `003C + 4*0038` | Start nach einem DWORD-Bereich mit `0038` Elementen |
+
+Diese Beziehungen sind aus den Maschinenbefehlen abgeleitet. Die Zähler `0032`, `0034`, `0038` und die Felder `0030` bis `003E` gehören zum selben internen GEODE-Kontext, aber ihre symbolischen Namen werden erst nach Abgleich mit realen Headern und Loader-Aufrufpfaden vergeben.
+
+### 2100 – Korrigierter Stand und nächste Prüfschritte
+
+Der Tabellenaufbau ist jetzt in Teilen mathematisch rekonstruiert. Zusätzlich ist die Rolle von `9630h` eindeutig: `DS` wird aus `CS:[962E]` geladen. `724Bh` ist eine Segment-/Handle-Verwaltungsroutine, deren genaue Wirkung noch nicht abschließend benannt wird.
+
+**Nächste Schritte:**
+1. Den Initialisierungspfad vor `1B45` zurückverfolgen, um Herkunft und Bedeutung von `0034`, `0036`, `0032` und `0038` festzustellen.
+2. Die Aufrufstellen von `1B45`, `1C76` und `21A7` vergleichen, um die Lebensdauer der Tabellenbereiche zu verstehen.
+3. Den Wert `CS:[962E]` und seine Schreibstellen finden.
+4. Die realen GEODE-Dateitabellen aus NOTEPAD und GROBJ gegen die internen Tabellenbeziehungen spiegeln.
+
+**Status:** Statische Disassemblierung des deutschen Originalkernels `KERNEL.OLD`. Keine Änderung an Kerneldateien, GEO-Dateien oder `pcgeos1/geode.py`; keine Laufzeitbestätigung.
