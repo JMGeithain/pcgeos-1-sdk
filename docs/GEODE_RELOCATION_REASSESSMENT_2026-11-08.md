@@ -2204,3 +2204,98 @@ Diese Befunde stammen aus dem Originalkernel und sind unabhängig von der SDK-Im
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x78B2–0x7EAF`, `0x8329–0x838C), `0x87AC–0x8913); ergänzend Original `GEOWORKS/WORLD/SPINTEXT.GEO`, Ressource R3, Header/Handle-/Flagtabellenwerte aus Untersuchung 2214. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2219 – LMem-Chunk-Handles, Allokation, Resize und Freigabe
+
+### 2219.1 – Handle-Tabelleneintrag und Chunkanfang
+
+Die Routine `0x7977` sucht in der Handle-Tabelle ab dem in `DS:0002` gespeicherten Offset nach einem freien WORD-Eintrag. Die Anzahl der Einträge wird aus `DS:000A` gelesen. Ein freier Eintrag wird als WORD mit Wert null erkannt. Ist kein freier Eintrag vorhanden, ruft der Pfad `0x7C53` zur Erweiterung der Handle-Tabelle auf.
+
+Für den gefundenen Eintrag ruft `0x7977` `0x79FB` auf. Diese Routine:
+
+1. schreibt zunächst `0xFFFF` in den Handle-Tabelleneintrag;
+2. gibt dessen Offset in AX zurück;
+3. ruft bei nichtnull CX die Allokationsroutine `0x7A32` auf;
+4. speichert den von `0x7CCE` gelieferten Chunkoffset in den Handle-Tabelleneintrag;
+5. schreibt die aufgerundete Chunkgröße unmittelbar vor den Chunkinhalt, also an `ChunkOffset-2`.
+
+Die Größe wird durch `(CX + 3) AND 0xFFFC` auf eine Vier-Byte-Grenze aufgerundet. Der Handle-Tabelleneintrag enthält damit einen Offset auf den Chunkinhalt; das WORD unmittelbar davor enthält die belegte Chunkgröße.
+
+### 2219.2 – Chunk anlegen und Handle wiederverwenden
+
+`0x7977` durchsucht die Handle-Tabelle nach einem freien Eintrag. Der Wert null kennzeichnet dabei einen freien Tabelleneintrag. Die Routine `0x79FB` setzt den Eintrag zunächst auf `0xFFFF` und übergibt die gewünschte Chunkgröße an `0x7A32).
+
+Die Allokation selbst erfolgt über `0x7CCE`. Der zurückgegebene Offset wird in den Handle-Eintrag geschrieben. Damit ist der Zusammenhang zwischen Handle und Chunkdaten im Originalkernel direkt belegt.
+
+Wenn die Tabelle keine freien Einträge enthält, erweitert `0x7C53` sie um `0x18` WORD-Einträge (24 Handles). Die Routine verschiebt den nachfolgenden Heapbereich um `0x30` Bytes, passt betroffene Handlewerte an und erhöht `DS:000A` um `0x18`.
+
+### 2219.3 – Chunkgröße ändern
+
+Die Routine `0x7A5D` ist der zentrale Resize-Pfad:
+
+- AX enthält den Offset des Handle-Tabelleneintrags.
+- CX enthält die angeforderte neue Chunkgröße.
+- Der bisherige Chunkoffset wird aus dem Handle-Eintrag gelesen.
+- Die alte Größe steht bei `[ChunkOffset-2]`.
+- Die neue Größe wird wiederum auf eine Vier-Byte-Grenze aufgerundet.
+- Bei unveränderter gerundeter Größe bleibt der Chunk an Ort und Stelle.
+- Andernfalls versucht der Kernel zunächst, den Chunk im Heap zu erweitern beziehungsweise zu verschieben.
+- Bei erfolgreicher Neuallokation wird der Handle-Eintrag auf den neuen Chunkoffset umgestellt und der bisherige Inhalt kopiert.
+- Der bisherige Heapbereich wird anschließend über `0x7E32` angepasst.
+
+Die Routine `0x7A5D` verwendet außerdem `0x7B42`, um zu prüfen, ob der Chunk unmittelbar in den angrenzenden freien Bereich hinein vergrößert werden kann. Reicht dieser Platz nicht aus, wird eine neue Allokation versucht; bei Bedarf wird der LMem-Block über `0x7D18` vergrößert.
+
+### 2219.4 – Chunk freigeben
+
+Es sind zwei unterschiedliche Vorgänge zu unterscheiden:
+
+- `0x7A38`: liest den Chunkoffset aus dem Handle-Eintrag, setzt den Eintrag auf null und gibt den bisherigen Chunk über `0x7BE7` frei. Der Handle-Tabelleneintrag bleibt damit als freier Eintrag verfügbar.
+- `0x7A4C`: tauscht den Handle-Eintrag mit `0xFFFF` aus. Wenn zuvor ein gültiger Chunkoffset darin stand, wird dessen Speicher ebenfalls über `0x7BE7` freigegeben. Der Handle wird damit nicht einfach als null-freier Eintrag zurückgelassen; der Sonderwert `0xFFFF` kennzeichnet einen anderen Zustand.
+
+Die Unterscheidung zwischen null und `0xFFFF` ist für eine korrekte SDK-Abbildung wesentlich. Die genaue öffentliche API-Zuordnung dieser beiden Kernelpfade ist noch nicht bewiesen.
+
+### 2219.5 – Einfügen und Löschen innerhalb eines Chunks
+
+Die Routine `0x7ACA` verschiebt einen Teil des Chunkinhalts, um Platz für eine Einfügung zu schaffen. Sie bestimmt zunächst die aktuelle Chunkgröße, ruft `0x7A5D` mit der vergrößerten Größe auf und verschiebt danach den betroffenen Datenbereich innerhalb des Chunks. Der neu geschaffene Bereich wird mit null gefüllt.
+
+Die Routine `0x7B08` führt den umgekehrten Vorgang aus: Sie verschiebt den verbleibenden Datenbereich nach vorn, verkleinert den Chunk über `0x7A5D` und passt damit den Chunkgrößeneintrag an.
+
+Damit sind zwei eigenständige Chunkoperationen im Kernelcode nachgewiesen: Einfügen und Entfernen von Bytes innerhalb eines bestehenden Chunks.
+
+### 2219.6 – Freispeicherliste und Zusammenführen benachbarter Blöcke
+
+`0x7BE7` gibt einen Chunk in die verkettete Freispeicherliste zurück:
+
+- liest die Chunkgröße bei `[SI-2]`;
+- rundet sie auf eine Vier-Byte-Grenze;
+- erhöht den Freispeicherzähler `DS:000E`;
+- fügt den freigegebenen Bereich anhand seiner Adresse sortiert in die Liste ein;
+- führt benachbarte freie Bereiche zusammen.
+
+`0x7BCC` entfernt einen freien Bereich aus dieser Liste und aktualisiert die Verkettung. `0x7E32` passt einen Bereich an, wenn ein Chunk in seiner Größe verändert wird.
+
+### 2219.7 – Blockvergrößerung und Kompaktierung
+
+`0x7CCE` sucht einen passenden freien Bereich. Wenn keiner genügt, führt der Pfad über `0x7D18` eine Vergrößerung des LMem-Blocks aus. Dabei wird `DS:0008` angepasst und der neue Speicher über die Kernel-Speicherverwaltung angefordert.
+
+`0x7D7C` prüft, ob Freispeicher vorhanden ist. `0x7D85–0x7E31` verschiebt Heapbereiche, aktualisiert die Handle-Tabelleneinträge, passt Verweise auf verschobene Chunks an und wiederholt den Vorgang, bis die Kompaktierung abgeschlossen ist oder die Blockgrenze erreicht wird.
+
+### 2219.8 – Konsequenzen für den SDK-Entwurf
+
+Für eine minimale LMem-Implementierung sind jetzt folgende Eigenschaften direkt belegt:
+
+1. Die Handle-Tabelle enthält WORD-Offsets auf Chunkinhalte.
+2. Ein freier Handle-Eintrag kann den Wert null enthalten.
+3. Ein weiterer Sonderzustand ist `0xFFFF`; er darf nicht pauschal mit null gleichgesetzt werden.
+4. Vor jedem Chunkinhalt liegt ein WORD mit der Chunkgröße.
+5. Chunkgrößen werden auf Vier-Byte-Grenzen aufgerundet.
+6. Handle-Tabellen-Erweiterung und Heapverschiebung erfordern die Anpassung der betroffenen Handlewerte.
+7. Die Freispeicherliste ist verkettet und wird sortiert geführt; benachbarte freie Bereiche werden zusammengeführt.
+8. Das Vergrößern eines Chunks kann eine Verschiebung des Chunkinhalts und eine Aktualisierung des Handles auslösen.
+
+Die Befunde beschreiben die beobachteten Kernelpfade. Sie legen noch keine vollständige öffentliche LMem-API fest und sind keine Freigabe, die SDK-Implementierung ohne weitere Vergleichstests zu ändern.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x7977–0x7A37`, `0x7A38–0x7B41`, `0x7B42–0x7B75`, `0x7B76–0x7E50). Ergänzend die LMem-Header-/Handle-/Flagtabellenbelege aus den Untersuchungen 2214 und 2218. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
