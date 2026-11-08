@@ -1278,3 +1278,47 @@ Die Befunde zeigen zwei Ebenen: (1) den zentralen Verwaltungsblock mit festem Gr
 **Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `1C16h–1C75h`, `1D0Bh–1D68h`, `1D8Ah–1E37h` und `2300h–2355h`. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
+
+
+## Untersuchungen 2161–2165 – Offsetprüfung und Tabellenlayout
+
+### 2161 – Korrektur der zwischenzeitlichen Offset-Warnung
+
+Eine zwischenzeitliche Warnung, die Routine bei Load-Image-Offset `197Ah` liege im DOS-Startcode, war falsch. Ursache war die fehlerhafte Kombination von `objdump --adjust-vma` und `--start-address`: Der Startoffset wurde dadurch als VMA statt als gewünschter Dateioffset behandelt. Die korrekte Disassemblierung erfolgt hier ohne `--adjust-vma`, direkt mit `--start-address=0x197a` auf `KERNEL.OLD.LOAD`. Sie zeigt bei `197Ah` die GEODE-Laderoutine, bei `1A56h` den Headerlese-/Signaturpfad und bei `1AEAh` die Größenberechnung. Die Befunde 2141–2160 werden daher nicht verworfen; die zwischenzeitliche gegenteilige Aussage wird ausdrücklich zurückgenommen.
+
+### 2162 – Allokationsformel direkt aus den Headerzählern bestätigt
+
+Die korrekte Instruktionsfolge bei `1AEAh–1B06h` lautet:
+- `AX = 2 * [BP-1Eh]` (Headerwort `D0h`, Ressourcenanzahl),
+- Addition von `[BP-1Ah]` (Headerwort `D4h`, Exportanzahl),
+- Verdopplung,
+- Addition von `[BP-1Ch]` (Headerwort `D2h`, Importanzahl),
+- erneute Verdopplung,
+- Addition `46h`,
+- optional Addition `18h`, falls Bit 7 von Headerbyte `C9h` gesetzt ist.
+
+Damit ist die Formel `46h + 8*R + 4*E + 2*I` unmittelbar durch die Maschineninstruktionen belegt. Anschließend erfolgt `CALL 6E87h` mit `CX=8080h`.
+
+### 2163 – Tabellenanfänge werden im Verwaltungsblock dynamisch berechnet
+
+Die Routine `1C76h` berechnet:
+- `[3Ah] = [30h] + 4 * [32h]`
+- `[3Ch] = [3Ah] + 2 * [38h]`
+- `[3Eh] = [3Ah] + 6 * [38h]`
+
+Davor setzt `1B45h`:
+- `[30h] = 2 * [34h] + [36h]`
+
+Diese Gleichungen sind direkte Befunde. Sie zeigen, dass die Verwaltungsstruktur mehrere aufeinanderfolgende Tabellen-/Teilbereiche über Offsets verwaltet. Die symbolische Zuordnung von `[32h]`, `[34h]`, `[36h]` und `[38h]` zu den GEODE-Zählertypen wird noch nicht behauptet.
+
+### 2164 – Die Tabellenbereiche werden tatsächlich für Ressourcenverweise benutzt
+
+Die Routine `1D9Ch` greift auf den über `[3Ah]` adressierten Bereich zu, liest über den zweiten WORD-Eintrag einen Segmentwert und über den folgenden WORD-Eintrag eine Anzahl, die mit 16 multipliziert und um einen lokalen Größenwert vermindert wird. Danach wird `SI=2` gesetzt und eine weitere Speicher-/Laderoutine aufgerufen. In der Schleife `1DD4h–1E1Bh` werden weitere WORD-Einträge des Bereichs `[3Ah]` mit Schrittweite 2 gelesen und als Verweise auf separate Blöcke verwendet. Das bestätigt eine WORD-indizierte Tabelle von Blockverweisen; eine Gleichsetzung jedes Eintrags mit genau einer Ressource ist ohne die vollständige Befüllungsroutine noch nicht bewiesen.
+
+### 2165 – Relokations-/Adressauflösung liest mehrere Tabellenbereiche
+
+Die Routine bei `2153h` wird von `1C04h` aufgerufen und verarbeitet den Relokationstyp in `AL` sowie die Klasse in `DL`. Die Verzweigung für Klasse `10h` verwendet `[36h]` als Basis einer WORD-Tabelle; andere Klassen verwenden den über `[3Ah]` berechneten Bereich oder die über `[30h]` adressierten Einträge. Das belegt, dass die Felder `30h`, `36h` und `3Ah` nicht bloße Größenwerte sind, sondern zur Laufzeit als Tabellenbasen/Offsets in der Adressauflösung dienen. Die exakten Feldnamen und die komplette Klassenzuordnung bleiben Gegenstand der nächsten Untersuchung.
+
+**Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `197Ah–1B0Ch`, `1B45h–1C16h`, `1C16h–1E37h` und `2153h–2217h`. Die Disassemblierung wurde ohne `--adjust-vma` erstellt, damit die angegebenen Startadressen den tatsächlichen Offsets im Load-Image entsprechen. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
