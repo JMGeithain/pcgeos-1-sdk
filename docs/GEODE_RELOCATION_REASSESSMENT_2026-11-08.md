@@ -2299,3 +2299,53 @@ Die Befunde beschreiben die beobachteten Kernelpfade. Sie legen noch keine volls
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x7977–0x7A37`, `0x7A38–0x7B41`, `0x7B42–0x7B75`, `0x7B76–0x7E50`. Ergänzend die LMem-Header-/Handle-/Flagtabellenbelege aus den Untersuchungen 2214 und 2218. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2220 – Unabhängige Aufrufstellen bestätigen Chunk-Resize und Chunk-Edit
+
+### 2220.1 – Descriptoraktualisierung verwendet Einfügen und Löschen
+
+Die Kernelroutine `0x8226` arbeitet mit einem über SI adressierten Handle-/Datenbereich und vergleicht einen gespeicherten Größenwert mit einer neu berechneten Größe. Bei einer Größenänderung wird die Differenz gebildet:
+
+- Bei negativer Differenz wird `0x7B08` aufgerufen.
+- Bei positiver Differenz wird `0x7ACA` aufgerufen.
+- Anschließend werden die betroffenen WORD-Offsets in einer nachfolgenden Eintragstabelle angepasst.
+
+Damit ist der Einsatz von `0x7B08` und `0x7ACA` als Entfernen beziehungsweise Einfügen von Bytes nicht nur aus ihrem internen Speicherbewegungsalgorithmus abgeleitet, sondern auch durch einen unabhängigen Kernel-Aufrufer bestätigt.
+
+### 2220.2 – Einfüge-/Löschoperationen wirken auf einen konkreten Chunk
+
+In `0x8226` wird vor dem Aufruf der Chunkoffset aus dem Handle-Eintrag geladen. Die Routine berechnet den Größenunterschied und übergibt an `0x7B08` beziehungsweise `0x7ACA` die Handle-/Chunkreferenz und die Änderungsgröße. Danach werden die nachfolgenden Offsets in einer Tabelle angepasst.
+
+Die Kombination aus Chunk-Resize und Offsetkorrektur zeigt, dass die Operationen dazu dienen, einen variabel großen Datenbereich innerhalb eines LMem-Chunks zu verändern, ohne die logischen Verweise auf die darin liegenden Einträge unverändert zu lassen.
+
+### 2220.3 – Weitere Freigabe-/Resize-Aufrufstellen
+
+Im Kernelbereich `0x3076–0x3093` wird ein vorhandener Chunk bei Bedarf über `0x7A38` freigegeben. Anschließend wird, abhängig von einem Statusbit, ein neuer Chunk der Größe `0x000E` über `0x7977` angelegt. Das ist eine unabhängige Bestätigung für die Kombination aus Handle-Freigabe und neuer Chunkallokation.
+
+Im Bereich `0x8877–0x88AC` durchläuft der Kernel Handle-Tabelleneinträge und verwendet:
+
+- `0x7A38`, um einen Chunk freizugeben;
+- `0x7A5D` mit CX = 0, um den Chunk über den Resize-Pfad auf null Größe zu setzen beziehungsweise den entsprechenden Handlepfad auszuführen.
+
+Der Code prüft vorher Statusbits im Chunk-/Objektkontext. Die Bedeutung dieser Bits wird nicht allein aus diesen Aufrufstellen abgeleitet.
+
+### 2220.4 – Bedeutung der drei Handlezustände
+
+Die beobachteten Routinen unterscheiden mindestens diese WORD-Werte in einem Handle-Tabelleneintrag:
+
+| Wert | Beobachtetes Verhalten |
+|---|---|
+| `0x0000` | wird von `0x7977` als freier Handleeintrag gesucht |
+| `0xFFFF` | wird von `0x79FB` während der Chunkanlage gesetzt; wird in `0x7A5D` als Sonderwert des Chunkoffsets erkannt |
+| anderer Offset | wird als Offset des Chunkinhalts verwendet; die Chunkgröße liegt bei Offset minus zwei |
+
+Die Bedeutung von `0xFFFF` als dauerhaftem Zustand ist noch nicht endgültig geklärt. Sicher ist lediglich, dass der Kernel den Wert von null unterscheidet und dass er im Allokations-/Freigabepfad als besonderer Marker behandelt wird.
+
+### 2220.5 – Konsequenz für den Test-GEODE
+
+Die Untersuchung bestätigt die internen Regeln für Chunk-Handles und Datenbereichsänderungen. Für einen ersten Test-GEODE ist damit weiterhin nicht ausreichend geklärt, welche öffentliche LMem-Aufruffolge der GEODE beim Laden tatsächlich benötigt und welche Ressourcen-/Relokationsanforderungen zusätzlich gelten. Die Erkenntnisse rechtfertigen deshalb noch keine Implementierung eines eigenen LMem-Blocks im SDK.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8226–0x828D), `0x3076–0x3093), `0x8877–0x88AC), sowie die LMem-Routinen `0x7977`, `0x7A38`, `0x7A5D`, `0x7ACA`, `0x7B08`. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
