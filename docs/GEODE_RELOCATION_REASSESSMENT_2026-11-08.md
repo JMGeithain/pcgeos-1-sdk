@@ -1094,3 +1094,74 @@ Die letzte Funktion ist ein allgemeiner Kernelvermittler und nicht als Bestandte
 **Quellenbasis:** Statische Disassemblierung von `KERNEL.OLD` (Load-Image-Offsets `0F56–10DF`, `12F6–133A`, `14AA–15EA`, `197A–1AD3`, `271C–27D6`). DOS-Funktionsnummern sind anhand der DOS-API-Schnittstelle benannt. Keine Laufzeitbestätigung.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, sämtliche GEO-Dateien und `pcgeos1/geode.py`.
+
+## Untersuchungen 2131–2140 – Dateigröße, Pfadwechsel und Headerfehler
+
+### 2131 – `112C` ermittelt die Dateigröße über drei Seek-Operationen
+
+Die Routine `112C` prüft zunächst über `1164`, ob der Handle für diesen Weg geeignet ist. Im normalen Handle-Zweig führt sie danach diese DOS-Seek-Sequenz aus:
+
+```asm
+1135  xor cx,cx
+1137  xor dx,dx
+1139  mov al,01
+113B  call 10CA       ; SEEK_CUR, aktuelle Position lesen
+113E  mov si,dx
+1140  xchg ax,di      ; aktuelle Position DX:AX sichern
+1141  mov al,02
+1143  xor cx,cx
+1145  xor dx,dx
+1147  call 10CA       ; SEEK_END, Dateiende ermitteln
+114A  push ax
+114B  push dx          ; Dateigröße sichern
+114C  mov cx,si
+114E  mov dx,di
+1150  mov al,00
+1152  call 10CA       ; SEEK_SET, ursprüngliche Position restaurieren
+1155  pop dx
+1156  pop ax
+```
+
+Die DOS-Ursprungswerte sind `AL=0` (Dateianfang), `AL=1` (aktuelle Position) und `AL=2` (Dateiende). Damit liefert `112C` im normalen Zweig die 32-Bit-Dateigröße in `DX:AX` zurück und stellt zugleich den vorherigen Dateizeiger wieder her. Das ist für den GEODE-Lader relevant, weil `197A` direkt nach dem Öffnen `112C` aufruft und anschließend aus `DX:AX` einen Größen-/Allokationswert berechnet.
+
+### 2132 – Die Sonderbehandlung in `112C` hängt von der Handle-Klassifizierung ab
+
+`1164` ruft `118F` auf. `118F` holt über den aktuellen DS-Kontext und `0F7F` einen Verwaltungszeiger und liest daraus das WORD-Feld bei `+06`. Ist dieses Feld null, wird ein kurzer Statusvergleich ausgeführt. Andernfalls werden `5A4` und `0CC5` aufgerufen und Bit `20h` aus `AH` ausgewertet. Nur bei gesetztem Statusbit wird der normale Seek-Ende-Weg ausgeführt. Der alternative Pfad setzt `DI=000Eh` und ruft `1180` auf, das einen indirekten Callback über `ES:[05B8]` ausführt. Die genaue Bedeutung dieses Handle-Typs und des Callbacks ist noch nicht benannt.
+
+### 2133 – `14AA` wechselt Laufwerk und aktuelles Verzeichnis
+
+Der Code ab `14AA` sichert den aktuellen Kontext, ruft `17B5` und `9630`, ermittelt das aktuelle Laufwerk/Verzeichnis und setzt anschließend mit DOS `AH=0Eh` das Ziellaufwerk sowie mit `AH=3Bh` das Zielverzeichnis. Bei Erfolg wird über `AH=47h` das Verzeichnis des Ziellaufwerks gelesen und in den Kernelkontext zurückgeführt. Die Routine ist damit kein einfacher String- oder Dateiname-Konverter, sondern verwaltet einen temporären Laufwerks-/Verzeichniswechsel.
+
+### 2134 – `15A0` konstruiert einen Pfad für `14AA`
+
+`15A0` reserviert `68h` Bytes auf dem Stack und kopiert `34h` WORDs aus dem Puffer ab `DS:04A4`. Wenn `BP` ungleich null ist, sucht es im kopierten Pfad nach dem abschließenden Nullbyte, ergänzt nötigenfalls `\` und hängt danach einen String aus der Tabelle der Zeiger bei `DS:0544` an. Der Index ist `2*BP`. Der zusammengesetzte Pfad wird an `14AA` übergeben. Belegt ist die Konstruktion aus Basisverzeichnis plus indiziertem Zusatzpfad; die symbolischen Namen und die Bedeutung aller Indizes bleiben offen.
+
+### 2135 – `AL=A0h` wird unverändert bis zum DOS-Open-Vermittler weitergereicht
+
+`197A` setzt vor dem Aufruf von `12F6` `AL=A0h`. `12F6` setzt lediglich `AH=3Dh` und springt nach `12FC`; der Wert in `AL` bleibt dabei unverändert. `12FC` führt zusätzliche Kernelprüfungen und Callback-Schritte aus, bevor der DOS-Open-Pfad erreicht wird. Daher ist `A0h` zunächst als kernelinterner Open-Modusparameter dokumentiert. Seine genaue Bedeutung kann aus diesem Ausschnitt allein nicht zuverlässig auf ein Standard-DOS-Zugriffsrecht reduziert werden.
+
+### 2136 – `12FC` prüft den Pfadstatus vor dem eigentlichen Öffnen
+
+`12FC` sichert Register, ruft `172F`, `15EB` und `17C3` auf und testet danach `AL & 03h`. Bei gesetzten Bits wird `17F0` ausgeführt. Danach folgen der Kernelvermittler `7A8`, das Setzen des ES-Kontexts über `9636` und ein indirekter Callback `ES:[05B8]` mit `DI=0004`. Bei erfolgreichem Callback wird `11CB` ausgeführt. Anschließend restauriert der Code den Kontext und ruft `1628` sowie `1736` auf. Das bestätigt, dass `12FC` kein transparenter Eins-zu-eins-Wrapper um DOS `3Dh` ist.
+
+### 2137 – `17F0` liefert einen Status-/Fehlerwert für die Pfadprüfung
+
+`17F0` wechselt in den Kernel-DS-Kontext, ruft `0885` auf und invertiert dessen Carry-Status. Bei einem Fehler folgt eine zweite Prüfung über `063C`; schlägt auch diese fehl, wird `AX=0013h` gesetzt. Der genaue fachliche Name des geprüften Zustands ist nicht belegt. Fest steht nur, dass `12FC` den Rückgabestatus von `17F0` zur Entscheidung über den folgenden Callback-Pfad verwendet.
+
+### 2138 – `197A` liest nach dem 44h-Byte-Kopfblock gezielt ab Dateioffset `00C8h`
+
+Nach Prüfung der GEODE-Signatur `C7 45 CF 53` und des WORD-Feldes bei Headeroffset `0004h` setzt `1A56` den Dateizeiger mit `AL=0`, `CX=0`, `DX=00C8h` auf den absoluten Offset `00C8h`. Danach liest es genau `18h` Bytes in den Stackpuffer ab `BP-26h`. Damit ist der zweite Leseabschnitt nicht bloß ein Fortsetzen des Headerlesens, sondern ein gezielter Zugriff auf den festen Header-/Metadatenbereich ab `00C8h`.
+
+### 2139 – Die Fehlernummern `02h` bis `08h` sind interne Loaderstatuswerte
+
+Die Routine `197A` setzt in den jeweiligen Prüfpfaden unter anderem `AX=02h` nach fehlgeschlagenem Öffnen, `AX=04h` nach fehlgeschlagenem Lesezugriff, `AX=05h` bei falscher GEODE-Kennung, `AX=06h` bei nicht-null WORD an Headeroffset `0004h`, `AX=07h` bei einer nicht passenden gespeicherten WORD-Angabe und `AX=08h` bei fehlgeschlagener Bitmaskenprüfung. Das sind im untersuchten Code gesetzte interne Rückgabewerte des GEODE-Laders; sie dürfen nicht mit den DOS-Fehlercodes gleichgesetzt werden.
+
+### 2140 – Ergebnis und offene Punkte
+
+**Neu gesichert:** `112C` ermittelt im normalen Dateihandle-Zweig die Dateigröße mit `SEEK_END` und restauriert die ursprüngliche Dateiposition. `14AA` führt einen temporären Laufwerks-/Verzeichniswechsel durch. `15A0` konstruiert den dazu übergebenen Pfad aus einem Basisverzeichnis und einem indizierten Zusatzpfad. `AL=A0h` wird vom Einstieg `12F6` bis in die zusätzliche Kernelvermittlung `12FC` unverändert übernommen. `197A` liest nach dem ersten 44h-Byte-Block gezielt weitere 18h Bytes ab Dateioffset `00C8h`. Die Fehlerwerte `02h` bis `08h` sind interne Loaderstatuswerte.
+
+**Offen:** (1) genaue Klassifizierung des Handles in `1164` und Semantik des Callbacks `ES:[05B8]`; (2) symbolische Bedeutung der Pfadzeigertabelle ab `0544h`; (3) fachliche Bedeutung des `A0h`-Open-Modusparameters; (4) Bedeutung der Metadaten ab `00C8h` und der dort geprüften WORD-/Bitmaskenfelder.
+
+**Quellenbasis:** Statische Disassemblierung des deutschen Originalkernels `KERNEL.OLD`, Load-Image-Offsets `10CA–11CA`, `12F6–133A`, `14AA–15EA`, `17F0–180E` und `197A–1AD3`. DOS-Seek-Ursprünge und Funktionsnummern sind gemäß DOS-API benannt. Keine Laufzeitbestätigung.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
