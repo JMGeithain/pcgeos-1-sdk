@@ -2412,3 +2412,53 @@ Nicht gesichert sind die offiziellen symbolischen Namen beziehungsweise Bedeutun
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8329–0x838C), `0x87A1), `0x8FD3–0x9001), `0x9323–0x933F), `0x79FB–0x7A37), `0xA567–0xA574). Ergänzend SPINTEXT R3, Untersuchung 2214. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2222 – Drei getrennte Flag-/Statusbereiche nicht verwechseln
+
+### 2222.1 – Chunk-Flagbyte (LMem-Handleindex → Flagtabelle)
+
+Die Routinen `0x8329` und `0x833C` adressieren die separate Chunk-Flagtabelle. Der Index wird aus dem Handleoffset relativ zu `DS:0002` berechnet; die Basis der Flagbytes stammt aus dem ersten WORD der Handle-Tabelle. Diese Datenstruktur ist anhand SPINTEXT R3 direkt verifiziert (Untersuchung 2214).
+
+Das Chunk-Flagbyte ist daher nicht identisch mit dem ersten Datenbyte des Chunks und auch nicht mit einem Byte im globalen Kernel-Handleeintrag.
+
+### 2222.2 – LMem-Headerstatus bei DS:0005
+
+Die Routine `0x835C` prüft `DS:0005`, Bit `0x01`. Weitere Kernelpfade lesen dort unter anderem Bits `0x04`, `0x10`, `0x20` und `0x80` (beispielsweise `0x838C`, `0x8887`, `0x8890`, `0x7A13`). Diese Zugriffe beziehen sich auf das Byte im LMem-Blockkopf bei Offset 5, nicht auf das einzelne Chunk-Flagbyte.
+
+Der Befund ist für die SDK-Analyse wichtig: Ein Bitwert wie `0x08` in der Chunk-Flagtabelle darf nicht mit gleich nummerierten Bits in `DS:0005` gleichgesetzt werden. Es handelt sich um getrennte Speicherorte und getrennte Statusdomänen.
+
+### 2222.3 – Kernel-Handleeintrag bei ES:[BX+0Ah]
+
+Andere Routinen prüfen oder ändern ein Statusbyte bei Offset `+0x0A` eines Kernel-Handleeintrags:
+
+- `0x835C` prüft dort Bit `0x20` und ruft bei gesetztem Bit `0xA567` auf; `0xA567` löscht dieses Bit.
+- `0x8A46` prüft Bit `0x08` im Byte `ES:[BX+0x0A]`.
+- `0x8A7E` prüft Bit `0x02` in einem weiteren Kernel-Handleeintrag.
+
+Diese Zugriffe liegen im globalen Kernel-Handlekontext, nachdem der Eintrag über den Kernel-Handle-/Ressourcenpfad aufgelöst wurde. Sie sind nicht die LMem-Chunk-Flagtabelle. Auch die gleichlautenden Offsetnummern (zum Beispiel `+0x0A`) dürfen nicht als dieselbe Struktur interpretiert werden.
+
+### 2222.4 – Chunkdatenbyte und Bereinigungsroutine 8867h
+
+Die Routine `0x8867` durchläuft die LMem-Handle-Tabelle. Für jeden Eintrag liest sie den Chunkoffset, überspringt die Sonderwerte null und `0xFFFF`, und untersucht anschließend das erste Byte am Chunkinhalt (`DS:[ChunkOffset]`). Dieses Byte wird in AL/AH ausgewertet und über eine Tabelle bei `0x8857` in einen Bereinigungszweig umgesetzt.
+
+Je nach Ergebnis ruft sie `0x7A38` (Chunk freigeben) oder `0x7A5D` mit CX=0 (Resize-/Nullgrößenpfad) auf. Für bestimmte Chunktypen folgt eine Descriptor-/Objektbereinigung, die über `0x8226` Datenbereiche anpasst.
+
+Die Routine ist damit ein weiterer Beleg, dass LMem-Chunkinhalte selbst interne Typ-/Statusbytes besitzen können. Dieses erste Chunkdatenbyte ist wiederum weder das Chunk-Flagbyte aus der separaten Flagtabelle noch das Headerstatusbyte `DS:0005`.
+
+### 2222.5 – Konsequenz für die Flagsemantik
+
+Die bisher untersuchten Kernelzugriffe umfassen mindestens drei getrennte Bereiche:
+
+| Bereich | Speicherstelle | Verwendung |
+|---|---|---|
+| LMem-Chunk-Flags | Separate Flagtabelle, indexiert über Handleoffset und `DS:0002` | Getter/Setter `0x8329`/`0x833C` |
+| LMem-Headerstatus | `DS:0005` | Blockweite Verwaltungs-/Statusbits |
+| Kernel-Handlestatus | Byte `+0x0A` im Kernel-Handleeintrag | globale Handle-/Ressourcenstatusbits |
+| Chunkdaten | erstes Byte bei `DS:[ChunkOffset]` | chunkinterne Typ-/Statusauswertung in `0x8867` |
+
+Damit sind gleich nummerierte Bits aus unterschiedlichen Bereichen ausdrücklich nicht austauschbar. Die Bedeutungen der einzelnen Bits bleiben dort offen, wo kein eindeutiger Kontrollflussbeleg vorliegt.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8329–0x838C), `0x8867–0x8913), `0x8A41–0x8A84), `0xA567–0xA574); SPINTEXT R3, LMem-Header und Flagtabellenbeleg aus Untersuchung 2214. Statische Disassemblierung und Datenflussanalyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
