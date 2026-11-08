@@ -1322,3 +1322,35 @@ Die Routine bei `2153h` wird von `1C04h` aufgerufen und verarbeitet den Relokati
 **Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `197Ah–1B0Ch`, `1B45h–1C16h`, `1C16h–1E37h` und `2153h–2217h`. Die Disassemblierung wurde ohne `--adjust-vma` erstellt, damit die angegebenen Startadressen den tatsächlichen Offsets im Load-Image entsprechen. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
+
+
+## Untersuchungen 2166–2170 – Zuordnung der Tabellenbereiche
+
+### 2166 – [34h] ist die Importanzahl und [36h] der Importtabellenanfang
+
+Die Routine `2652h` setzt `[36h]` abhängig vom Statusbit `80h` bei `DS:[0003h]` auf `0046h` oder `005Eh`. Danach liest sie `[34h]` als Schleifenzähler und verarbeitet je Eintrag einen 14-Byte-Datensatz (`AX=000Eh`, `MUL CX`). Die Datensätze werden über die Dateileseroutine in einen temporären Stackbereich eingelesen. Pro Eintrag wird ein WORD-Ergebnis an `[36h]` mit Schrittweite 2 abgelegt. Das entspricht der Importanzahl und der zweibytebreiten Importtabelle. Die Zuordnung wird zusätzlich durch die GEODE-Headerangabe D2h (Importanzahl) und die 14-Byte-Importdatensatzgröße bestätigt.
+
+### 2167 – [30h] ist der Exporttabellenanfang
+
+Die Routine `1B45h` berechnet `[30h] = [36h] + 2 * [34h]`. Damit beginnt der nächste Bereich unmittelbar nach der WORD-Tabelle der Importverweise. Anschließend verwendet sie `[32h]` als Anzahl und verarbeitet `4 * [32h]` Bytes ab `[30h]`; die Schleife `1B6Bh–1B7Eh` läuft genau `[32h]` Mal mit 4-Byte-Schrittweite. Dies identifiziert `[32h]` als Exportanzahl und `[30h]` als Exporttabellenanfang.
+
+### 2168 – [3Ah] ist der Ressourcentabellenanfang
+
+Die Routine `1C76h` berechnet `[3Ah] = [30h] + 4 * [32h]`. Der Bereich folgt somit direkt auf die 4-Byte-Exporttabelle. `[38h]` steuert danach die Grenzen innerhalb dieses Bereichs: `[3Ch] = [3Ah] + 2 * [38h]` und `[3Eh] = [3Ah] + 6 * [38h]`. Da die Allokationsformel acht Bytes je Ressource vorsieht und die Ressourcenzugriffe den Bereich `[3Ah]` mit WORD-Schrittweite indizieren, ist `[38h]` die Ressourcenanzahl.
+
+### 2169 – Vollständige Tabellenfolge stimmt mit der Allokationsgröße überein
+
+Damit ist die interne Tabellenfolge im Verwaltungsblock jetzt durch Berechnungen und Zugriffe nachvollziehbar:
+1. Importverweise: `[36h]`, Länge `2 * [34h]` (Importanzahl).
+2. Exporteinträge: `[30h]`, Länge `4 * [32h]` (Exportanzahl).
+3. Ressourceneinträge: `[3Ah]), Länge `8 * [38h]` (Ressourcenanzahl).
+
+Die Reihenfolge der Zähler ist damit nicht identisch mit der Reihenfolge der Headerwörter: Header D0h = Ressourcen, D2h = Importe, D4h = Exporte; interne Felder [32h] = Exporte, [34h] = Importe, [38h] = Ressourcen. Die Gesamtlänge ist `46h + 2I + 4E + 8R`, zuzüglich optionaler `18h`.
+
+### 2170 – Bedeutung der Offsets 3Ch und 3Eh bleibt auf Unterfelder begrenzt
+
+Die Offsets `[3Ch]` und `[3Eh]` markieren innerhalb des Ressourcenbereichs Grenzen nach `2R` bzw. `6R` Bytes. Zusammen mit `[3Ah]` zerlegen sie die acht Bytes pro Ressourceneintrag in Teilbereiche von 2, 4 und 2 Bytes. Das ist eine belastbare strukturelle Beobachtung. Die exakten Feldnamen und die Semantik der drei Teilfelder werden erst nach Auswertung der Lese- und Schreibzugriffe in den Ressourcen-/Relokationsroutinen vergeben.
+
+**Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets `1B45h–1B7Eh`, `1C76h–1CA5h`, `1D9Ch–1E1Bh`, `2153h–2217h` und `2652h–26AFh`; GEODE-Headerzähler D0h/D2h/D4h und die 14-Byte-Importdatensatzstruktur. Analyse ausschließlich statisch; keine Laufzeitbestätigung.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
