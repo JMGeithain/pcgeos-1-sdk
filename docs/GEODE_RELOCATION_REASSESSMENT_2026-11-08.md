@@ -938,3 +938,63 @@ Die bisherigen Abschnitte beschrieben `0036` zunächst nur als „Eingangszeiger
 **Nächste Schritte:** (1) `271C` und seine Aufrufkonvention analysieren, um die Importauflösung zu benennen; (2) die Headerbytes bei `0046h` und `005Eh` mit echten GEODE-Dateien vergleichen; (3) die drei Arrays ab `003Ah` anhand aller Leser und Schreiber semantisch identifizieren; (4) den Klasse-00h-Pfad separat auflösen.
 
 **Status:** Statische Disassemblierung des deutschen Originalkernels `KERNEL.OLD`. Keine Änderung an Kerneldateien, GEO-Dateien oder `pcgeos1/geode.py`; keine Laufzeitbestätigung.
+
+## Untersuchungen 2111–2120 – Importauflösung durch `271C` und GEODE-Namenssuche
+
+### 2111 – Aufrufkonvention von `271C` aus dem Importtabellenleser
+
+Die Routine `2652` liest jeden 14-Byte-Importeintrag und ruft `271C` mit folgenden Werten auf:
+
+```asm
+2693  push bx                 ; Zielslot in Import-Segmenttabelle sichern
+2694  mov ax,es:[di+0A]       ; Importfeld +0Ah
+2698  mov bx,es:[di+0C]       ; Importfeld +0Ch
+269C  mov cx,es:[di+08]       ; Importfeld +08h
+26A0  mov dx,[0000]           ; Kernel-Kontextwert
+26A4  call 271C
+26A7  pop bx
+26A8  jb  26BB
+26AA  mov [bx],ax             ; aufgelöstes Segment eintragen
+```
+
+Damit ist die Lage der drei WORD-Felder im Importdatensatz belegt. Ihre endgültigen symbolischen Namen werden noch nicht festgelegt: `AX:BX` wird später als Vergleichspaar verwendet; `CX` wirkt auf die Suche bereits geladener Module.
+
+### 2112 – `271C` sucht zuerst nach einem bereits geladenen GEODE
+
+Am Anfang von `271C` werden die Eingangsregister gesichert. Für die Suche setzt die Routine `AX=8`, `BX=0` und `DX=0` und ruft `1EBC` auf. `1EBC` richtet einen Suchlauf über die GEODE-Verwaltung ein; der Vergleichs-Callback liegt bei `1EDE`.
+
+Der Callback vergleicht acht Bytes ab `ES:[DI]` des Importeintrags mit acht Bytes ab Offset `14h` im jeweiligen GEODE-Verwaltungsobjekt. Das ist ein direkter Namensvergleich über acht Zeichen.
+
+### 2113 – Der Suchlauf berücksichtigt zusätzlich ein Flag-Muster
+
+Der Callback bei `1EDE` liest das WORD bei `ES:[2]` des Verwaltungsobjekts und prüft es gegen `CX`. Die Sequenz `NOT SI` gefolgt von `TEST SI,CX` verwirft Einträge, deren gesetzte Bits nicht vollständig durch die Maske in `CX` abgedeckt sind. Wir halten diese beobachtete Bitprüfung fest, ohne dem Feld bereits einen nicht belegten Namen wie „Geode-Typ“ oder „Capabilities“ zu geben.
+
+### 2114 – Ein bereits geladenes GEODE wird über seine Verwaltungsstruktur gefunden
+
+Die Suchroutine `1E7E` traversiert eine verkettete Liste, deren Einstieg aus dem Kernelkontext über `ES:[05FD]` geladen wird. Für den nächsten Eintrag verwendet sie das Segment-/Linkfeld am Anfang des Verwaltungsobjekts und das Segmentfeld bei `ES:[44]`. Der Vergleichs-Callback `1EDE` liefert bei Namensübereinstimmung das gefundene Segment in `AX` zurück.
+
+### 2115 – Bei einem Fehlschlag wird ein DOS-Dateiname aus dem GEODE-Namen erzeugt
+
+Wenn `1EBC` keinen geladenen Treffer liefert, kopiert `271C` acht Zeichen aus `ES:DI` in den Kernelpuffer `CS:05E8`. Ein Punkt oder ein Nullbyte wird dabei durch Leerzeichen ersetzt; beim Punkt/Nullbyte wird der Quellzeiger zusätzlich zurückgesetzt, sodass die acht Zeichen als DOS-Basisname normalisiert werden.
+
+Anschließend ruft `271C` die Routinen `1531`, `15A0` und `197A` auf. Der Codepfad führt damit von der Namenssuche zur Dateisuche beziehungsweise zum Öffnen und Laden des benötigten GEODE. Die genaue DOS-Funktion und Pfadpriorität bleiben Gegenstand der Folgeanalyse.
+
+### 2116 – `197A` ist der GEODE-Datei-Einlesepfad
+
+`197A` legt einen lokalen Arbeitsbereich an, ruft `12F6` mit `AL=A0h` auf und verarbeitet danach die Dateikennung und den GEODE-Kopf. Es folgen unter anderem die Prüfungen bei `1A56`, `1AEA`, `2652`, `1B45`, `1C76`, `1B6B` und `1B81`. Damit ist die zuvor untersuchte GEODE-Headerprüfung in den Datei-Ladepfad eingebettet.
+
+### 2117 – Versionsvergleich `1AD4`
+
+`1AD4` vergleicht zwei 32-Bit-Werte in der Registerpaar-Darstellung `AX:BX` und `CX:DX`. Bei Ungleichheit setzt die Routine Carry und liefert in `AX` einen Vergleichscode (`0` oder `1`); bei `AX:BX <= CX:DX` kehrt sie mit gelöschtem Carry zurück. Die Routine ist somit ein geordneter Versions-/Größenvergleich, aber der fachliche Name der verglichenen Werte ist aus diesem Ausschnitt allein noch nicht gesichert.
+
+### 2118 – Importversion wird gegen GEODE-Kopfdaten geprüft
+
+Nach erfolgreicher Namensauflösung stellt `271C` die ursprünglichen Importwerte `AX:BX` wieder her. Wenn `AX` ungleich null ist, lädt der Code die Vergleichswerte aus `[000E]` und `[0010]` des geladenen GEODE-Segments und ruft `1AD4` auf. Ein gesetztes Carry führt in den Fehlerpfad. Das belegt eine Kompatibilitätsprüfung anhand eines zweigliedrigen Wertes, ohne die Versionskomponenten bereits abschließend zu benennen.
+
+### 2119 – Die aufgelöste Segmentadresse wird in die Importtabelle geschrieben
+
+`271C` liefert das gefundene beziehungsweise neu geladene GEODE-Segment in `AX` zurück. `2652` schreibt diesen Wert nach erfolgreicher Rückkehr in den aktuellen WORD-Slot der Tabelle ab `0036`. Damit ist die Kette vollständig: Importdatensatz → Namenssuche/Dateiladen → Prüfung → Segmentwert im Import-Segmentarray → spätere Relocation-Auflösung über Klasse `10h`.
+
+### 2120 – Abgleich mit Originaldateien und gesicherter Stand
+
+Der erste Importdatensatz von `NOTEPAD.GEO` (DOCUMENT und WORLD) sowie `GROBJ.GEO` beginnt bei `0120h` und lautet byteweise:
