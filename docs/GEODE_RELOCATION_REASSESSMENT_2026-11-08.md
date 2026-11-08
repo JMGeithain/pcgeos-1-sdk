@@ -2723,3 +2723,86 @@ Der Ressourcenbereich und seine Flag-WORDs werden jetzt getrennt vom Bibliotheks
 **Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1B81–0x1C15`, `0x1C76–0x1CC3`, `0x1D11–0x1D9C`, `0x20FE–0x223F`, `0x2630–0x2651`; Originaldateien `BLANK.GEO` und `DISK.GEO` mit den in Untersuchung 2223 genannten SHA-256-Prüfsummen. Statische Disassemblierung und Bytevergleich; kein Laufzeittest.
 
 **Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte. Kein `geoTest.geo` erstellt.
+
+
+## Untersuchung 2227 – 32-Bit-Ressourcendateioffset und Korrektur der Leselänge
+
+### 2227.1 – Korrektur der bisherigen Interpretation von DS:003C
+
+Die frühere Aussage aus Untersuchung 2223.3, die beiden WORDs ab `DS:003C + 2*Index` seien Dateiposition und Leselänge, war falsch. Die erneute Prüfung der vollständigen Registerfolge in `0x2218` zeigt, dass diese beiden WORDs gemeinsam den 32-Bit-Dateioffset bilden.
+
+Der Beleg:
+
+```asm
+2218  push bx
+2219  push ds
+221A  push cx
+...
+221D  shl  si,1
+221F  add  si,WORD PTR ds:0x3c
+2223  mov  dx,WORD PTR [si]
+2225  mov  cx,WORD PTR [si+0x2]
+...
+222D  mov  bx,WORD PTR ds:0x40
+222F  mov  al,0x00
+2231  call 0x10ca
+2232  pop  ds
+2233  pop  cx
+2234  mov  al,0x80
+2236  xor  dx,dx
+2238  call 0x1088
+```
+
+`0x10CA` ist der Dateipositionierungsaufruf. Er erhält `CX:DX` als 32-Bit-Offset. Das unmittelbar folgende `pop cx` stellt den vom Aufrufer übergebenen ursprünglichen CX-Wert wieder her. Dieser restaurierte CX-Wert wird anschließend an `0x1088` weitergereicht, den Dateileseaufruf.
+
+Die Tabellenfelder sind daher:
+
+- WORD 0: niederwertige 16 Bit des Dateioffsets;
+- WORD 1: höherwertige 16 Bit des Dateioffsets;
+- Leselänge: nicht in diesem Paar gespeichert, sondern vom Aufrufer in CX übergeben und von `0x2218` bewahrt.
+
+### 2227.2 – Bytevergleich in vier unabhängigen Original-GEODEs
+
+Die Ressourcenbereiche wurden aus den Zählern des 64-Byte-Verwaltungsblocks und der nachfolgenden 14-Byte-Bibliotheksdeskriptoren sowie vier Byte langen Importfunktionsdatensätze lokalisiert. Das 8*n-Byte-Ressourcenverzeichnis enthält n WORDs im ersten Teil, n DWORD-Dateioffsets im zweiten Teil und n WORDs mit Relokationszahlen im dritten Teil. Die separat folgenden 2*n Bytes sind die Flag-WORDs.
+
+Die folgenden Einträge bestätigen die DWORD-Deutung:
+
+| Datei | Ressourcenindex | DWORD-Dateioffset | Relokationen |
+|---|---:|---:|---:|
+| BLANK.GEO | 0 | `0x00000180` | 0 |
+| BLANK.GEO | 1 | `0x00000180` | 0 |
+| BLANK.GEO | 2 | `0x00000190` | 16 |
+| BLANK.GEO | 3 | `0x000001C0` | 4 |
+| DISK.GEO | 0 | `0x00000156` | 0 |
+| DISK.GEO | 1 | `0x00000156` | 4 |
+| DISK.GEO | 2 | `0x0000016A` | 44 |
+| DISK.GEO | 3 | `0x00000236` | 72 |
+| NOTEPAD.GEO | 2 | `0x000002E2` | 292 |
+| UI.GEO | 2 | `0x000023D0` | 980 |
+
+Die jeweils zweiten WORDs der DWORDs sind in diesen Beispielen null, weil die Dateioffsets unterhalb von 64 KiB liegen. Der Kernelcode verwendet sie dennoch als High-Word-Anteil der 32-Bit-Position. Die Werte sind nicht die Ressourcengrößen.
+
+### 2227.3 – Leselänge stammt aus dem Ressourcen-Handle-/Deskriptorkontext
+
+Die Aufrufer liefern die Leselänge in CX. Zwei nachgewiesene Pfade:
+
+- `0x1D9C–0x1DBE`: liest aus dem über die Ressourcentabelle ermittelten Kontext zwei WORDs bei `ES:[BX]` und `ES:[BX+2]`. Das zweite WORD wird mit 16 multipliziert; anschließend wird der lokale Wert `[BP-0x18]` abgezogen und das Ergebnis mit `0xFFF0` maskiert. Das berechnete CX wird an `0x20FE` übergeben.
+- `0x209C–0x20BC`: liest ein WORD bei `[BX+2]`, multipliziert es viermal mit zwei (also mit 16), und übergibt dieses CX nach `0x20FE`.
+
+Damit kommt die Leselänge aus einem Ressourcen-/Handlekontext und nicht aus dem DWORD-Dateioffsetverzeichnis. Die genaue Bedeutung der dort gelesenen WORDs und des lokalen Abzugswerts `[BP-0x18]` ist noch offen; sie wird nicht allein anhand dieser Rechnung benannt.
+
+### 2227.4 – Korrigierte Modellierung der Ressourcenstruktur
+
+Für die bisher untersuchten nativen 1.x-Dateien ist das aktuelle Modell:
+
+1. n WORDs im ersten Ressourcenbereich (Laufzeit-/Ressourcenverwaltung; genaue vollständige Semantik noch offen);
+2. n DWORDs mit Dateioffsets ab `DS:003C`;
+3. n WORDs mit Relokationszahlen ab `DS:003E`;
+4. n WORDs mit Ressourcenflags in einem separat eingelesenen Bereich;
+5. die Leselänge wird vom jeweiligen Aufrufer aus dem Ressourcen-/Handlekontext berechnet und in CX an `0x20FE` übergeben.
+
+Diese Korrektur ersetzt ausdrücklich die Dateiposition-/Leselängen-Zuordnung in 2223.3 und die unpräzise Formulierung in 2226.2. Die zuvor ermittelten Ressourcenzähler, Tabellenstartpositionen, DWORD-Dateioffsets und Relokationszahlen bleiben davon unberührt.
+
+**Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1D9C–0x1DC1`, `0x209C–0x20BC`, `0x20FE–0x214F`, `0x2218–0x223F`, `0x10CA`, `0x1088`; Originaldateien BLANK.GEO, DISK.GEO, DOCUMENT/NOTEPAD.GEO und SYSTEM/UI.GEO. Statische Disassemblierung, Register-/Stack-Datenflussanalyse und Bytevergleich; kein Laufzeittest.
+
+**Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte. Kein `geoTest.geo` erstellt.
