@@ -1872,3 +1872,102 @@ Die Ziele `0x8000` und `0x8027` bleiben die nächsten Kandidaten für eine getre
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Kerneloffsets `0x8216–0x8225`, `0x9630–0x9635`, `0x6FA4–0x6FD1` und `0x7306`; UI.GEO-Quelle-0-/Typ-0-Relokationen mit Tabellenindex `0x1EB`. Statische Analyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2214 – Direkter LMem-Nachweis über die Chunk-Flag-Tabelle
+
+### 2214.1 – Kernelroutine 8329h liest ein Chunk-Flagbyte
+
+Im Originalkernel liegt bei Load-Image-Offset `0x8329` folgender Code:
+
+```asm
+8329  56             push si
+832A  8B 36 02 00    mov si,WORD PTR ds:0x2
+832E  2B C6          sub ax,si
+8330  D1 E8          shr ax,1
+8332  8B 34          mov si,WORD PTR [si]
+8334  03 F0          add si,ax
+8336  8A 04          mov al,BYTE PTR [si]
+8338  32 E4          xor ah,ah
+833A  5E             pop si
+833B  CB             retf
+```
+
+Der Code liest zunächst den WORD-Wert bei `DS:0002`, zieht ihn vom übergebenen AX ab und halbiert die Differenz. Anschließend liest er den ersten WORD-Eintrag der dadurch adressierten Tabelle und verwendet diesen als Basis für einen Bytezugriff. Das gelesene Byte wird in AL zurückgegeben.
+
+### 2214.2 – Kernelroutine 833Ch ändert ein Chunk-Flagbyte
+
+Direkt anschließend liegt bei `0x833C`:
+
+```asm
+833C  50             push ax
+833D  56             push si
+833E  8B 36 02 00    mov si,WORD PTR ds:0x2
+8342  2B C6          sub ax,si
+8344  D1 E8          shr ax,1
+8346  8B 34          mov si,WORD PTR [si]
+8348  03 F0          add si,ax
+834A  8A 04          mov al,BYTE PTR [si]
+834C  8A E7          mov ah,bh
+834E  F6 D4          not ah
+8350  22 C4          and al,ah
+8352  0A C3          or al,bl
+8354  88 04          mov BYTE PTR [si],al
+8356  E8 03 00       call 0x835C
+```
+
+Die Änderung entspricht exakt der Bitoperation:
+
+```text
+neues_flag = (altes_flag AND NOT BH) OR BL
+```
+
+Danach folgt eine weitere Routine bei `0x835C`, die abhängig von bestimmten Bits des resultierenden Flagbytes Zusatzbehandlung ausführt. Ihre vollständige Semantik ist noch offen.
+
+### 2214.3 – Abgleich mit SPINTEXT.GEO, Ressource R3
+
+Die Originaldatei `GEOWORKS/WORLD/SPINTEXT.GEO` wurde direkt aus dem bereitgestellten Archiv gelesen. Für Ressource R3 gelten:
+
+| Feld | Wert |
+|---|---:|
+| Ressourcengröße | `0x01F0` |
+| LMem-Kopf: WORD bei Offset `0x02` | `0x0020` |
+| erster Handle-Tabelleneintrag bei Offset `0x20` | `0x0042` |
+| Flagbyte-Tabelle ab Offset | `0x0042` |
+
+Die 16 Bytes ab Offset `0x42` lauten:
+
+```
+00 02 03 02 03 02 07 02
+02 07 02 07 02 03 02 07
+```
+
+Diese Bytes stimmen exakt mit dem bereits zuvor isolierten 16-Byte-Chunk für Handle `0x20` überein.
+
+Die Indexberechnung der Kernelroutine passt dazu: Bei `DS:0002 = 0x20` und einem Handlewert `AX = 0x20` ergibt sich Index 0. Der erste WORD-Eintrag an `DS:0x20` liefert `0x42`; die Routine liest damit das Flagbyte an `DS:0x42`. Für nachfolgende Handlewerte wird der Index in WORD-Schritten erhöht, während die Flagwerte byteweise gelesen werden.
+
+### 2214.4 – Bedeutung für den LMem-Aufbau
+
+Damit ist anhand des deutschen GeoWorks-1.2-Originalbestands direkt belegt:
+
+1. Das WORD-Feld bei LMem-Blockoffset `0x02` wird vom Kernel als Offset der Handle-Tabelle verwendet.
+2. Der erste WORD-Eintrag dieser Tabelle verweist in der geprüften Ressource auf die Byte-Flagtabelle.
+3. Die Kernelroutinen `0x8329` und `0x833C` lesen beziehungsweise ändern die zu einem Handle gehörende Flag-Information.
+4. Die vom SDK bereits verwendete Anordnung mit Handle-Tabelle ab Offset `0x20` und dem Flag-Chunk ist mit diesem Originalbeispiel vereinbar.
+
+**Nicht bewiesen** sind damit die vollständige Bedeutung des 32-Byte-Kopfs, die Bedeutung der Felder bei `0x08` und `0x14`, die Semantik aller Flagbits oder die symbolischen API-Namen der beiden Kernelroutinen. Auch die Funktionen bei `0x8000` und `0x8027` werden dadurch nicht automatisch als LMem-Funktionen klassifiziert.
+
+### 2214.5 – Häufigkeit der beiden Kernelziele in UI.GEO
+
+Die Kernel-Tabelle ordnet Index `0x1F2` (498) dem Codeoffset `0x8329` und Index `0x1F3` (499) dem Codeoffset `0x833C` zu. In den Quelle-0-/Typ-0-Relokationen der 28 UI.GEO-Ressourcen wurden drei Verweise auf Index 498 und 13 Verweise auf Index 499 gezählt. Die beiden Funktionen sind damit auch im realen System-GEODE referenziert.
+
+### 2214.6 – Nächste Schritte
+
+1. Die Zusatzroutine `0x835C` und ihre Bedingungen vollständig verfolgen.
+2. Weitere originale 1.x-LMem-Ressourcen auf dieselbe Kopf-/Handle-/Flagtabellenstruktur prüfen.
+3. Die übrigen Kernelroutinen untersuchen, die Handlewerte in derselben Weise in die Tabelle auflösen.
+4. Erst nach der getrennten Analyse die offenen Kopffelder `0x08` und `0x14` untersuchen.
+
+**Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8329–0x835C) und Kernel-Tabelle ab `0x0DEC0`; `GEOWORKS/WORLD/SPINTEXT.GEO`, Ressource R3, Bytes bei `0x0000–0x0051); `GEOWORKS/SYSTEM/UI.GEO`, Quelle-0-/Typ-0-Relokationen. Ausschließlich statische Analyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
