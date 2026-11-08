@@ -1724,3 +1724,60 @@ Innerhalb von `0x724B` werden außerdem Segment- und Handlebezüge gegen mehrere
 **Nächster Schritt:** Den Dispatcherzweig für Typ 0 und die von ihm gelesene Kernel-Tabelle weiter zurückverfolgen. Dort liegen die direkten Kernelverweise, die für die API-Kandidatenliste relevant sind. Anschließend gezielt nach Funktionen suchen, die LMem-Blockkopf und Handle-Tabelle initialisieren, statt allgemeine Speicherhandle-Locks mit LMem zu verwechseln.
 
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x724B–0x72B3`, `0x7014–0x701F` und `0x971D–0x9775`; Aufruf aus dem Relokationsdispatcher `0x21FC–0x2205`. Statische Analyse. Keine Änderung an Originaldateien oder SDK-Quelltexten; kein Laufzeittest.
+
+
+## Untersuchung 2211 – Kernel-Exporttabelle und Auflösung von Quelle 0 / Typ 0
+
+### 2211.1 – Der Zeiger bei 2151h ist ein DOS-relokierter Segmentzeiger
+
+Die Bytes des Originalkernels bei Load-Image-Offset `0x2151` lauten `EC 0D`, also WORD `0x0DEC`. In der DOS-MZ-Relocationstabelle von `KERNEL.OLD` existiert ein Eintrag für Offset `0x2151`, Segmentziel `0x0000`. Der MZ-Lader addiert deshalb das tatsächliche Lade-Segment zum WORD an dieser Stelle. Der Dispatcher lädt diesen korrigierten Wert mit `mov ds, cs:[0x2151]` nach DS.
+
+Damit zeigt DS zur Laufzeit auf das Segment `Ladesegment + 0x0DEC`. Der dazugehörige Tabelleninhalt liegt im MZ-Load-Image ab linearem Offset `0x0DEC0`. Es handelt sich nicht um Code bei Load-Image-Offset `0x0DEC`, sondern um eine WORD-Tabelle im gesonderten Segmentbereich. Die Unterscheidung ist durch den MZ-Fixup bei `0x2151` belegt.
+
+### 2211.2 – Indexierung und Auflösung im Typ-0-Zweig
+
+Der Quellklasse-0-Zweig des Dispatchers führt folgende Operationen aus:
+
+1. `DI = ES:[BX]`: Der bisher im Relokationsziel gespeicherte WORD-Wert wird als Tabellenindex übernommen.
+2. `DI <<= 1`: Der WORD-Index wird in einen Byteoffset für die WORD-Tabelle umgerechnet.
+3. `DS = CS:[0x2151]`: DS wird auf das durch den MZ-Fixup korrigierte Tabellensegment gesetzt.
+4. Im gemeinsamen Pfad wird `DI = DS:[DI]` gelesen; das ist der aufgelöste Kernel-Codeoffset.
+5. Für Typ 0 schreibt der Dispatcher `SI` (zuvor mit CS geladen) nach `ES:[BX+2]` und danach den aufgelösten Offset nach `ES:[BX]`.
+
+Damit ist für Quelle 0 / Typ 0 die konkrete Wirkung nachgewiesen: Ein im GEODE-Operand gespeicherter Kernel-Tabellenindex wird in einen FAR-Pointer `CS:Offset` aufgelöst. Die Tabelle enthält WORD-Codeoffsets; sie ist keine Tabelle von symbolischen Funktionsnamen.
+
+### 2211.3 – Konkreter Abgleich mit UI.GEO R2
+
+Der in Untersuchung 2207/2208 dokumentierte UI.GEO-Eintrag in R2 liegt bei Zieloffset `0x0005`. Dort steht vor der Relokation ein FAR-CALL-Operand mit Offset `0x01E9` und Segment `0x0000`:
+
+```
+50 9A E9 01 00 00
+```
+
+Der Tabellenindex ist somit `0x01E9` (dezimal 489). Der zugehörige WORD-Eintrag befindet sich bei Tabellenoffset `0x0DEC0 + 2 * 0x01E9 = 0x0E292`; sein Wert ist `0x8027`. Im Kernel-Load-Image liegt bei `0x8027` tatsächlich Code:
+
+```
+8027  53             push bx
+8028  56             push si
+8029  57             push di
+802A  06             push es
+802B  26 8B 5D 02    mov bx, es:[di+2]
+802F  83 FB 01       cmp bx, 1
+8032  74 0D          je 8041
+```
+
+Nach der Typ-0-Auflösung wird der Operand daher zum FAR-Pointer `CS:8027` (wobei CS das zur Laufzeit geladene Kernel-Code-Segment ist). Der Eintrag ist damit ein belastbarer End-to-End-Beleg vom ursprünglichen UI.GEO-Tabellenindex bis zum konkreten Kernel-Codeoffset.
+
+### 2211.4 – Grenzen der Aussage
+
+Die Tabelle und die Auflösung von Quelle 0 / Typ 0 sind nun statisch nachgewiesen. Der symbolische API-Name der Routine bei `0x8027` ist damit noch nicht bekannt. Der dortige Code arbeitet unter anderem mit `ES:[DI+2]`, `ES:[DI]` und weiteren über Register übergebenen Werten; daraus allein folgt weder „LMem“ noch eine bestimmte Speicher-API.
+
+Ebenso ist diese Untersuchung keine vollständige Erklärung der Typen 1–3 oder der Quellklassen 1 und 2. Die Typ-0-Erkenntnis wird nicht auf andere Zweige übertragen.
+
+### 2211.5 – Nächste Schritte
+
+Als nächstes werden weitere Quelle-0-/Typ-0-Relokationen aus UI.GEO und unabhängigen Original-1.x-GEODEs katalogisiert. Für jeden eindeutigen Tabellenindex wird der aufgelöste Kernel-Codeoffset ermittelt. Danach werden die tatsächlichen Aufrufstellen und Funktionskörper dieser Kandidaten untersucht, um LMem-Initialisierung, Chunk-Allokation und Handleverwaltung anhand von Datenfluss und Speicherzugriffen voneinander zu trennen.
+
+**Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, MZ-Header und MZ-Relocationstabelle (Fixup für Load-Image-Offset `0x2151`), Load-Image-Offsets `0x2153–0x21DA`, Tabellenbereich ab `0x0DEC0` und Code bei `0x8027`; Originaldatei `GEOWORKS/SYSTEM/UI.GEO`, Ressource R2, Relokationsziel `0x0005`. Statische Analyse; kein Laufzeittest.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien, `pcgeos1/geode.py` und alle SDK-Quelltexte.
