@@ -1438,3 +1438,10 @@ Für den ersten Build sind jetzt vier Punkte erforderlich: (1) ein temporäres, 
 **Quellenbasis:** Repository `JMGeithain/pcgeos-1-sdk`, insbesondere `README.md`, `pcgeos1/buildsys.py`, `pcgeos1/packer.py`, `pcgeos1/target.py`, `examples/hello/project.json`, `examples/hello/src/app.c`, `docs/GETTING_STARTED.md` und `docs/TARGET_COMPATIBILITY.md`; außerdem direkte SHA-256-, Header- und Importprüfungen der genannten Dateien in `GEOWORKS.zip`. Analyse des Buildpfads anhand des Quellcodes; ein Build mit dem vorliegenden GEOWORKS.zip wurde in diesem Untersuchungsschritt nicht ausgeführt.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien im Originalarchiv und `pcgeos1/geode.py`.
+
+
+### 2188 – Die beiden SPINTEXT.GEO-Varianten sind nicht bytegleich
+
+Die Dateien `GEOWORKS/WORLD/SPINTEXT.GEO` (3.764 Bytes) und `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` (3.748 Bytes) unterscheiden sich nicht nur im Archivpfad. Ein byteweiser Vergleich ergibt 1.335 unterschiedliche Bytepositionen innerhalb des gemeinsamen Längenbereichs; zusätzlich ist die Dateilänge um 16 Bytes verschieden. Daher darf eine der Varianten nicht allein aufgrund des gleichen Kernel- und UI-Protokolls als Ersatz für die SDK-Referenzvorlage ausgewählt werden. Vor einem Build muss geklärt werden, welche Variante die vom Packer erwarteten Objekt-/Ressourcenlayouts enthält.
+
+**Quellenbasis:** Direkter Bytevergleich der beiden SPINTEXT.GEO-Dateien aus `GEOWORKS.zip`. Keine Änderung an den Originaldateien.
