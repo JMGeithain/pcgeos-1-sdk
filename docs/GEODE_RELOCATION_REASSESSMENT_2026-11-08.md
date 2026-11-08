@@ -1165,3 +1165,55 @@ Die Routine `197A` setzt in den jeweiligen Prüfpfaden unter anderem `AX=02h` na
 **Quellenbasis:** Statische Disassemblierung des deutschen Originalkernels `KERNEL.OLD`, Load-Image-Offsets `10CA–11CA`, `12F6–133A`, `14AA–15EA`, `17F0–180E` und `197A–1AD3`. DOS-Seek-Ursprünge und Funktionsnummern sind gemäß DOS-API benannt. Keine Laufzeitbestätigung.
 
 **Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
+
+## Untersuchungen 2141–2150 – GEODE-Kopfblock ab 00C8h
+
+### 2141 – Die 24 Byte ab 00C8h sind ein festes Loader-Metadatenfenster
+
+Der Code im deutschen Originalkernel (Load-Image-Offsets 1A56h–1AE9h; Dateioffsets 2056h–20E9h) positioniert den Dateizeiger absolut auf 00C8h und liest genau 18h Bytes. Das ist ein gezielter Zugriff auf den GEODE-Metadatenkopf, nicht bloß ein Fortsetzen des vorherigen 44h-Byte-Lesens.
+
+### 2142 – 00CAh enthält den vom Aufrufer erwarteten GEODE-Typ
+
+Der Loader vergleicht das am Eintritt gesicherte BX mit dem WORD aus dem Metadatenpuffer bei 00CAh. Bei Abweichung liefert er den internen Status 07h zurück. Im Archiv passen die Werte zu den beobachteten GEODE-Kategorien: NOTEPAD.GEO hat 0001h (Anwendung), GROBJ.GEO 0002h (Bibliothek); zahlreiche Treiberdateien, etwa EGA.GEO und DOS5.GEO, tragen 0003h. Die Zuordnung 1=Anwendung, 2=Bibliothek, 3=Treiber ist durch mehrere Dateibeispiele gestützt.
+
+### 2143 – 00CCh:00CEh wird gegen die Kernel-Protokollgrenze 026Eh:0003h geprüft
+
+Der Loader lädt WORDs aus 00CCh und 00CEh und vergleicht das Paar mit der Konstanten 026Eh:0003h über Routine 20D4h. Die Vergleichsroutine akzeptiert Werte kleiner oder gleich dieser Grenze und weist größere Werte zurück. NOTEPAD.GEO, GROBJ.GEO und die geprüften System-GEODEs enthalten überwiegend 026Eh:0003h; CUA.GEO enthält beispielsweise 026Eh:0001h und liegt damit innerhalb der Grenze. Belegt ist damit eine obere Kompatibilitätsgrenze des vom GEODE angegebenen Protokollwerts. Ob die Felder in der offiziellen Terminologie „required kernel protocol“ oder anders benannt werden, wird ohne zusätzliche Spezifikation nicht festgelegt.
+
+### 2144 – 00D0h, 00D2h und 00D4h sind Ressourcen-, Import- und Exportanzahl
+
+Die Loaderarithmetik in 20EAh verwendet diese drei WORD-Felder in einer Weise, die mit dem GEODE-Tabellenlayout übereinstimmt. Unabhängig davon bestätigt der bestehende Formatparser die gleichen Felder: 00D0h = Ressourcenanzahl, 00D2h = Importanzahl, 00D4h = Exportanzahl. Beispiele: NOTEPAD = 15 Ressourcen, 2 Importe, 0 Exporte; GROBJ = 20 Ressourcen, 1 Import, 21 Exporte.
+
+### 2145 – 00DAh ist eine Attributmaske, die der Loader mit zwei Aufrufermasken prüft
+
+Der Loader liest das WORD bei 00DAh. Zuerst prüft er die Schnittmenge mit der vom Aufrufer gelieferten Maske in DX; eine Überschneidung führt zum Fehlerstatus 08h. Danach invertiert er die GEODE-Maske und prüft sie gegen die Aufrufermaske in CX; ebenfalls führt eine fehlende geforderte Eigenschaft zum Status 08h. Formal muss gelten: (GEODE-Attribute AND DX) = 0 und (GEODE-Attribute AND CX) = CX. Welche einzelnen Bits fachlich bedeuten, bleibt offen.
+
+### 2146 – Bit 7 des Bytes 00C9h erweitert die interne Speicheranforderung um 18h Bytes
+
+Routine 20EAh prüft `byte [00C9h] AND 80h`. Ist das Bit gesetzt, addiert sie 18h zur berechneten internen Allokationsgröße. Das ist direkt im Code belegt. NOTEPAD.GEO (C9h=96h), SPLAY.GEO (92h), NOTEPADG.GEO (96h) und zahlreiche weitere Applikations-GEODEs haben das Bit gesetzt; GROBJ.GEO (50h) und typische Treiber-GEODEs (30h/38h) nicht. Die Bedeutung der Zusatzstruktur ist damit noch nicht benannt.
+
+### 2147 – Die interne Allokationsgröße wird aus den drei Zählern berechnet
+
+Die Instruktionsfolge in 20EAh ergibt exakt:
+
+`0x46 + 8 * Ressourcenanzahl + 4 * Exportanzahl + 2 * Importanzahl`
+
+Bei gesetztem Bit 7 in 00C9h kommen weitere 0x18 Bytes hinzu. Das Ergebnis wird an den Speichervermittler 7487h übergeben (Aufruf mit CX=8080h). Diese Formel beschreibt die angeforderte interne Verwaltungsgröße; sie ist nicht die Dateigröße und auch nicht die Länge des GEODE-Dateikopfs.
+
+### 2148 – Die Felder 00D6h und 00D8h–00DEh werden in diesem Prüfpfad nicht ausgewertet
+
+Im untersuchten 24-Byte-Lese-/Prüfpfad verwendet der Kernel 00C9h, 00CAh, 00CCh, 00CEh, 00D0h, 00D2h, 00D4h und 00DAh. Die WORD-Felder 00D6h, 00D8h, 00DCh und 00DEh werden in diesem Pfad nicht verwendet. Aus ihren Werten allein werden daher keine Bedeutungen abgeleitet.
+
+### 2149 – Stichprobenabgleich über die mitgelieferten GeoWorks-1.x-GEODEs
+
+Der Abgleich wurde nicht nur an NOTEPAD und GROBJ durchgeführt. Im Archiv zeigen beispielsweise EGA.GEO und DOS5.GEO Typ 0003h; CUA.GEO Typ 0002h; NOTEPADG.GEO Typ 0001h. Die Protokollwerte liegen bei diesen Beispielen innerhalb der vom Kernel akzeptierten Grenze. Die Anzahlwerte an 00D0h/00D2h/00D4h stimmen mit den Duplikatfeldern und Tabellenpositionen überein, die der vorhandene Parser prüft.
+
+### 2150 – Ergebnis und offene Punkte
+
+**Neu gesichert:** 00CAh ist der erwartete GEODE-Typ; 00CCh:00CEh ist ein Protokoll-/Kompatibilitätswert, der höchstens 026Eh:0003h betragen darf; 00D0h/00D2h/00D4h sind Ressourcen-/Import-/Exportanzahl; 00DAh ist eine vom Aufrufer maskiert geprüfte Attributmaske. Bit 7 von 00C9h erweitert die interne Verwaltungsallokation um 18h Bytes. Die Allokationsformel lautet `46h + 8*R + 4*E + 2*I`, zuzüglich optional 18h.
+
+**Offen:** (1) offizielle symbolische Namen und Bedeutung aller Bits im WORD 00C8h/Attributfeld 00DAh; (2) genaue Struktur der zusätzlichen 18h Bytes; (3) Semantik der übrigen Felder 00D6h und 00D8h–00DEh; (4) offizielle Benennung des Protokollpaares 00CCh:00CEh.
+
+**Quellenbasis:** Deutscher Originalkernel `KERNEL.OLD`, Load-Image-Offsets 1A56h–1AE9h und 20EAh–210Ah (die Speichergrößenberechnung liegt im Load-Image-Bereich 20EAh–210Ah); Original-GEODE-Dateien im `GEOWORKS.zip`, insbesondere NOTEPAD.GEO, GROBJ.GEO, CUA.GEO, EGA.GEO, DOS5.GEO und NOTEPADG.GEO; vorhandene `pcgeos1/geode.py`-Parserdefinition. Statische Analyse, keine Laufzeitbestätigung.
+
+**Unverändert:** `KERNEL.OLD`, `KERNEL.EXE`, alle GEO-Dateien und `pcgeos1/geode.py`.
