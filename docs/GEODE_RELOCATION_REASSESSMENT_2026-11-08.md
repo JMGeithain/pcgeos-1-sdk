@@ -2068,3 +2068,40 @@ Als nächstes wird der Descriptor-Aufbau anhand mehrerer realer Aufrufstellen un
 **Quellenbasis:** `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8000–0x808F), `0x828E–0x82B2), `0x9248–0x927D), `0x9527–0x9553), `0x9630–0x9636); `GEOWORKS/SYSTEM/UI.GEO`, Quelle-0-/Typ-0-Relokationen und Ressourcen R2, R5, R7, R8, R9, R10, R12, R14, R16, R19, R21, R22 und R23. Statische Analyse; kein Laufzeittest.
 
 **Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
+
+
+## Untersuchung 2217 – Reale UI.GEO-Aufrufkontexte für den Descriptorpfad 8027h
+
+### 2217.1 – UI.GEO übergibt unterschiedliche Descriptoradressen und AX-Modi
+
+Die Aufrufstellen der Kernel-Tabelle `0x1E9 → 0x8027` wurden in den Originalressourcen disassembliert. Beispiele:
+
+- UI.GEO R2, Offset `0x0000`: `mov di,0x0040`, danach `push ax` und FAR CALL auf den Kernelindex `0x01E9`.
+- UI.GEO R7, Offset `0x01B4`: `push dx; mov di,0x0040`; FAR CALL auf `0x01E9); danach wird das Carry-Flag geprüft.
+- UI.GEO R7, Offset `0x021F`: `mov ax,0x2091; mov di,0x0040`; FAR CALL auf `0x01E9`.
+- UI.GEO R8, Offset `0x0719`: `mov di,0x0543`; FAR CALL auf `0x01E9`; unmittelbar danach folgt `mov al,0x08; xor cx,cx` und ein weiterer FAR CALL.
+- UI.GEO R8, Offset `0x0767`: `mov dx,ds:0; mov bp,si; mov di,0x0543; mov ax,0x0005`; FAR CALL auf `0x01E9`; danach ein weiterer Kernel-FAR-CALL auf Tabellenindex `0x0200`.
+
+Diese Beispiele belegen, dass AX und DI vor dem Aufruf bewusst vorbereitet werden. Die DI-Werte sind keine einheitlichen LMem-Chunk-Handles: Es treten unter anderem `0x0040`, `0x0265`, `0x0543`, `0x071F`, `0x0743` und weitere Werte auf. Ohne den zugehörigen Descriptorbereich und die Segmentbelegung dürfen sie nicht als LMem-Handles interpretiert werden.
+
+### 2217.2 – AX beeinflusst den Descriptor-/Ressourcenpfad
+
+Im Kernelcode ab `0x8080` wird AX in BX kopiert, dreimal rotiert und mit 7 maskiert. Der daraus gewonnene Wert dient als Index in eine Byte-Tabelle bei `CS:0x8177` (Wertefolge `01 02 04 08 10 20 40 80`). Das resultierende Bit wird gegen `ES:[BP+0x11]` geprüft.
+
+Damit ist belegt, dass AX bei diesem Pfad eine Auswahl eines einzelnen Bits aus einer Descriptor-Flagmaske steuert. Welche öffentliche API-Konstante beziehungsweise welcher symbolische Modus hinter den konkreten AX-Werten steht, ist noch nicht geklärt.
+
+### 2217.3 – Ressourcenzustand und Nachladepfad
+
+Der weitere Kontrollfluss untersucht die Descriptorfelder bei Offsets `+0x10` und `+0x11`, folgt bei Bedarf FAR-Zeigern über `ES:[BP]` und prüft einen weiteren Tabellen-/Datenbereich. Wenn ein erforderlicher Eintrag fehlt, wird `0x82B3` aufgerufen. Dieser Pfad arbeitet mit Descriptorfeldern `+0x04` und `+0x08`, ruft `0x8226` sowie `0x8021` auf und kehrt mit gesetztem Carry zurück.
+
+Das Verhalten passt zu einer allgemeinen Ressourcen-/Descriptorverwaltung mit Zustandsprüfung und Nachlade-/Initialisierungspfaden. Eine eindeutige symbolische Benennung wird daraus noch nicht abgeleitet.
+
+### 2217.4 – Konsequenz für die LMem-Suche
+
+Die realen UI-Aufrufstellen bestätigen, dass `0x8027` einen Descriptorpfad mit Modus-/Bit-Auswahl und Ressourcenstatus bearbeitet. Sie liefern weiterhin keinen direkten Zugriff auf die LMem-Chunk-Flagtabelle oder auf die 32-Byte-LMem-Kopfstruktur. Deshalb bleibt `0x8027` als allgemeine Ressourcen-/Descriptorfunktion klassifiziert, nicht als nachgewiesene LMem-Funktion.
+
+Die Funktionen `0x8329` und `0x833C` bleiben dagegen direkte LMem-Kandidaten, weil ihre Tabellenindizierung anhand von SPINTEXT R3 bytegenau auf die Chunk-Flagtabelle passt.
+
+**Quellenbasis:** `GEOWORKS/SYSTEM/UI.GEO`, Originalressourcen R2, R7 und R8, Aufrufstellen bei `0x0000`, `0x01B4`, `0x021F`, `0x0719` und `0x0767`; `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x8027–0x8176`, `0x8226–0x82D3`. Statische Analyse; kein Laufzeittest.
+
+**Unverändert:** Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte.
