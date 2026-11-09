@@ -1,0 +1,81 @@
+ICONMAKE – Korrektur der Kontext-Offset-Formeln aus 2341
+Untersuchungsschritt 2343
+Stand: 10. November 2026
+
+WICHTIGE KORREKTUR
+Bei erneuter bytegenauer Prüfung des Original-Disassemblats von 144Ch wurden die Rechenfolgen bei 1495h–14BCh sowie 1513h–1524h korrigiert. Die in Bericht 2341 angegebenen Faktoren für b und die anfängliche Größenberechnung waren falsch. Dieser Bericht ersetzt die entsprechenden Formeln aus 2341.
+
+1. Bytegenaue Größenberechnung
+Lokale Werte:
+  a = WORD PTR [BP-14h]
+  b = WORD PTR [BP-12h]
+  c = WORD PTR [BP-0Eh]
+
+Instruktionen 1495h–14A2h:
+  MOV AX,[BP-0Eh]   ; AX=c
+  MOV CX,AX         ; CX=c
+  SHL AX,1          ; 2c
+  SHL AX,1          ; 4c
+  ADD AX,CX         ; 5c
+  SHL AX,1          ; 10c
+
+Instruktionen 14A2h–14A9h:
+  MOV CX,[BP-14h]   ; a
+  SHL CX,1
+  SHL CX,1
+  ADD AX,CX         ; 10c + 4a
+
+Instruktionen 14ABh–14BAh:
+  MOV CX,[BP-12h]   ; b
+  MOV DX,CX
+  SHL CX,1          ; 2b
+  ADD CX,DX         ; 3b
+  SHL CX,1          ; 6b
+  ADD CX,DX         ; 7b
+  SHL CX,1          ; 14b
+  ADD AX,CX         ; 10c + 4a + 14b
+
+Damit ist die von 14BCh gespeicherte Größe:
+  N = 4a + 14b + 10c
+
+Der anschließend beschaffte Block ist N + 012Eh Bytes groß.
+
+2. Korrigierte Kontextgrenzen
+P bezeichnet weiterhin den Beginn des zuletzt eingelesenen Bereichs bei Blockoffset +012Eh.
+
+Die Instruktionen 1501h–1547h ergeben:
+  Kontext +02h = P
+  Kontext +04h = P + 4a
+  Kontext +06h = P + 4a + 14b
+  Kontext +08h = P + 4a + 14b + 2c
+  Kontext +0Ah = P + 4a + 14b + 4c
+  Kontext +0Ch = P + 4a + 14b + 6c
+
+Hinweis zur Reihenfolge: +08h ist der Beginn des Teilbereichs, den 1558h als Tabelle mit 4-Byte-Einträgen verwendet. Seine Länge bis +0Ah beträgt 2c Bytes, entsprechend c Tabelleneinträgen zu je vier Bytes. Dies folgt aus den Offsets und der Zugriffsbreite in 1558h.
+
+3. Segmentlängen
+Aus den korrigierten Grenzen ergeben sich:
+- Bereich +02h bis +04h: 4a Bytes
+- Bereich +04h bis +06h: 14b Bytes
+- Bereich +06h bis +08h: 2c Bytes
+- Bereich +08h bis +0Ah: 2c Bytes
+- Bereich +0Ah bis +0Ch: 2c Bytes
+
+Die drei letzten Bereiche sind jeweils 2c Bytes lang. Zusammen mit dem davorliegenden 2c-Bereich +06h bis +08h ergibt sich ab +06h bis +0Ch eine Gesamtlänge von 6c Bytes.
+
+4. Konsequenz für 1558h
+1558h greift bei Kontext +08h auf 4-Byte-Einträge zu:
+  BX = [SI+08h]
+  DI = Index * 4
+  AX = [BX+DI]
+  DX = [BX+DI+2]
+
+Da der Bereich +08h bis +0Ah 2c Bytes umfasst, passen rechnerisch c vollständige 4-Byte-Einträge hinein. Damit ist der zulässige Indexbereich für diesen Teilbereich grundsätzlich 0 bis c-1, sofern der Aufrufer den Index entsprechend begrenzt. Die tatsächliche Begrenzungsprüfung ist separat anhand der Aufrufstellen zu bestätigen.
+
+5. Auswirkungen auf frühere Berichte
+- Bericht 2341: Formeln für +06h und folgende sowie die Gesamtgröße N sind falsch und werden durch diesen Bericht ersetzt.
+- Bericht 2342: Die Herkunft und Positionen von a, b und c im zweiten 0060h-Puffer bleiben unverändert. Die dort beschriebene Verwendung zur Abschnittsberechnung bleibt bestehen, die alten Faktoren sind aber durch die Formeln dieses Berichts zu ersetzen.
+- Bericht 2340: Die strukturelle Aussage, dass +08h ein Offset in den dynamischen Block ist, bleibt bestehen. Die genaue Offsetformel ist jetzt korrigiert.
+
+6. Offene Prüfung
+Noch zu prüfen ist, ob die Aufrufer den Tabellenindex tatsächlich auf 0 bis c-1 begrenzen und ob c in allen Dateivarianten die tatsächliche Zahl der 4-Byte-Einträge beschreibt. Die rechnerische Kapazität folgt aus 2c Bytes / 4 Bytes pro Eintrag; die semantische Bedeutung von c bleibt offen.
