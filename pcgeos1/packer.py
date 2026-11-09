@@ -6,28 +6,18 @@ def w(b,o,v):struct.pack_into('<H',b,o,v)
 
 def encode_relocs(rs):return b''.join(struct.pack('<BBH',*r) for r in rs)
 
-def write_process_methods(dg,methods,symbols,code_resource=2):
-    """Write Class_rel1 method IDs and far pointers (resource WORD, offset WORD)."""
-    w(dg,0x46,len(methods))
-    relocs=[]
-    for i,(msg,name) in enumerate(methods):
-        if name not in symbols:
-            raise ValueError(f'Runtime is missing method symbol: {name}')
-        w(dg,0x52+2*i,msg)
-        a=0x52+2*len(methods)+4*i
-        w(dg,a,code_resource)
-        w(dg,a+2,symbols[name])
-        relocs.append((0x22,0,a))
-    return relocs
 
 def package_from_skeleton(original,code,engine,ui3,ui4,symbols,project):
     q=parse(original,'SPINTEXT.GEO')
     methods=[(0xa01,'native_open'),(0xa03,'native_close'),(4,'native_attach'),(0x57,'native_view_closed'),
              (0x49,'native_expose'),(0xc3,'native_select'),(0x7b,'native_key'),(0xc0a,'native_command')]
+    missing=[n for _,n in methods if n not in symbols]
+    if missing:raise ValueError('Runtime is missing method symbols: '+', '.join(missing))
     dg=bytearray(project.get('dgroup_bytes',512));odg=resource_bytes(original,q,1);dg[:min(0x40,len(dg))]=odg[:min(0x40,len(dg))]
-    w(dg,0x14,len(dg));dg[0x40:0x52]=odg[0x40:0x52]
+    w(dg,0x14,len(dg));dg[0x40:0x52]=odg[0x40:0x52];w(dg,0x46,len(methods))
     drels=[(0x11,0,0x40),(0x12,0,0x42)]
-    drels.extend(write_process_methods(dg,methods,symbols,code_resource=2))
+    for i,(msg,name) in enumerate(methods):
+        w(dg,0x52+2*i,msg);a=0x52+2*len(methods)+4*i;w(dg,a,symbols[name]);w(dg,a+2,2);drels.append((0x22,0,a+2))
     crels=[]
     for name,addr in symbols.items():
         if name.startswith('krel_'):crels.append((0,0,addr))
