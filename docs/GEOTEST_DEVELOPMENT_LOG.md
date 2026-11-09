@@ -3,7 +3,7 @@
 **Projekt:** erste ausführbare Testanwendung für GeoWorks 1.2 / PC/GEOS 1.x  
 **SDK:** `JMGeithain/pcgeos-1-sdk`, Zweig `main`, SDK 0.1  
 **Protokollstand:** 2026-11-09  
-**Status:** Vorbereitung und Quellenabgleich; noch kein Build und kein Laufzeittest von `GEOTEST.GEO`
+**Status:** Statische Analyse und Build-Vorbereitung; `GEOTEST.GEO` ist noch nicht erfolgreich kompiliert oder zur Laufzeit getestet.
 
 ## 1. Verbindliche Projektgrenzen
 
@@ -420,3 +420,68 @@ Danach führt sie mit Interruptsperre `lcall SS:[000Eh]` aus und prüft anschlie
 6. `0609h` speichert den skalierten Tabellenindex des Blocks `10B53h–10BD6h`.
 
 **Nächster Schritt 2253:** Den Knotenaufbau ab `11CBh` vollständig als Byte-Layout darstellen und die Verbraucher der Felder `+0`, `+1`, `+2`, `+3`, `+4`, `+6`, `+0Ch`, `+0Eh` verfolgen. Parallel die Herkunft der extern initialisierten Far-Zeiger `05B4h/05B6h` und `05B8h/05BAh` weiter eingrenzen.
+
+
+## 14. Untersuchung 2253 – Knotenlayout der Liste ab `05AEh`
+
+**Quelle:** reproduzierte Disassemblierung des unveränderten Load-Moduls aus `GEOWORKS/KERNEL.OLD`. Untersuchte Bereiche: `06DACh–06DE8h`, `0072Bh–00788h`, `011CBh–01246h`, Aufrufer `01329h` und `013BFh`, Verbraucher u. a. `00795h–007A3h`, `011A4h–011B8h`, `013A3h–01401h` und `01445h–01455h`.
+
+### 14.1 Speicherbeschaffung und Feld `+08h`
+
+`11CBh` lädt vor dem Aufruf von `6DACh` den Wert `SS:[0002h]` nach BX. Die Routine `6DACh` nimmt den bisherigen Freilistenkopf aus `0E48h`, entnimmt daraus einen Block und initialisiert dessen Wortfelder. Besonders wichtig ist die Instruktion `6DD4h: pop [BX+8]`: Der zuvor gesicherte ursprüngliche BX-Wert wird in das neue Blockfeld `+08h` geschrieben. Da BX unmittelbar vor dem Aufruf aus `SS:[0002h]` geladen wurde, enthält der neue Knoten an `+08h` den Wert von `SS:[0002h]`.
+
+**Gesichert:** `+08h` ist bei dieser Erzeugung nicht uninitialisiert; es enthält den übernommenen Wert `SS:[0002h]`. Die genaue Bedeutung dieses globalen SS-Feldes ist noch offen. Es wird auch von weiteren Kernelroutinen als Kontextwert verwendet.
+
+### 14.2 Byte-/Wortlayout des von `11CBh` angelegten Knotens
+
+| Offset | Breite | Initialisierung / Beleg |
+|---|---:|---|
+| `+00h` | Byte | Caller-CL; wird nach Wiederherstellung von CX bei `11F3h` geschrieben. |
+| `+01h` | Byte | Konstante `FDh` bei `11E9h`; mehrere Verbraucher prüfen genau diesen Marker. |
+| `+02h` | Wort | Low-Byte = ursprüngliches CL bei `11DBh`; High-Byte wird zunächst durch `11E0h` auf null gesetzt und bei nichtnegativem AL durch `11E9h`/genauer `1204h` mit AL belegt. |
+| `+04h` | Wort | Nächster Listenknoten; alter Kopf aus `05B2h` wird bei `11F9h` eingetragen. |
+| `+06h` | Wort | Zunächst null; wenn AL nicht negativ ist, wird der von Hilfsroutine `72Bh` in BX gelieferte Wert hier bei `120Dh` gespeichert. |
+| `+08h` | Wort | Wert aus `SS:[0002h]`, durch `6DACh` bei `6DD4h` übernommen. |
+| `+0Ah` | Wort | Durch den Blockallocator `6DACh` zunächst auf null gesetzt; `11CBh` selbst ändert es nicht. |
+| `+0Ch` | Wort | Zunächst null; wenn CH ungleich null ist, wird bei `121Dh` ein beim Durchlaufen der Liste gefundener Knoten-Zeiger gespeichert. |
+| `+0Eh` | Wort | Konstante `0001h` bei `11EDh`; spätere Verwendungsweise ist noch nicht abschließend geklärt. |
+
+**Präzisierung:** Die Bytes `+02h` und `+03h` bilden gemeinsam ein Wort. Die Instruktionen beschreiben sie zunächst getrennt; deshalb darf `+03h` nicht als unabhängiges 16-Bit-Feld behandelt werden.
+
+### 14.3 Bedeutung des Markers `+01h = FDh`
+
+Der Marker wird unter anderem an folgenden Stellen geprüft:
+
+- `11A8h`: nur bei Marker `FDh` wird das Byte `+02h` geladen und mit `03h` maskiert.
+- `0798h`: prüft denselben Marker; bei Treffer wird das Wort `+06h` nach BX geladen und auf null geprüft.
+- `13AEh–13B8h`: prüft `+06h`; abhängig davon wird AL aus `+03h` oder auf `FFh` gesetzt, danach wird CL aus `+02h` gelesen.
+
+**Gesichert:** `FDh` kennzeichnet diesen Knotentyp in mehreren Kernelpfaden. Die konkrete symbolische Bezeichnung des Typs ist im Disassembly nicht enthalten.
+
+### 14.4 Die zwei direkten Aufrufer von `11CBh`
+
+Die Disassemblierung enthält zwei direkte Near-Aufrufe:
+
+**Aufrufer `1329h`:**
+- Vorher erfolgt ein indirekter Aufruf über `ES:[05B8h]` mit `DI=04h`.
+- Das zurückgegebene AX wird über `push AX / pop CX` nach CX übertragen.
+- Bei nicht gesetztem Carry wird `11CBh` aufgerufen.
+- Damit stammen CL und CH in diesem Pfad aus AL und AH des vorherigen Aufrufs. CH kann folglich die optionale Suche über `+0Ch` auslösen.
+
+**Aufrufer `13BFh`:**
+- Zuvor erfolgt ein indirekter Aufruf über `DS:[05B8h]` mit `DI=0Ch`.
+- Danach werden Werte aus dem vorhandenen Knoten gelesen: `+06h` wird geprüft, AL wird aus `+03h` oder als `FFh` gesetzt, CL wird aus `+02h` geladen.
+- CH wird in diesem lokalen Block nicht neu gesetzt; sein Wert stammt aus dem umgebenden Aufrufkontext. Daher ist die CH-abhängige Suche bei diesem Aufrufer nicht als immer aktiv zu behaupten.
+
+### 14.5 Ergebnis und offene Punkte
+
+1. Das Layout umfasst mindestens die belegten Offsets `+00h` bis `+0Eh`; die Erzeugungsroutine und der Blockallocator liefern dafür konkrete Schreibbelege.
+2. `+04h` ist der Listenlink; `+01h=FDh` ist ein wiederholt geprüfter Knotentyp-Marker.
+3. `+08h` enthält nachweislich den Wert aus `SS:[0002h]`.
+4. `+02h/+03h` sind gemeinsam ein Wort, dessen High-Byte abhängig vom Vorzeichen von AL gesetzt wird.
+5. `+06h` erhält bei nichtnegativem AL einen Rückgabewert der Hilfsroutine `72Bh`; deren höhere fachliche Bedeutung ist noch offen.
+6. `+0Ch` kann einen Zeiger auf einen anhand CH gefundenen Knoten enthalten; spätere Routinen ändern dieses Feld ebenfalls.
+7. `+0Eh` wird mit eins initialisiert und später als Wort gelesen bzw. weitergereicht. Eine eindeutige Bezeichnung als Referenzzähler wäre auf Basis der bisher untersuchten Pfade verfrüht.
+8. Die genaue Bedeutung der Knoten (z. B. konkrete Objekt-/Geräteklasse) ist weiterhin nicht bewiesen.
+
+**Nächster Schritt 2254:** Die Hilfsroutine `72Bh` und die Verbraucher der Felder `+06h`, `+0Ch` und `+0Eh` gezielt auf dieselbe Knotentypfamilie zurückverfolgen. Dabei besonders prüfen, welche Daten `CC5h` und `E37h` liefern und ob sich daraus ein belastbarer Typname ableiten lässt.
