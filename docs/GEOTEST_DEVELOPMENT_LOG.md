@@ -85,7 +85,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Repository und Schreibberechtigung | bestätigt |
 | SDK 0.1 Buildarchitektur | aus Repository-Dokumentation bestätigt |
 | GeoWorks-1.2 Zielprotokolle | dokumentiert: Kernel 622.3, UI 693.0 |
-| Untersuchungsnotiz 2245 | teilweise korrigiert durch Untersuchung 2246; `10B20h` als Codeeinstieg verworfen |
+| Untersuchungsnotiz 2245 | Adressvermischung in Untersuchung 2255 korrigiert; `0B20h` und `10B20h` getrennt, 11-Byte-Kopie bestätigt |
 | Originalkernel-Body | aus `GEOWORKS/KERNEL.OLD` extrahiert; SHA-256 exakt bestätigt |
 | Originaldisassemblierung | mit objdump neu erzeugt; SHA-256 exakt bestätigt; 53/53 Anker vorhanden |
 | Untersuchung 2246 | Daten-/Codegrenze und Codekandidat `10B53h–10BD6h` statisch untersucht; Funktionsvertrag offen |
@@ -95,6 +95,12 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2250 | DI-Aufrufvarianten und unterschiedliche Rückgabekanäle verglichen; keine einheitliche Callback-Signatur unterstellt |
 | Untersuchung 2251 | Überlappende Segmentladehelfer analysiert; DS/ES in den untersuchten Callback-Pfaden auf `0E35h` zurückgeführt |
 | Untersuchung 2252 | Listenanker `05AEh`, Kopf-Link `05B2h`, Statusfelder und zweites Far-Zeigerpaar untersucht |
+| Untersuchung 2253 | Knotenlayout der Liste und beide direkten Aufrufer von `11CBh` untersucht |
+| Untersuchung 2254 | 26-Byte-Indexdatensätze und Herkunft des Knotenfeldes `+06h` verfolgt |
+| Untersuchung 2255 | Routine `0B20h`, 16-Byte-Block und 11-Byte-Kopie vollständig bestätigt |
+| Untersuchung 2256 | Status-/Konfigurationspfad `0BD0h` und Datenquelle `[0192h]` untersucht |
+| Untersuchung 2257 | Semaphore- und kontextabhängige Synchronisationswrapper identifiziert |
+| Untersuchung 2258 | Warte-/Aufweckpfade und Scheduler-Wartelisten statisch untersucht |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
