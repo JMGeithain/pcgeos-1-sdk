@@ -1,0 +1,66 @@
+# GeoWorks 1.x Icon Provider Resource Comparison — 2026-11-09
+
+## Scope and method
+
+Static comparison of the original files in `GEOWORKS/ICONS/` from the supplied `GEOWORKS.zip`:
+
+- `PAPR.000`
+- `GDOC.000`
+- `NBAT.000`
+
+Parsed with the repository's bounds-checked `pcgeos1/geode.py` reader from SDK snapshot `pcgeos-1-sdk-main(1).zip`. The files carry the GEODE 1.x signature `C7 45 CF 53`. This is a file-structure audit, not a runtime-loader test. No original file was modified.
+
+## GEODE-level comparison
+
+All three files have:
+
+- GEODE format version 1; header starts at file offset `0xC8`.
+- 7 resources, IDs 0–6.
+- 1 imported library: `ui` (import attributes `0x4000`, protocol words `0x02B5, 0`).
+- 0 exported entries.
+- Same kernel protocol pair: `622, 3`.
+- Same permanent name/extension fields: `icon` / `app`.
+- Same resource flags by resource ID.
+- Same relocation-record counts by resource ID: R0=0, R1=2, R2–R6=1 each.
+
+The resource table and common resource payloads align across all three files. The files are small native applications, not raw icon-only data files.
+
+## Resource sizes and flags
+
+| Resource | PAPR size | GDOC size | NBAT size | Flags (all three) | Relocations |
+|---|---:|---:|---:|---:|---:|
+| R0 | 0 | 0 | 0 | `0x0880` | 0 |
+| R1 | 96 | 96 | 96 | `0x0080` | 2 |
+| R2 | 208 | 208 | 208 | `0x145A` | 1 |
+| R3 | 320 | 320 | 320 | `0x145A` | 1 |
+| R4 | 160 | 160 | 144 | `0x1C7A` | 1 |
+| R5 | 272 | 256 | 208 | `0x1C7A` | 1 |
+| R6 | 752 | 816 | 512 | `0x1C7A` | 1 |
+
+Flags are recorded as raw values. Their bit-level semantics are not assigned in this report.
+
+## Content observations
+
+- R1 and R2 are byte-identical in all three files.
+- R3 has the same size and general structure in all three. It contains the provider's four-character token at resource offset `0x54`: `PAPR`, `gDOC`, or `nBAT`. The ASCII string `Icon Maker` occurs at resource offset `0x12C`.
+- R2 contains the ASCII string `Exit` at resource offset `0xC0`.
+- R4–R6 differ between providers and have different sizes. They contain structured binary data; this audit does not yet decode their UI/moniker semantics.
+- Relocation records are structurally identical across all three: R1 has `11 00 40 00` and `12 00 42 00`; R2–R6 each have `23 00 00 00`. These are raw record bytes only; symbolic meanings are deliberately not inferred here.
+
+## SHA-256
+
+- PAPR.000: `30b08761294ccd7762c686ca3d477e509cb454f56b6c7db5aa2b1497efbabfbe`
+- GDOC.000: `fe19cbcb46c2a92cf02da64c963facb8decb95d7e60bca34eb0d1c5e00b01733`
+- NBAT.000: `1071e86b13b73a6032764e410474a4aec28727169a99a7f127ba8c246c6a210f`
+
+## Conclusions and limits
+
+1. The three provider files share a common native GEODE skeleton and common R1–R2 payloads.
+2. R3 includes provider-specific token text; R4–R6 carry provider-specific binary content.
+3. The comparison does not yet establish which of R4–R6 contains the visible icon moniker, nor does it decode the object/resource structures.
+4. A minimal provider should not be assembled by copying only a presumed icon resource. The resource references, relocations, and provider startup/close behavior still need to be traced.
+5. No application GEO was built, no TOKEN.DB was changed, and no runtime test was performed.
+
+## Next static-analysis step
+
+Decode the resource-local structures in R3–R6 against the original GeoWorks 1.x resource formats and source/header definitions. In particular, identify the R3 token-list structure and the actual moniker-bearing resource(s), then map all references and relocation targets before proposing a minimal provider.
