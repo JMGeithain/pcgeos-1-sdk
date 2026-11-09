@@ -485,3 +485,74 @@ Die Disassemblierung enthält zwei direkte Near-Aufrufe:
 8. Die genaue Bedeutung der Knoten (z. B. konkrete Objekt-/Geräteklasse) ist weiterhin nicht bewiesen.
 
 **Nächster Schritt 2254:** Die Hilfsroutine `72Bh` und die Verbraucher der Felder `+06h`, `+0Ch` und `+0Eh` gezielt auf dieselbe Knotentypfamilie zurückverfolgen. Dabei besonders prüfen, welche Daten `CC5h` und `E37h` liefern und ob sich daraus ein belastbarer Typname ableiten lässt.
+
+
+## 15. Untersuchung 2254 – Herkunft des Feldes `+06h` und Index-Tabelle
+
+**Quelle:** reproduzierte Disassemblierung des unveränderten `KERNEL.OLD`; Kontrollfluss ab `072Bh`, `0CC5h`, `0E37h`, `0EBBh` und die Tabellenzugriffe in `072Bh–0788h`. Diese Untersuchung beschreibt nur die im Kernel-Code belegten Abläufe; der zur Laufzeit aufgebaute Inhalt des Datensegmentes `0E35h` liegt nicht als fertige Datensegment-Abbildung in `KERNEL.OLD` vor.
+
+### 15.1 Indexberechnung in `0EBBh`
+
+`0EBBh` verwendet AL als Index:
+1. AL wird nach BL übertragen; BH wird auf null gesetzt.
+2. Die Schiebe-/Addierfolge berechnet aus dem Index den 26-fachen Byteabstand.
+3. `9630h` lädt DS auf `0E35h`.
+4. BX wird um `021Ch` erhöht.
+
+Damit lautet die berechnete Datensatzadresse:
+
+`DS:BX = 0E35h:(021Ch + AL * 1Ah)`
+
+**Gesichert:** Die von `0EBBh` adressierte Tabelle beginnt bei `0E35h:021Ch`; der Abstand zwischen zwei Indexeinträgen beträgt `1Ah` = 26 Bytes. Das ist eine aus den Maschineninstruktionen abgeleitete Datensatzgröße, keine Schätzung.
+
+### 15.2 Gültigkeitsprüfung durch `0CC5h`
+
+- AL muss kleiner als `1Ah` sein; sonst setzt die Routine Carry.
+- Für einen zulässigen Index wird die Tabellenbasis über `0EBBh` berechnet.
+- Das erste Byte des Datensatzes wird nach AH geladen.
+- Bit `80h` dieses Bytes wird geprüft; ist es nicht gesetzt, wird Carry gesetzt.
+
+Die Routine liefert damit einen Statusbytewert in AH und einen Carry-Status. Eine symbolische Bedeutung der Bits ist im Kernel nicht hinterlegt.
+
+### 15.3 Zusätzliche Prüfung in `0E37h`
+
+`0E37h` berechnet denselben Datensatzanfang, addiert `0Eh` zum Datensatzoffset und prüft anschließend das Wort `0FB8h` im Datensegment. Ist dieses Wort ungleich null, springt der Code in den Kernelpfad `971Dh`; andernfalls kehrt er zurück. Die Routine stellt DS vorübergehend auf `0E35h` und stellt das ursprüngliche DS anschließend wieder her.
+
+**Gesichert:** `0E37h` ist eine zusätzliche globale Zustandsprüfung im Zusammenhang mit dem indizierten Datensatz. Welche fachliche Bedeutung `0FB8h` besitzt, bleibt offen.
+
+### 15.4 Verhalten der Hilfsroutine `072Bh`
+
+Der Ablauf lässt sich statisch wie folgt rekonstruieren:
+
+1. `CC5h` prüft AL und liefert das Statusbyte in AH. Bei gesetztem Carry endet `72Bh` ohne den normalen Cachepfad.
+2. `E37h` führt die zusätzliche Zustandsprüfung aus.
+3. Der Index AL wird verdoppelt und als Wortindex für zwei Tabellenbereiche verwendet:
+   - Zeigerfeld ab `0E35h:01DFh)
+   - Zeit-/Markierungsfeld ab `0E35h:01ABh)
+4. Wenn Bit `40h` in AH nicht gesetzt ist, wird der gespeicherte Zeiger aus `[01DFh + 2*Index]` gelesen. Ist er ungleich null, wird er als Rückgabewert in BX verwendet.
+5. Wenn Bit `40h` gesetzt ist, wird `[105Ah]` mit dem gespeicherten Wert aus `[01ABh + 2*Index]` verglichen. Liegt die Differenz unter `5Ah` (= 90), wird ebenfalls der vorhandene Zeigerpfad benutzt.
+6. Andernfalls folgen weitere Kernelaufrufe zur Beschaffung bzw. Erneuerung des Eintrags. Bei erfolgreichem Pfad wird BX in `[01DFh + 2*Index]` gespeichert und der aktuelle Wert aus `[105Ah]` in `[01ABh + 2*Index]` abgelegt.
+7. Vor der Rückkehr wird `E51h` aufgerufen; die Routine stellt danach CX wieder her.
+
+**Gesichert:** `72Bh` liefert im erfolgreichen Pfad einen BX-Zeiger, der indexabhängig aus dem Bereich `01DFh` gelesen oder nach einem Erneuerungspfad dort gespeichert wird. Der Bereich `01ABh` enthält den zugehörigen Vergleichswert. Der Schwellwert beträgt exakt `5Ah` Einheiten des Wertes `[105Ah]`; ob diese Einheiten Systemticks, Zeitstempel oder etwas anderes sind, ist anhand dieses Ausschnitts allein nicht bewiesen.
+
+### 15.5 Konsequenz für Knotenfeld `+06h`
+
+Die Routine `11CBh` speichert den von `72Bh` zurückgegebenen BX-Wert in `+06h), sofern AL nicht negativ ist. Die Verbraucher bestätigen, dass dieses Feld als Zeiger-/Gültigkeitswert behandelt wird:
+
+- `0795h–07A3h`: nach Prüfung des Markers `FDh` wird `+06h` nach BX geladen und auf null geprüft.
+- `13AEh–13B8h`: `+06h` wird geprüft; abhängig davon wird AL aus `+03h` oder als `FFh` gesetzt.
+- `13FBh–1401h`: das Wort `+06h` wird beim Kopieren eines Knotens in einen anderen Datensatz übernommen.
+
+**Gesicherter Zusammenhang:** `+06h` enthält in diesem Knotentyp einen indexabhängig beschafften oder zwischengespeicherten Zeiger. Eine präzise Objektbezeichnung (z. B. Datei, Gerät, Treiber oder Ressourcenobjekt) ist noch nicht belegt.
+
+### 15.6 Ergebnis Untersuchung 2254
+
+1. Die Index-Tabelle bei `0E35h:021Ch` besitzt Datensätze im Abstand von 26 Bytes.
+2. AL ist der Tabellenindex; `CC5h` begrenzt ihn auf Werte kleiner `1Ah` und prüft Bit `80h` des ersten Datensatzbytes.
+3. `72Bh` verwendet zwei indexbezogene Worttabellen bei `01DFh` und `01ABh`.
+4. Der Erneuerungspfad wird bei gesetztem Statusbit `40h` und einer Differenz von mindestens `5Ah` durchlaufen.
+5. Der erfolgreiche Rückgabewert in BX wird vom Knotenaufbau `11CBh` im Feld `+06h` gespeichert.
+6. Die fachliche Bedeutung der Datensatztypen und die Einheit von `[105Ah]` bleiben offen.
+
+**Nächster Schritt 2255:** Die Rückgabepfade und Datenzugriffe der Hilfsroutinen `0BD0h`, `0C97h`, `0CAC h`, `0A20h` und `0A3C h` im Zusammenhang mit `72Bh` verfolgen. Ziel ist, den erzeugten bzw. wiederverwendeten Zeiger genauer zu klassifizieren, ohne aus den Offsets allein einen Objektnamen zu erfinden.
