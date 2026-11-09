@@ -1,0 +1,14 @@
+{
+  "sdk": "pcgeos1-sdk-0.1",
+  "long_name": "GeoWorks 1.x Test",
+  "permanent_name": "geotest",
+  "token": "GTS1",
+  "output": "GEOTEST.GEO",
+  "release": [0, 1, 0, 0],
+  "protocol": [1, 0],
+  "viewport": [500, 300],
+  "sources": ["src/app.c"],
+  "help": "src/help.txt",
+  "native_stack_bytes": 8192,
+  "allow_unknown_target": true
+}
