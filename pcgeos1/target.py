@@ -16,6 +16,24 @@ PATHS={
  'TERM.GEO':'/WORLD/TERM.GEO',
 }
 
+PROFILES={
+ 'geoworks-pro-1.2':{
+  'hashes':KNOWN,
+  'format_version':1,
+  'kernel_protocol':[622,3],
+ },
+ 'geoworks-1.2.8-de':{
+  'hashes':{
+   'SPINTEXT.GEO':'18f2075c9d61fe7231b1dacae8c171e68c2028ef2fca6d40a6694158fdfcb9fd',
+   'NOTEPAD.GEO':'a1ebd0cb84712a126b1f67f5fd1ca6b57f8bda2e9038e9224ba16ebc008f9ea9',
+   'VIEWER.GEO':'c884b76cdc4f9119d4794f7830d5438e0abcc1d92d3cc248aa912bde85ed43e7',
+   'TERM.GEO':'a62ebc0fb3c01acb4b59c8172d20d520653822a6d42f0bec4831dfdb93e1cf3a',
+  },
+  'format_version':1,
+  'kernel_protocol':[622,3],
+ },
+}
+
 def sha(b):return hashlib.sha256(b).hexdigest()
 
 def member(z,end):
@@ -23,14 +41,23 @@ def member(z,end):
     if len(names)!=1:raise ValueError(f'Expected exactly one archive member ending {end}, got {len(names)}')
     return z.read(names[0])
 
-def load_templates(gwp,strict=True):
+def load_templates(gwp,profile='geoworks-pro-1.2'):
+    if profile not in PROFILES:
+        raise ValueError(f'Unknown target profile: {profile}')
+    spec=PROFILES[profile]
     out={}
     with zipfile.ZipFile(gwp) as z:
         for name,end in PATHS.items():
             data=member(z,end); digest=sha(data)
-            if strict and digest!=KNOWN[name]:
-                raise ValueError(f'Unsupported {name}: SHA-256 {digest}; SDK 0.1 knows {KNOWN[name]}')
-            out[name]=(data,parse(data,name),digest)
+            expected=spec['hashes'][name]
+            if digest!=expected:
+                raise ValueError(f'Unsupported {name} for profile {profile}: SHA-256 {digest}; expected {expected}')
+            info=parse(data,name)
+            if info['format_version']!=spec['format_version']:
+                raise ValueError(f'{name} is GEOS format {info["format_version"]}; profile {profile} requires {spec["format_version"]}')
+            if info['kernel_protocol']!=spec['kernel_protocol']:
+                raise ValueError(f'{name} kernel protocol {info["kernel_protocol"]}; profile {profile} requires {spec["kernel_protocol"]}')
+            out[name]=(data,info,digest)
     return out
 
 def scan(gwp):
