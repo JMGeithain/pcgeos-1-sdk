@@ -114,6 +114,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2269 | Rückwärtskompatibles Zielprofil-Design festgelegt; Hashprüfung wird pro benanntem Profil statt per globalem Bypass ausgewählt |
 | Untersuchung 2270 | Explizite Hash-gepinnte Zielprofile im Buildsystem implementiert; Unit-Tests für Profilgrenzen ergänzt; Laufzeittest noch ausstehend |
 | Untersuchung 2271 | Neun Profil-/Bypass-Unit-Tests, Parser-Absatzregression und realer deutscher Profil-Parse erfolgreich ausgeführt |
+| Untersuchung 2272 | GitHub Actions testet den aktuellen Repository-Checkout erfolgreich: Python-Compile, Profiltests und GEODE-Absatzregression PASS |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1696,3 +1697,47 @@ Alle vier erwarteten SHA-256-Werte stimmten exakt mit dem registrierten Profil `
 6. Das Profil `geoworks-1.2.8-de` ist damit auf Ebene der vier geprüften Template-Dateien und des Parser-/Hash-Gates verifiziert, nicht aber als vollständige ABI- oder Laufzeitkompatibilität.
 
 **Nächster Schritt 2272:** Den vollständigen GitHub-HEAD-Quellbestand in einer sauberen Arbeitskopie bereitstellen. Danach die echten Buildmodule ohne Stubs einbinden, `doctor` ausführen und einen Build mit `examples/geotest/project.json` plus dem frisch erzeugten Profilarchiv starten. Der resultierende GEO-Hash muss im Buildbericht und im Dossier festgehalten werden.
+
+
+## 33. Untersuchung 2272 – GitHub-CI auf dem vollständigen Repository-Checkout
+
+Zur Verifikation des tatsächlichen Repository-Stands wurde `.github/workflows/sdk-tests.yml` angelegt. Damit laufen die Quelltests direkt auf GitHub Actions gegen einen frischen Checkout des Repositorys und nicht gegen die frühere lokale Arbeitskopie.
+
+### 33.1 Erster CI-Lauf und Korrektur
+
+Der erste Lauf `42605385668` schlug beim Profiltest fehl, weil `tests/test_target_profiles.py` beim direkten Aufruf den Repository-Root nicht in `sys.path` eingetragen hatte. Die Python-Module selbst ließen sich kompilieren. Die Testdatei wurde daraufhin analog zu den übrigen Tests um die Root-Pfaderkennung ergänzt.
+
+Der Fehler war ein Teststart-/Importpfadproblem, kein Fehler der Profilvalidierung.
+
+### 33.2 Zweiter CI-Lauf
+
+<badge color="success">GitHub Actions: success</badge>
+
+- Workflow: `SDK source tests`
+- Run-ID: `42605448481`
+- Commit: `51ced54eb2b8e206aee07c706cc10861e6930491`
+- Ergebnis: `completed / success`
+- Lauf: https://github.com/JMGeithain/pcgeos-1-sdk/actions/runs/42605448481
+
+Erfolgreiche Schritte:
+1. Checkout des aktuellen Repository-Commits.
+2. Python 3.12 bereitgestellt.
+3. `python -m compileall -q pcgeos1 tests` – PASS.
+4. `python tests/test_target_profiles.py` – PASS (neun Tests).
+5. `python tests/test_geode_alignment.py` – PASS.
+
+### 33.3 Aussagegrenze
+
+Dieser CI-Lauf bestätigt, dass die aktuellen Python-Module syntaktisch kompilieren und die neun Profiltests sowie die Absatz-/Relokationsregression auf einem sauberen GitHub-Checkout bestehen.
+
+Er baut noch keine `GEOTEST.GEO`-Datei. Das Workflow-Setup enthält absichtlich keine proprietäre GeoWorks-Zielinstallation und kann daher die vier deutschen Template-Dateien nicht bereitstellen. Die echte deutsche Profilprüfung wurde separat in Untersuchung 2271 mit dem Nutzerarchiv ausgeführt.
+
+### 33.4 Ergebnis Untersuchung 2272
+
+1. Die Testpipeline läuft auf dem tatsächlichen GitHub-Checkout.
+2. Der anfängliche Importpfadfehler wurde behoben.
+3. Der zweite CI-Lauf ist vollständig erfolgreich.
+4. Python-Compile, neun Zielprofiltests und GEODE-Absatzregression sind bestätigt.
+5. Der vollständige Build der Anwendung mit dem gesamten aktuellen Repository-Stand und anschließend der Start in GeoWorks 1.2 bleiben die nächsten großen Meilensteine.
+
+**Nächster Schritt 2273:** Den Build mit dem aktuellen GitHub-HEAD und dem frisch erzeugten Archiv `GWP2-profile-verified.zip` durchführen. Dafür muss der vollständige Quellbestand des Repositorys in der Buildumgebung liegen; die alte lokale SDK-Arbeitsfassung aus Untersuchung 2266 darf nicht wiederverwendet werden. Danach den resultierenden GEO-Hash, Ressourcen-/Relokationszahlen und alle Parserprüfungen protokollieren.
