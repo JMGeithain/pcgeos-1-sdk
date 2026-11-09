@@ -84,6 +84,7 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 | Originalkernel-Body | aus `GEOWORKS/KERNEL.OLD` extrahiert; SHA-256 exakt bestätigt |
 | Originaldisassemblierung | mit objdump neu erzeugt; SHA-256 exakt bestätigt; 53/53 Anker vorhanden |
 | Untersuchung 2246 | Daten-/Codegrenze und Codekandidat `10B53h–10BD6h` statisch untersucht; Funktionsvertrag offen |
+| Untersuchung 2247 | Querverweise und Aufrufziele `0399h`, `2588h`, `101CBh` untersucht; DS-Segmentkorrektur dokumentiert |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
@@ -125,7 +126,7 @@ Der Bereich ab `10B53h` ist syntaktisch plausibler 16-Bit-Code. Er besitzt in de
 | `10BA9h–10BAFh` | DS sichern; Far-Aufruf `0000h:2588h`; liest zwei Worte von DS:SI; DS wiederherstellen | AX/BX werden aus `[SI]` und `[SI+2]` geladen. |
 | `10BB5h–10BB8h` | speichert AX/BX nach `[05B8h]`/`[05BAh]` | legt offenbar einen später verwendeten Far-Zeiger in zwei benachbarten Worten ab; Interpretation als Funktionszeiger ist durch den späteren indirekten Aufruf gestützt. |
 | `10BBCh–10BC2h` | testet Bit `10h` in `ES:[0003h]`; ggf. Rücksprung | bedingter Zusatzpfad. |
-| `10BC4h–10BD6h` | liest ES:[0040h], sichert BX, liest Byte über DS:BX, setzt DI=14h, führt `lcall *[05B8h]` aus, stellt DI wieder her und schreibt BL nach DS:DI | `10BCFh` ist Beginn der vier Byte langen indirekten Far-Aufrufinstruktion. `10BD0h` liegt mitten in ihr und ist kein Instruktionsanfang. |
+| `10BC4h–10BD6h` | liest ES:[0040h], sichert BX, liest Byte über DS:BX, setzt DI=14h, führt `lcall DS:[05B8h]` aus, stellt DI wieder her und schreibt BL nach DS:DI | `10BCFh` ist Beginn der vier Byte langen indirekten Far-Aufrufinstruktion. `10BD0h` liegt mitten in ihr und ist kein Instruktionsanfang. |
 
 **Wichtige Einschränkung:** Die Tabellenbasis `CS:121Ah`, die Bedeutung von `[05ABh]`, `[05B1h]`, `[0044h]`, `[0046h]` und die Verträge der Far-Aufrufe `0000h:0399h` / `0000h:2588h` sind noch nicht geklärt. Deshalb ist `10B53h` vorerst ein *Codekandidat*, kein abschließend bewiesener öffentlicher Routineeinstieg. Auch die Registerwerte beim Eintritt sind unbekannt.
 
@@ -140,11 +141,62 @@ Der Bereich ab `10B53h` ist syntaktisch plausibler 16-Bit-Code. Er besitzt in de
 
 1. Die vier Werte bei `10B1Ah–10B20h` und die DOS-Dateinamen bei `10B23h–10B52h` sind als Datenbereich zu behandeln.
 2. `10B20h` ist als Codeeinstieg verworfen.
-3. `10B53h–10BD6h` ist ein plausibler Codeblock mit einem indirekten Far-Aufruf über den zuvor gespeicherten Zeiger `0000:[05B8h]`; die Eintrittsbedingungen und Gesamtfunktion bleiben offen.
+3. `10B53h–10BD6h` ist ein plausibler Codeblock mit einem indirekten Far-Aufruf über den zuvor gespeicherten Zeiger `DS:[05B8h]`; die Eintrittsbedingungen und Gesamtfunktion bleiben offen.
 4. Die alte Notiz „elf Bytes kopiert bei `0B6Fh–0B75h`“ wird nicht übernommen: der sichtbare Code an `10B6Fh` ist ein Far-Aufruf und die inklusive Spanne `10B6Fh–10B75h` umfasst sieben Bytes.
 5. `10BD0h` ist als Instruktionsanfang ausgeschlossen; `10CACh` und `10CC5h` sind zwar Instruktionsanfänge, aber keine belegten Routineeinstiege.
 
 **Nächster Schritt 2247:** Querverweise auf Datenoffsets `121Ah`, `1246h`, `05ABh`, `05B1h`, `05B8h`, `05BAh`, `0044h`, `0046h`, `0609h` systematisch sammeln; danach die aufgerufenen Kernelziele `0399h`, `2588h` und Near-Routine `101CBh` mit vollständigem Aufrufer-/Aufrufkontext untersuchen.
+
+
+## 8. Untersuchung 2247 – Querverweise und aufgerufene Hilfsroutinen
+
+**Quelle und Methode:** vollständige Datei `kernel_original_body.dis`, erzeugt aus dem unveränderten `GEOWORKS/KERNEL.OLD`-Kernel-Body. Es wurden alle Vorkommen der relevanten absoluten Offsets und Aufrufziele im linearen Disassembly gesucht und die Zielbereiche im Kontext gelesen. Die Suche findet nur im disassemblierten Byte-Image statt; segmentabhängige Laufzeitdaten können dadurch nicht vollständig aufgelöst werden.
+
+### 8.1 Daten-/Statusoffsets
+
+- `05ABh`: Im vorliegenden Disassembly ist ein direkter Zugriff bei `10B5Fh` (`mov 05ABh,%bl`) und ein weiterer bei `110E` (`cmpb $3,05ABh`) sichtbar. Damit ist `05ABh` kein isolierter lokaler Wert dieses Blocks; die genaue Bedeutung des Bytes ist noch offen.
+- `05B1h`: Der hier untersuchte Block liest den Wert bei `10B58h` und verzweigt bei ungleich null nach `10B90h`. Weitere direkte Vorkommen wurden im Disassembly nicht gefunden.
+- `05B8h`: Das Wort wird bei `10BB5h` geschrieben und bei `10BCFh` indirekt als Far-Ziel aufgerufen. Es gibt mehrere weitere indirekte Aufrufe über denselben Offset im Kernel, u. a. bei `0E7Dh`, `0F20h`, `0F3Bh`, `0F4Eh`, `0F76h`, `1189h`, `129Bh`, `1321h` und `13A8h`. Der Operand ohne Segmentpräfix verwendet DS; die frühere Formulierung `0000:[05B8h]` war falsch und ist korrigiert. Die tatsächliche Segmentbasis hängt vom jeweiligen Aufrufer ab.
+- `05BAh`: Der Block speichert bei `10BB8h` das zweite Wort neben `05B8h`. Das passt zu einem Far-Pointer-Paar (Offset/Segment), ist aber allein noch kein Beweis für die Bedeutung jedes Wortes.
+- `0044h`: Dieses Wort wird im Kernel an zahlreichen Stellen gelesen und geschrieben. Der Zugriff bei `10B90h` lädt es nach DI; weitere Verwendungen zeigen, dass es sich um einen übergreifenden Laufzeit-/Stack-/Segmentzustandswert handeln kann. Die genaue Struktur ist noch zu ermitteln.
+- `0046h`: Dieses Byte/Wort wird ebenfalls an vielen Stellen verwendet. Der untersuchte Block setzt es vorübergehend auf `04h` und danach auf `00h`; andere Routinen testen bzw. verändern Bits dieses Feldes. Es ist daher ein gemeinsames Status-/Flags-Feld und nicht einfach eine lokale Kopiervariable.
+- `0609h`: `10BA5h` speichert BX hier; Routine `25A5h` liest den Wert später nach DX. Der gespeicherte Wert ist der zuvor verdoppelte Index aus BX. Eine weitergehende semantische Benennung ist noch nicht gesichert.
+- `CS:[121Ah+BX]`: Einziger direkter Fund dieses indizierten Lesezugriffs. Die Tabelle wird mit dem aktuellen BX-Index angesprochen. Der Tabelleninhalt und seine Basis müssen bytegenau untersucht werden; die einfache lineare Disassemblierung kann überlagerte Daten nicht zuverlässig klassifizieren.
+- `SI=1246h`: Die Konstante wird bei `10B55h` geladen. Offset `1246h` ist im linearen Disassembly zugleich das `ret` am Ende eines anderen Codeblocks. Da SI anschließend durch die Hilfsaufrufe verändert werden kann und die Segmentwerte wechseln, darf aus dem numerischen Gleichstand keine Funktionsbeziehung abgeleitet werden.
+
+### 8.2 Ziel `0000:2588h` – Objekt-/Zeigerauflösung
+
+Die Routine bei `2588h` besteht aus:
+
+- Near-Aufruf `9630h`;
+- `mov (%bx),%ds` – DS wird aus dem durch BX adressierten Wort geladen;
+- `mov 28h,%si` – SI wird aus Offset `28h` im nun gewählten Segment geladen;
+- `mov 2Ah,%ds` – DS wird anschließend aus Offset `2Ah` desselben Segments geladen;
+- `lret`.
+
+**Belegter Effekt:** Die Routine liefert durch Änderung von DS und SI einen Segment:Offset-Kontext zurück. Der untersuchte Aufrufer `10BA9h–10BB8h` liest anschließend zwei Worte aus DS:SI und legt sie bei `05B8h`/`05BAh` ab. Dies stützt die Interpretation, dass dort ein später verwendeter Far-Zeiger vorbereitet wird. Die genaue Struktur des durch BX adressierten Objekts und die Bedeutung der Felder `28h`/`2Ah` bleiben offen.
+
+### 8.3 Ziel `0000:0399h` – Fehler-/Abbruchpfad
+
+`0399h` springt nach `039Ch`. Dort werden BP, SI, DS und AX gesichert, Interrupts gesperrt und ein Stackframe aufgebaut. Der Code kann über den gesicherten Stack einen Segment:Offset-Kontext laden, liest einen Wortwert, aktualisiert Status bei `0046h` und führt umfangreiche globale Aufräum-/Abbruchschritte aus. Später wird SS:SP auf einen internen Stack umgestellt; mehrere globale Routinen werden aufgerufen. Je nach Status endet der Pfad u. a. mit DOS-Funktionsaufruf `int 21h`/`4C00h` oder einem Far-Rücksprung.
+
+**Sicherer Befund:** `0399h` ist kein gewöhnlicher Rückgabewert-Lieferant, sondern ein globaler Fehler-/Abbruchpfad mit Interrupt- und Stackmanipulation. Welche Fehlercodes und Zustände er konkret behandelt, muss aus seinen Aufrufern und den nachfolgenden Pfaden abgeleitet werden. In `10B6Fh`, `10B81h` und `10B9Bh` wird er jeweils als Fehlerbehandlung aufgerufen; anschließend wird AX explizit auf `0019h` bzw. `000Fh` gesetzt.
+
+### 8.4 Ziel `101CBh` – Initialisierungs-/Setup-Hilfsroutine
+
+Der Block `101CBh–101EFh` ruft nacheinander `1531h`, setzt AX auf `3`, ruft `15A0h`, löscht AX/BX/CX/DX, ruft `1970h`, setzt DI auf `0E35h`, lädt DS mit `0E35h`, ruft `156Ch` und kehrt zurück. Es gibt lokale Wrapper bei `101B4h` und `101BCh`; der untersuchte Block `10B90h` ruft `101CBh` direkt auf.
+
+**Sicherer Befund:** `101CBh` ist eine Setup-Sequenz mit mehreren Kernel-Far-Aufrufen und einem am Ende explizit gesetzten DS=`0E35h`. Das ist für den folgenden Zugriff auf `DS:[05B8h]` im untersuchten Pfad relevant. Die semantischen Verträge der Unteraufrufe `1531h`, `15A0h`, `1970h` und `156Ch` sind noch nicht entschlüsselt.
+
+### 8.5 Ergebnis und Korrektur
+
+1. `05B8h` wird im Kernel mehrfach als Speicheroperand indirekter Far-Aufrufe verwendet; im Block `10BCFh` ist es `DS:[05B8h]`, nicht `0000:[05B8h]`.
+2. `2588h` liefert einen geänderten DS:SI-Kontext; der Aufrufer speichert zwei daraus gelesene Worte als Paar bei `05B8h`/`05BAh`.
+3. `0399h` ist ein globaler Fehler-/Abbruchpfad, der Interrupts und Stack aktiv manipuliert. Seine Aufrufe dürfen nicht als normale Funktionsrückkehr interpretiert werden.
+4. `101CBh` setzt DS am Ende auf `0E35h`; im untersuchten Ablauf wird danach `DS:[05B8h]` vorbereitet bzw. verwendet.
+5. Die Semantik der Indextabelle `CS:[121Ah+BX]`, der Objektfelder `28h`/`2Ah` und der Statusfelder `05ABh`/`05B1h` ist noch offen.
+
+**Nächster Schritt 2248:** Den Ablauf um `05B8h` in den weiteren Aufrufern (insbesondere `0E7Dh–0F76h`, `1189h`, `129Bh`, `1321h`, `13A8h`) vergleichen, um die Struktur und Segmentbasis des gespeicherten Far-Zeigers zu bestimmen. Parallel die Routine `2588h`-Aufrufer und das Objektformat mit konkreten DS-/BX-Werten aus den statischen Datenbereichen rekonstruieren.
 
 ## 6. Änderungs- und Belegregel
 
