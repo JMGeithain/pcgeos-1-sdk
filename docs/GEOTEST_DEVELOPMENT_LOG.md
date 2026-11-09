@@ -101,6 +101,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2256 | Status-/Konfigurationspfad `0BD0h` und Datenquelle `[0192h]` untersucht |
 | Untersuchung 2257 | Semaphore- und kontextabhängige Synchronisationswrapper identifiziert |
 | Untersuchung 2258 | Warte-/Aufweckpfade und Scheduler-Wartelisten statisch untersucht |
+| Untersuchung 2259 | Objektliste, Speicherfreiliste und Scheduler-Warteliste strukturell getrennt; unterschiedliche Linkfelder belegt |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
@@ -892,3 +893,58 @@ Die Routine `9CF6h` erzeugt in diesem Pfad keinen neuen 16-Byte-Knoten über `6D
 6. Der identische Feldoffset `+6) bedeutet je nach Lebenszyklus und Struktur etwas anderes; künftige Dossierabschnitte müssen die jeweilige Struktur ausdrücklich nennen.
 
 **Nächster Schritt 2260:** Die Initialisierung und Verwendung der Synchronisationsobjekte bei `0186h), `018Eh) und `0196h) im Datensegment `0E35h) weiter verfolgen. Zusätzlich den Erzeugungs- und Freigabepfad der Schedulerkontexte (insbesondere die Aufrufstellen von `9C8Bh), `9C19h) und die Felder `+0/+2/+4/+6)) anhand der Kernel-Taskverwaltung untersuchen.
+
+
+## 21. Untersuchung 2260 – Aufruferzuordnung der Synchronisationsobjekte
+
+**Ziel:** Die in Untersuchung 2257 ermittelten Synchronisationsoffsets `0186h`, `018Eh) und `0196h) nicht nur anhand der Wrapper, sondern anhand ihrer konkreten Aufrufer einordnen. Die folgenden Aussagen beziehen sich auf den beobachteten Schutzbereich der jeweiligen Aufrufe. Sie vergeben keine nicht belegten symbolischen Kernel-Namen.
+
+### 21.1 Objekt `0E35h:0186h` – wiederkehrender geschützter Bereich
+
+Die Wrapper `0C97h/0C9Eh` rufen den erweiterten Erwerbs-/Freigabepfad `971Dh/9754h` mit BX=`0186h` auf. Im Disassembly sind unter anderem folgende Aufrufer zu sehen:
+
+| Aufrufer | Geschützter Abschnitt | Beleg |
+|---|---|---|
+| `0552h` | setzt `[0213h]` aus AH, ruft `72Bh`, löscht `[0213h]` wieder | `0553h`, `0565h` |
+| `0595h` | ruft `0968h` | `0596h`, `059Fh` |
+| `05C9h` | führt zwei Prüfungen über `09B6h` aus und setzt das Ergebnis | `05CAh`, `05E3h` |
+| `05F0h` | ruft `0A3Ch`; der Aufrufpfad hat zusätzlich den Wrapper `0CAC h` für das innere Semaphoreobjekt | `05F3h), `0600h), `0603h` |
+| `063Ch` | führt Prüfungen, Blockanlage und Kopie eines 16-Byte-Blocks aus | `063Fh), `0689h` |
+
+**Gesichert:** `0186h` ist ein gemeinsam genutztes Synchronisationsobjekt für mehrere Kerneloperationen, darunter den indexbezogenen Cachepfad `72Bh`, Prüf-/Vergleichsroutinen und Speicher-/Blockoperationen. Die genaue fachliche Bezeichnung der Sperre ist aus den Aufrufern allein nicht zu bestimmen.
+
+### 21.2 Objekt `0E35h:018Eh` – Synchronisation um Datenzugriff
+
+Die Wrapper `0CA5h/0CAC h` führen den einfachen atomischen Semaphore-Abstieg/-Anstieg für BX=`018Eh) aus.
+
+- `0A3Ch` ruft `0CA5h` vor dem Lesen der über `[0192h]` referenzierten Struktur.
+- Der Pfad ruft `0CAC h` zum Freigeben des geschützten Bereichs auf.
+- `0BD0h` ruft `0CA5h` im Statuszweig mit Bit `20h) auf; der weitere Kontrollfluss läuft über die gemeinsame Ergebnisaufbereitung.
+
+**Gesichert:** `018Eh` wird als Zählsemaphore verwendet und schützt mindestens den Zugriffspfad von `0A3Ch`. Die genaue Ressource, deren Zugriff damit serialisiert wird, ist noch nicht benannt.
+
+### 21.3 Objekt `0E35h:0196h` – Ressourcenzugriff und Statusprüfung
+
+Die Wrapper `0CB3h/0CBAh` rufen den erweiterten Erwerbs-/Freigabepfad `971Dh/9754h` mit BX=`0196h) auf.
+
+Belegte Aufrufer:
+- `0B87h` ruft `0CB3h` vor der Auswertung von Index-/Statusdaten und dem Zugriff über den Zeiger `[019Eh]); am Ende ruft es `0CBAh`.
+- `0E6Ah` ruft `0CB3h`, danach `0E71h) und einen indirekten Aufruf über `DS:[05B8h]) mit `DI=18h); anschließend erfolgt `0CBAh`.
+
+**Gesichert:** `0196h) schützt mindestens zwei Pfade, die index-/ressourcenbezogene Daten bzw. einen Dispatch-Aufruf verwenden. Ein engerer Objektname wäre ohne weitere Aufruferanalyse spekulativ.
+
+### 21.4 Warum die Initialwerte weiterhin offen sind
+
+Die untersuchten Codeverweise setzen BX auf die drei Konstanten und rufen die gemeinsamen Synchronisationsroutinen auf. Im bisherigen Disassembly-Audit wurden keine direkten unmittelbaren Schreibinstruktionen gefunden, die die Anfangswerte an den Offsets `0186h), `018Eh) oder `0196h) setzen. Das schließt indirekte Initialisierung, Segmentabbild-/Loaderdaten oder Initialisierung durch einen anderen Kernelpfad nicht aus.
+
+**Wichtige Abgrenzung:** Aus dem Fehlen eines direkten `mov [0186h],...`-Musters darf nicht gefolgert werden, die Synchronisationsobjekte seien uninitialisiert. Ihre Laufzeitinitialisierung muss über den Aufbau des Datensegments und indirekte Schreibpfade geprüft werden.
+
+### 21.5 Ergebnis Untersuchung 2260
+
+1. `0186h) ist ein gemeinsam genutztes erweitertes Synchronisationsobjekt, das mehrere Kernelbereiche schützt.
+2. `018Eh) wird als einfacher Zählsemaphore verwendet; `0A3Ch` ist ein bestätigter Aufrufer.
+3. `0196h) ist ein weiteres erweitertes Synchronisationsobjekt, das unter anderem `0B87h) und `0E6Ah) verwenden.
+4. Die drei Offsets haben unterschiedliche Aufruferprofile; sie dürfen nicht als ein einziges Synchronisationsobjekt behandelt werden.
+5. Die initialen Laufzeitwerte sind noch nicht aus dem statischen Codebestand belegt.
+
+**Nächster Schritt 2261:** Den Erzeugungs-/Initialisierungspfad des Datensegments `0E35h) und seine Datenbereiche vor `021Ch) verfolgen. Ziel ist, die Startwerte der Synchronisationsobjekte und des Kontextzeigers `0FB8h) aus einem konkreten Initialisierungspfad nachzuweisen, nicht aus vermuteten Segmentdefaults abzuleiten.
