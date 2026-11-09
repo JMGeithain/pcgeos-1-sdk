@@ -118,6 +118,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2273 | Build mit rekonstruierter GitHub-Quellfassung wiederholt; identischer GEO-Hash, Quellbyteidentität weiterhin offen |
 | Untersuchung 2274 | Erste Farzeiger-Fehlinterpretation durch korrekte Tabellenposition widerlegt; ursprüngliche Reihenfolge des Packers bestätigt |
 | Untersuchung 2275 | Korrekte Farzeiger-Serialisierung in Hilfsfunktion gekapselt; Offset/Resource- und Relokationsregression ergänzt |
+| Untersuchung 2276 | Acht Prozessmethoden und ihre Eintrittspunkte statisch gegen Original-1.x-Code und Nachrichtenvertrag geprüft; Help-Nachricht 0C0Ah intern abgeglichen |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1921,3 +1922,67 @@ GitHub Actions Run `42608173374` auf Commit `1b350e06e6d72cef80b47e207920d62e855
 6. Die Anwendung ist noch nicht als startbar in GeoWorks 1.2 bestätigt.
 
 **Nächster Schritt 2276:** Den CI-Lauf des aktuellen Repository-HEAD abwarten und danach die acht Handler-Eintrittspunkte sowie den Nachrichtenvertrag gegen die Disassemblierungen der originalen BOUNCE.GEO- und SPINTEXT.GEO-Code-Ressourcen vergleichen. Erst wenn diese Prüfung keine offenen ABI-Widersprüche zeigt, den Starttest in einer gesicherten GeoWorks-1.2-Installation vorbereiten.
+
+
+## 37. Untersuchung 2276 – Statischer ABI-Abgleich der acht GEOTEST-Prozessmethoden
+
+Ziel: Nach der bestätigten Farzeigerstruktur die acht in GEOTEST.GEO eingetragenen Message-IDs und Handler-Einstiegspunkte gegen die Originalanwendungen BOUNCE.GEO und SPINTEXT.GEO sowie die im SDK verwendeten 1.x-Nachrichtenverträge prüfen.
+
+### 37.1 Referenzmethoden aus den Originaldateien
+
+Die Methodeinträge von BOUNCE.GEO und SPINTEXT.GEO wurden aus DGROUP-Ressource 1 gelesen. Die jeweilige Code-Ressource ist Ressource 2. Die Einträge belegen die Lifecycle-/UI-Nachrichten:
+- 0A01h – Open
+- 0A03h – Close
+- 0004h – Attach
+- 0057h – View closed
+- 0049h – Expose
+
+Die Originaldateien enthalten darüber hinaus anwendungsspezifische Nachrichten 0C00h, 0C01h und in SPINTEXT 0C02h. Diese Werte sind nicht als allgemeine API-Nachrichten zu behandeln.
+
+### 37.2 Weitere native Nachrichten
+
+Der technische Bericht zum 1.x-Prozessklassenvertrag ordnet 007Bh der Tastaturbehandlung und 00C3h dem Start-Select-Pfad zu. Er beschreibt außerdem 0C00h ff. ausdrücklich als anwendungsspezifische Nachrichtengruppe, nicht als universelle API. ObjCallSuperNoLock ist im Zielkernel als Ordinal 01E9h dokumentiert; DS:DI bezeichnet die ClassStruct, AX die Nachricht. Die Close-Methode liefert CX=0, um keinen späteren State-Block in ein altes State-Format zu schreiben.
+
+Diese Aussagen stützen die Auswahl der Message-IDs 007Bh und 00C3h im SDK. Die konkreten Registerübergaben bleiben zusätzlich anhand des jeweiligen Handlers und des tatsächlichen Laufzeitverhaltens zu prüfen.
+
+### 37.3 GEOTEST-Methodentabelle
+
+Die aktuelle GEOTEST-Datei enthält acht Einträge:
+
+| Index | Message-ID | Handler | Codeoffset |
+|---:|---:|---|---:|
+| 0 | 0A01h | native_open | 002Fh |
+| 1 | 0A03h | native_close | 0071h |
+| 2 | 0004h | native_attach | 0068h |
+| 3 | 0057h | native_view_closed | 0074h |
+| 4 | 0049h | native_expose | 0089h |
+| 5 | 00C3h | native_select | 00B1h |
+| 6 | 007Bh | native_key | 00ECh |
+| 7 | 0C0Ah | native_command | 0148h |
+
+Alle acht Codeoffsets liegen innerhalb der 1.397 Bytes großen Code-Ressource. Die Methodentabelle verwendet die aus Untersuchung 2274 bestätigte Reihenfolge Offset-WORD, Ressourcen-WORD; alle Ressourcenrelokationen zeigen auf das zweite WORD.
+
+### 37.4 Interner Abgleich des Help-Befehls
+
+Die native Help-Trigger-Konstruktion in pcgeos1/ui.py setzt die Aktionsnachricht 0C0Ah. Der Prozesshandler native_command in runtime/native.S vergleicht AX ebenfalls mit 0C0Ah und führt nur für diesen Wert den Help-Aufruf aus.
+
+Damit sind UI-Trigger und Prozesshandler auf denselben projektspezifischen Nachrichtenwert abgestimmt. Das bestätigt die interne Konsistenz der beiden SDK-Quellstellen. Ob der Nachrichtenempfänger und die konkrete UI-Interaktion im alten Laufzeitsystem korrekt sind, ist erst durch einen Starttest in GeoWorks 1.2 bewiesen.
+
+### 37.5 ABI-Grenzen
+
+- Die fünf Lifecycle-/View-Nachrichten werden durch die Originalanwendungen als native 1.x-Nachrichten belegt.
+- Die Tastatur- und Start-Select-Nachrichten werden durch den dokumentierten 1.x-Prozessklassenvertrag gestützt.
+- 0C0Ah ist eine private GEOTEST-Nachricht, die in UI-Trigger und Prozesshandler übereinstimmt; sie ist keine behauptete Standard-API.
+- Die Methoden werden statisch an gültigen Codeoffsets gefunden. Das beweist weder, dass jede Methode im Laufzeitpfad aufgerufen wird, noch dass alle Register- und Superclass-Konventionen zur Laufzeit korrekt sind.
+- Der native_open-Handler prüft CPU-Unterstützung und initialisiert den privaten Engine-Zustand; die Engine setzt 386+-Instruktionen voraus. Ein Lauf auf einem 8086/80286 ist nicht zugesichert.
+
+### 37.6 Ergebnis Untersuchung 2276
+
+1. Die acht GEOTEST-Handler sind in der Prozessmethodentabelle vorhanden und ihre Codeoffsets liegen innerhalb der Code-Ressource.
+2. Die Lifecycle-/View-Message-IDs stimmen mit den untersuchten 1.x-Referenzanwendungen überein.
+3. Tastatur 007Bh und Start Select 00C3h werden durch den dokumentierten 1.x-Prozessklassenvertrag gestützt.
+4. Die private Help-Nachricht 0C0Ah ist zwischen UI-Trigger und Prozesshandler konsistent.
+5. Die Farzeiger- und Relokationsstruktur entspricht den Originalvorlagen.
+6. Die vollständige Nachrichten-ABI und der tatsächliche Fenster-/Input-Lebenszyklus bleiben bis zum GeoWorks-1.2-Lauftest offen.
+
+**Nächster Schritt 2277:** Die vollständigen Methodenpfade von native_open, native_attach, native_view_closed und native_expose mit dem Originalkernel-Ordinal 01E9h und den Aufrufkonventionen abgleichen. Danach native_key und native_select einschließlich Rückgabewerten, Registererhalt und Superclass-Fallback prüfen. Die Laufzeitprüfung bleibt weiterhin zwingend.
