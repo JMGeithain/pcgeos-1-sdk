@@ -32,12 +32,12 @@ def _symbols(text):
 
 def build(project_path,gwp,build_dir=None,toolchain='auto'):
     cfg=load_project(project_path);root=cfg['_root'];sdk=Path(__file__).resolve().parents[1]
-    out=(Path(build_dir) if build_dir else root/'build').resolve();out.mkdir(parents=True,exist_ok=True)
-    tc=detect(toolchain);flags=flags_for(tc)+cfg.get('cflags',[])
     if cfg.get('allow_unknown_target') is True:
         raise ValueError('allow_unknown_target is no longer supported; select a named target_profile')
     profile=cfg.get('target_profile','geoworks-pro-1.2')
     templates=load_templates(gwp,profile=profile)
+    out=(Path(build_dir) if build_dir else root/'build').resolve();out.mkdir(parents=True,exist_ok=True)
+    tc=detect(toolchain);flags=flags_for(tc)+cfg.get('cflags',[])
     spin,spinq,_=templates['SPINTEXT.GEO']; viewer,viewerq,_=templates['VIEWER.GEO']
     help_path=root/cfg.get('help','src/help.txt');help_text=help_path.read_text(encoding='ascii') if help_path.exists() else cfg['long_name']
     ui3,ui4,uimap=build_basic_ui(resource_bytes(spin,spinq,3),resource_bytes(spin,spinq,4),
