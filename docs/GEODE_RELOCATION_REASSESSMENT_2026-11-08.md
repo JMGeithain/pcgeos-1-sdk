@@ -3882,3 +3882,68 @@ Im Pfad 0x9A7C–0x9A8F wird CX mit DS:060B verglichen. Nur bei Gleichheit wird 
 ### Korrektur zu Untersuchung 2243: Sonderzweig 0x9642 mit SI=FFFFh
 
 Die Beschreibung des Zweigs 0x9642 mit AX=0006h und SI=FFFFh wird präzisiert: 0x964A erkennt AX=6 und springt nach 0x965C. Dort führt der Vergleich SI=FFFFh direkt zum gemeinsamen Ausgang 0x966D. Der Zeichenketten-Kopierpfad ab 0x9667 wird in diesem Fall übersprungen. Daraus folgt keine Dereferenzierung von DS:FFFFh; die frühere Formulierung, dieser Bereich werde „gerade nicht kopiert“, war missverständlich und wird hiermit ersetzt. Die konkrete Wirkung des gemeinsamen Abschlusses 0x3D8 bleibt offen.
+
+
+## Untersuchung 2244 – Dispatch-Tabelle DS:30 und zwei verschiedene Verwendungen von 0049h
+
+### 1. Dispatch-Tabelle: tatsächlicher Aufbau des Aufrufwegs
+
+Die Routine 0x1F27 lädt zunächst das Kernel-Datensegment aus dem globalen Zeiger bei Segment 0E35h:0603h und ruft anschließend 0x1F41 auf.
+
+0x1F41 berechnet den Eintrag für den API-Index in AX:
+- AX wird zweimal nach links geschoben (Index × 4).
+- Der Wert DS:30 wird addiert.
+- Aus der resultierenden Adresse werden zwei WORDs gelesen: [BX] nach AX und [BX+2] nach BX.
+- Dieses WORD-Paar wird an 0x1F57 weitergereicht.
+
+Damit ist der Eintrag vier Byte groß und wird über DS:30 + API_Index*4 adressiert.
+
+### 2. Herkunft von DS:30
+
+DS:30 wird bei 0x1B45 aus zwei Feldern gebildet:
+- DS:34 wird verdoppelt;
+- DS:36 wird addiert;
+- das Ergebnis wird nach DS:30 geschrieben.
+
+Der Aufbau geschieht im Initialisierungspfad 0x19D3–0x19E0 nach 0x2652. Anschließend verwenden 0x1B6B und 0x1C76 DS:30 als Basis für weitere Tabellen-/Bereichsberechnungen. DS:30 ist damit kein fester Kernel-Codeoffset, sondern ein zur Laufzeit aus GEODE-Daten abgeleiteter Tabellenzeiger.
+
+Für API-Index 0049h liegt der Dispatch-Eintrag rechnerisch bei DS:30 + 0124h (49h × 4). Der konkrete Inhalt dieses Eintrags hängt vom zur Laufzeit aufgebauten Datensegment ab und kann aus dem vorliegenden linearen Code-Disassembly allein nicht bestimmt werden.
+
+### 3. Wrapper 0x0513: API-Index 0049h
+
+Der Wrapper 0x0513 setzt AX=0049h und springt über 0x050A in die Dispatch-Routine 0x1F27. 0x050A sichert BP und überträgt nach dem Dispatch den vom Handler in BP zurückgegebenen Wert nach BX. Damit ist für diesen Wrapper auch der Rückgabekanal sichtbar: Das Ergebnis des API-Handlers wird über BP an den Aufrufer als BX zurückgegeben.
+
+Im Initialisierungspfad 0x10156–0x1017F wird genau dieser Wrapper verwendet:
+- DS wird auf CS gesetzt;
+- BP wird auf null gesetzt;
+- der Far-Aufruf 0:0513 wird ausgeführt;
+- bei Erfolg wird BX in CS:0B91 gesichert;
+- anschließend wird 0x6FDF mit diesem Handle aufgerufen.
+
+Der Rückgabewert wird somit im konkreten Aufruf als Handle weiterverwendet. Der Name und die eigentliche Funktion des API-Handlers 0049h sind durch diese Beobachtung noch nicht identifiziert.
+
+### 4. Wichtige Abgrenzung: AX=0049h bei 0xCB2F ist kein API-Dispatch
+
+Eine zweite Fundstelle bei 0xCB2F setzt ebenfalls AX=0049h, ruft aber nicht 0x1F27 auf. Sie ruft 0x2C8E auf. Diese Routine setzt DI=4000h und ruft 0x2AD3 auf.
+
+Im Erzeugungspfad 0x2AD3 wird AX später als WORD in das neu angelegte Handle-Objekt bei +0Ch geschrieben (0x2BF6–0x2BF8). In diesem Aufruf ist 0049h also ein übergebener Datenwert bzw. Kennwert im Objekt, nicht der Index der Kernel-Dispatch-Tabelle.
+
+Diese Unterscheidung ist wichtig: Die gleiche Zahl 0049h erscheint in zwei verschiedenen Aufrufkonventionen. Nur 0x0513/0x1F27 verwendet sie als Dispatch-Index.
+
+### 5. Grenzen der externen Dokumentation
+
+Die online auffindbare FreeGEOS-Technikdokumentation beschreibt ausdrücklich das SDK 2.0. Sie ist deshalb kein Beleg für die symbolische Bedeutung des API-Index 0049h in GeoWorks 1.x. Die allgemeine PC/GEOS-Historienbeschreibung bestätigt nur die Existenz eines 16-Bit-Kernels mit aufrufbaren Systemroutinen, liefert aber keine Zuordnung dieses konkreten Indexes.
+
+### 6. Ergebnis / offene Punkte
+
+**Gesichert:**
+1. Die Dispatch-Tabelle besteht aus vier Byte großen Einträgen.
+2. Die Adresse des Eintrags wird als DS:30 + API_Index*4 berechnet.
+3. DS:30 wird zur Laufzeit aus DS:34 und DS:36 gebildet.
+4. Der Wrapper 0x0513 dispatcht API-Index 0049h und gibt den Handler-Rückgabewert aus BP in BX zurück.
+5. Im Initialisierungspfad wird dieser Rückgabewert als Handle gespeichert und anschließend über 0x6FDF verwendet.
+6. Die andere AX=0049h-Fundstelle bei 0xCB2F ist kein Dispatch-Aufruf, sondern speichert 0049h als Datenfeld +0Ch eines über 0x2AD3 angelegten Objekts.
+
+**Offen:** Der konkrete Inhalt des Laufzeit-Dispatch-Eintrags DS:30+0124h; der symbolische Name und die Funktion des API-Handlers 0049h; der konkrete Objekttyp des zurückgegebenen Handles; die Bedeutung des Datenkennwertes 0049h im separaten 0x2AD3-Pfad.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
