@@ -3713,3 +3713,48 @@ Die zuvor offene Frage nach dem Eintritt in 0x856C lässt sich weiter eingrenzen
 Vor diesem Aufruf dekrementiert der Pfad bei 0x916F den WORD-Wert DS:4. Nur wenn dessen neuer Wert nach AND 0007h gleich null ist, geht der Ablauf in den tieferen Abbaupfad bei 0x9192. Andernfalls kehrt er bereits bei 0x9191 zurück. Der konkrete Zweck dieses Zählers ist noch nicht identifiziert.
 
 Korrektur zur offenen Frage im vorherigen Abschnitt: 0x856C hat damit einen sichtbaren indirekten Aufrufpfad; nicht geklärt ist weiterhin, welche übergeordnete Operation den Dispatcher 0x9162 auswählt und welche Bedeutung der Zähler DS:4 besitzt.
+
+
+## Untersuchung 2241 – DS:060B als Handle und Korrektur der Bit-Zuordnung
+
+### 1. DS:060B wird als Handle verwendet
+
+Mehrere voneinander unabhängige Codepfade grenzen die Funktion des WORD-Wertes bei DS:060B ein:
+
+- Bei 0x10131 wird BX nach DS:060B geschrieben. Der Wert stammt aus dem vorangehenden Initialisierungspfad 0x10114–0x1012E.
+- 0x8842 lädt DS:060B nach BX und ruft 0x1F72 auf. 0x1F72 behandelt BX als Handle: Nach dem Kernel-Handlezugriff über 0x9630 wird DS aus [BX] geladen und anschließend der WORD-Wert DS:50 gelesen. Der Aufrufer vergleicht diesen zurückgegebenen Wert mit [BX+0E] des zuvor geladenen Handles.
+- Im Abbaupfad 0x9A7C–0x9A88 wird CX mit DS:060B verglichen. Bei Gleichheit wird DS:060B auf 0 gesetzt und danach 0x9642 mit AX=6 und SI=FFFFh aufgerufen.
+
+Damit ist die Einordnung als Handle deutlich besser belegt als eine bloße Vermutung: DS:060B wird in einem Handle-Zugriffspfad verwendet und im Abbau bedingt auf null gesetzt. Die Identität des referenzierten Objekts und der vollständige Erzeugungsweg bleiben offen.
+
+### 2. Weitere Lebenszyklus-Beobachtung
+
+0x95F1 liest DS:060B nach CX und übergibt den Wert über den Kernel-Aufruf 0x1F27 mit AX=0065h. 0x9694 lädt denselben Wert nach BX und bricht bei BX=0 aus dem nachfolgenden Pfad aus. Das bestätigt, dass der Wert auch in anderen Kernel-Funktionen als global verfügbarer Handle benutzt wird.
+
+### 3. Korrektur zur Bit-Zuordnung
+
+Die frühere Formulierung, 0x1BF2 setze das GEODE-Attributbit DS:3/80h, war ungenau und wird hiermit ausdrücklich korrigiert:
+
+- 0x1BF2 führt OR 80h auf BYTE PTR DS:2 aus und danach OR 40h ebenfalls auf DS:2.
+- Die an anderer Stelle untersuchte Prüfung des GEODE-Attributbits liest dagegen BYTE PTR DS:3 und testet Maske 80h.
+
+DS:2 und DS:3 sind unterschiedliche Bytes. Aus 0x1BF2 darf daher nicht abgeleitet werden, dass diese Routine das bei DS:3 geprüfte Attributbit setzt. Die tatsächliche Setzstelle für DS:3/80h ist mit diesem Befund noch nicht identifiziert.
+
+### 4. Dispatcher 0x9162: abgesicherte Einordnung
+
+Im Datenbereich ab 0x9107 befindet sich eine Folge von WORD-Werten, die auf Routinen im Bereich 0x914F–0x91E6 verweisen. Der Eintrag bei 0x9137 verweist auf 0x9162. Dort wird DI mit 0x856C geladen; der gemeinsame Ablauf endet für den betreffenden Zweig bei 0x91BB mit CALL DI.
+
+Das belegt den tabellengestützten indirekten Eintritt in den FAh-Abbaupfad. Welcher übergeordnete Aufrufer den Tabelleneintrag 0x9137 auswählt, ist weiterhin nicht nachgewiesen. Eine semantische Benennung der Tabelle wäre derzeit verfrüht.
+
+### 5. Zwischenstand
+
+**Gesichert:**
+1. DS:060B wird in Handle-Zugriffspfaden verwendet.
+2. Der Wert wird bei 0x10131 aus BX gespeichert.
+3. Ein Abbaupfad löscht ihn bei passendem Vergleich mit CX.
+4. 0x1BF2 setzt Bits 80h und 40h in DS:2, nicht in DS:3.
+5. Der Verweis auf 0x9162 liegt in einer Tabelle bei 0x9137 und führt indirekt zu 0x856C.
+
+**Offen:** Identität des durch DS:060B referenzierten Handles; Bedeutung der Tabelle ab 0x9107; Aufrufer und Auswahlkriterium des Eintrags 0x9137; tatsächliche Setzstelle des GEODE-Attributbits DS:3/80h.
+
+**Arbeitsregel:** Weiterhin keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
