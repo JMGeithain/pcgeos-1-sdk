@@ -112,6 +112,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2267 | Test-Gates und Selftest-Annahmen gegen das deutsche Zielprofil geprüft; Standard-Selftest scheitert erwartungsgemäß an strikten Referenzhashes |
 | Untersuchung 2268 | Zielprofil-Integrität geprüft: `allow_unknown_target` umgeht den Hashschutz vollständig; abgesicherter Profilvertrag erforderlich |
 | Untersuchung 2269 | Rückwärtskompatibles Zielprofil-Design festgelegt; Hashprüfung wird pro benanntem Profil statt per globalem Bypass ausgewählt |
+| Untersuchung 2270 | Explizite Hash-gepinnte Zielprofile im Buildsystem implementiert; Unit-Tests für Profilgrenzen ergänzt; Laufzeittest noch ausstehend |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1605,3 +1606,29 @@ Zusätzlich bleiben die profilunabhängigen Parser-/Relokationsregressionen und 
 6. Die vier deutschen Hashes aus Untersuchung 2262 sind die vorläufigen Profilwerte; sie werden vor Implementierung noch einmal gegen das Nutzerarchiv und die normalisierte ZIP-Kopie geprüft.
 
 **Nächster Schritt 2270:** Das Profilregister und die Prüfungen in `pcgeos1/target.py` implementieren, `buildsys.py` auf `target_profile` umstellen und `examples/geotest/project.json` aktualisieren. Dazu Unit-Tests für alle oben genannten Fehlerfälle ergänzen. Vor dem Commit muss der Testlauf mit dem echten deutschen Archiv bestanden sein; die unveränderte Standardhashliste ist als Regression zu sichern.
+
+
+## 31. Untersuchung 2270 – Implementierung expliziter, hashgeprüfter Zielprofile
+
+Die in Untersuchung 2269 festgelegte Profilarchitektur wurde im Repository umgesetzt.
+
+### 31.1 Änderungen
+
+- `pcgeos1/target.py`: Register mit `geoworks-pro-1.2` (Standard) und `geoworks-1.2.8-de` (experimentell) ergänzt. Beide Profile besitzen feste Hashlisten, GEOS-Format 1 und Kernelprotokoll 622.3. `load_templates()` löst eine benannte Profil-ID auf und prüft jeden Memberhash sowie Format und Kernelprotokoll.
+- `pcgeos1/buildsys.py`: Projektfeld `target_profile` wird ausgewertet und im Buildbericht ausgewiesen. Das frühere `allow_unknown_target=true` wird mit einer Fehlermeldung abgelehnt.
+- `examples/geotest/project.json`: Auswahl des deutschen Profils über `target_profile`; der globale Hash-Bypass ist entfernt.
+- `examples/geotest/README.md`: Buildanleitung erklärt die doppelte Prüfung durch Vorbereitungsskript und Builder.
+- `docs/TARGET_COMPATIBILITY.md`: Standard- und deutsches Profil sowie ihre Hashwerte dokumentiert.
+- `tests/test_target_profiles.py`: sieben Unit-Tests für gültiges Profil, falschen Hash, fehlendes/doppeltes Mitglied, unbekannte Profil-ID, falsches Kernelprotokoll und unveränderte Standardhashliste ergänzt.
+
+### 31.2 Sicherheits- und Kompatibilitätsverhalten
+
+Ein Projekt ohne `target_profile` verwendet weiterhin das bisherige strikte Standardprofil. Das deutsche Profil wird ausschließlich durch seine registrierte ID aktiviert. Die erwarteten Hashes können nicht aus der Projektdatei heraus überschrieben werden.
+
+Die vier Dateien werden vor dem Start des Compilers geprüft. Das deutsche Vorbereitungsprogramm prüft weiterhin die Originalpfade; die Build-Engine prüft unabhängig davon die normalisierten Archivmember erneut.
+
+### 31.3 Teststatus
+
+Die Tests wurden als Repository-Quellcode ergänzt. Ein vollständiger Lauf gegen einen byteidentischen Checkout des aktuellen Repository-HEAD und den echten deutschen Zielarchivsatz steht noch aus. Wegen der in Untersuchung 2266 festgestellten Abweichungen der vorhandenen lokalen Buildkopie wird kein bestandener Lauf behauptet.
+
+**Nächster Schritt 2271:** Die neue Profilimplementierung aus dem GitHub-HEAD in eine saubere Arbeitskopie übernehmen und `tests/test_target_profiles.py`, `tests/test_geode_alignment.py`, `pcgeos1 doctor` sowie die deutsche Profilvorbereitung ausführen. Erst nach bestandenen Tests den GEOTEST-Build aus dem aktuellen Repository-Stand starten.
