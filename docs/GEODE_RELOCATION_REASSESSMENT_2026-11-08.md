@@ -3333,3 +3333,115 @@ Damit ist die Prüfung als Schutz vor der Fehlinterpretation eines markierten Ha
 - Der Grenzwert F0 ist durch den Segment-/Marker-Unterschied technisch plausibel; ob alle Werte F0–FF reserviert sind, ist aus den bisher untersuchten Stellen allein nicht vollständig bewiesen.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2236 – F5h- und FAh-Datensatzlayouts
+
+Die Schreibstellen der Marker `F5h` und `FAh` wurden im unmittelbaren Aufruferkontext und in den zugehörigen Verbraucherpfaden untersucht. Die Befunde zeigen zwei verschiedene Kernelobjekt-Layouts. Eine gemeinsame symbolische Objektklasse ist nicht belegt.
+
+### 1. F5h – Datensatz aus dem Pfad 0x0A20 / 0x0B20
+
+Aufrufer `0x0A20`:
+
+```asm
+0A20  push ax,cx,dx,di,es
+0A25  mov  bx,0x10
+0A28  call 0x6DAC
+0A2B  call 0x0B20
+0A2E  jae  0x0A36
+0A30  call 0x6E2F
+```
+
+Die Routine `0x0B20` ruft zunächst `0x29DC` auf (Aufbau des lokalen Stack-/Parameterrahmens) und markiert dann den neuen Datensatz:
+
+```asm
+0B20  call 0x29DC
+0B23  mov  byte [bx+1],0xF5
+0B27  jcxz 0x0B4F
+0B29  mov  ah,[0x01A6]
+0B2D  and  ah,0x0F
+0B30  test cl,0x10
+0B38  mov  [bx],ah
+...
+0B66  push cx
+0B67  mov  [bx+2],di
+0B6A  mov  [bx+4],dl
+0B6D  push ds / pop es
+0B6F  lea  di,[bx+5]
+0B72  mov  cx,0x0B
+0B75  rep movsb
+```
+
+Beobachtungen:
+- Der Aufrufer fordert ausdrücklich einen 16-Byte-Handle-Datensatz an.
+- Das obere Byte des ersten WORDs wird `F5h`; das untere Byte wird später aus AH beschrieben.
+- Der Datensatz enthält ein WORD bei +2, ein Byte bei +4 und elf kopierte Bytes ab +5.
+- In diesem Pfad werden außerdem Prüfungen und Hilfsaufrufe ausgeführt (`0x0CC5`, `0x0B0E`, `0x0BD0`, `0x0A8E`, `0x0AB4`, `0x1752`, `0x0CAC`).
+
+Damit ist das Layout des F5-Datensatzes beschrieben. Seine genaue semantische Objektart ist mit den bisher verfolgten Aufrufern noch nicht zweifelsfrei festgelegt; eine Benennung als Datei-, Verzeichnis- oder GEODE-Objekt wäre voreilig.
+
+### 2. FAh – GEODE-bezogener Eintrag in einer globalen Liste
+
+Die Routine `0x8533` erzeugt einen anderen Datensatz:
+
+```asm
+8533  push ax,si,ds,bx
+8537  call 0x9630
+853A  mov  bx,es:[0]
+853F  call 0x6DAC
+8542  mov  byte [bx+1],0xFA
+8546  mov  si,bx
+8548  cli
+8549  xchg es:[0x4C],si
+854E  mov  [bx+4],si
+8551  sti
+...
+8560  mov  [bx+6],ax
+8563  pop ax
+8564  mov  [bx+2],ax
+```
+
+Gesichert ist:
+- Der Datensatz wird aus der Freiliste bezogen.
+- Das obere Byte des ersten WORDs erhält `FAh`.
+- Der Datensatz wird atomar (Interrupts gesperrt) in die globale verkettete Liste am Kernel-/GEODE-Feld `ES:004C` eingehängt.
+- Offset +4 enthält den bisherigen Listenanfang.
+- Offset +2 erhält den übergebenen AX-Wert.
+- Offset +6 erhält einen aus dem bisherigen Listenzustand berechneten Wert.
+
+Der typische Aufrufer `0x850C` ruft `0x8533` auf, nachdem er den WORD-Wert aus dem GEODE-Datenblock bei Offset `0x4A` gelesen hat. Dieser Wert wird dadurch im neuen Listeneintrag bei +2 abgelegt.
+
+### 3. Verbraucher des FAh-Eintrags
+
+`0x85B1` und seine Aufrufer untersuchen die Liste ab `ES:004C`. Dabei:
+
+- wird der Owner-Handle über Offset +8 des übergebenen Handles geholt;
+- wird dessen Segment aus dem ersten WORD gelesen;
+- wird ein GEODE-Attributbyte bei Segmentoffset +3 auf Bit `0x80` geprüft;
+- wird die verkettete Liste über Eintragsoffset +4 durchlaufen;
+- wird der gesuchte Handle mit dem WORD bei Eintragsoffset +2 verglichen.
+
+Das belegt eine GEODE-bezogene globale Liste und eine Suche nach einem darin gespeicherten Handle-/Kennwert. Die genaue fachliche Funktion des Listeneintrags ist noch nicht vollständig bewiesen.
+
+### 4. F5h und FAh sind nicht dieselbe Objektklasse
+
+Die Unterschiede sind konkret:
+
+| Merkmal | F5h | FAh |
+|---|---|---|
+| Erzeugender Pfad | `0x0A20/0x0B20` | `0x8533` |
+| Datensatzgröße beim Anfordern | 16 Byte | über `0x6DAC` |
+| Feld +2 | WORD aus DI | WORD aus AX |
+| Feld +4 | Byte aus DL | Listenrückverweis |
+| weitere Daten | elf Bytes ab +5 | Verknüpfungs-/Zählerfeld +6 |
+| erkennbare Einbettung | Parameter-/Namensdatenpfad | globale GEODE-bezogene Liste |
+
+Die identische Position des Markers im oberen Byte des ersten WORDs bedeutet nicht, dass die beiden Datensatztypen funktional verwandt sind.
+
+### 5. Ergebnis und offene Punkte
+
+**Gesichert:** F5h und FAh markieren zwei unterschiedliche Handle-Datensatzlayouts. F5h gehört zu einem 16-Byte-Datensatz mit kopierten elf Bytes ab +5. FAh gehört zu einer global verketteten Liste, deren Einträge über +4 verbunden sind und deren +2-Feld im Verbraucherpfad mit einem gesuchten Wert verglichen wird.
+
+**Offen:** die vollständige Semantik des F5-Objekts; die fachliche Funktion der FA-Liste und des Wertes bei GEODE-Offset +4A; die genaue Rolle des +6-Feldes.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
