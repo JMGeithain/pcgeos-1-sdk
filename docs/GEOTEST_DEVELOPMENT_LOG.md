@@ -1614,12 +1614,12 @@ Die in Untersuchung 2269 festgelegte Profilarchitektur wurde im Repository umges
 
 ### 31.1 Änderungen
 
-- `pcgeos1/target.py`: Register mit `geoworks-pro-1.2` (Standard) und `geoworks-1.2.8-de` (experimentell) ergänzt. Beide Profile besitzen feste Hashlisten, GEOS-Format 1 und Kernelprotokoll 622.3. `load_templates()` löst eine benannte Profil-ID auf und prüft jeden Memberhash sowie Format und Kernelprotokoll.
+- `pcgeos1/target.py`: Register mit `geoworks-pro-1.2` (Standard) und `geoworks-1.2.8-de` (experimentell) ergänzt. Beide Profile besitzen feste Hashlisten, GEOS-Format 1, Kernelprotokoll 622.3 und genau einen UI-Import mit Protokoll 693.0. `load_templates()` löst eine benannte Profil-ID auf und prüft jeden Memberhash sowie Format, Kernelprotokoll und genau einen UI-Import mit Protokoll 693.0.
 - `pcgeos1/buildsys.py`: Projektfeld `target_profile` wird ausgewertet und im Buildbericht ausgewiesen. Das frühere `allow_unknown_target=true` wird mit einer Fehlermeldung abgelehnt.
 - `examples/geotest/project.json`: Auswahl des deutschen Profils über `target_profile`; der globale Hash-Bypass ist entfernt.
 - `examples/geotest/README.md`: Buildanleitung erklärt die doppelte Prüfung durch Vorbereitungsskript und Builder.
 - `docs/TARGET_COMPATIBILITY.md`: Standard- und deutsches Profil sowie ihre Hashwerte dokumentiert.
-- `tests/test_target_profiles.py`: sieben Unit-Tests für gültiges Profil, falschen Hash, fehlendes/doppeltes Mitglied, unbekannte Profil-ID, falsches Kernelprotokoll und unveränderte Standardhashliste ergänzt.
+- `tests/test_target_profiles.py`: acht Unit-Tests für gültiges Profil, falschen Hash, fehlendes/doppeltes Mitglied, unbekannte Profil-ID, falsches Kernelprotokoll, falsches UI-Protokoll und unveränderte Standardhashliste ergänzt.
 
 ### 31.2 Sicherheits- und Kompatibilitätsverhalten
 
@@ -1629,6 +1629,6 @@ Die vier Dateien werden vor dem Start des Compilers geprüft. Das deutsche Vorbe
 
 ### 31.3 Teststatus
 
-Die Tests wurden als Repository-Quellcode ergänzt. Ein vollständiger Lauf gegen einen byteidentischen Checkout des aktuellen Repository-HEAD und den echten deutschen Zielarchivsatz steht noch aus. Wegen der in Untersuchung 2266 festgestellten Abweichungen der vorhandenen lokalen Buildkopie wird kein bestandener Lauf behauptet.
+Die acht Profiltests wurden zusätzlich in einer isolierten Testumgebung mit der exakt aus GitHub abgerufenen `target.py`- und Testdatei ausgeführt; alle acht Tests bestanden. Der GEODE-Parser wurde dabei bewusst gemockt, sodass dieser Lauf nur die Profilauflösung, Hash-/Member-Gates und Protokollkontrollen abdeckt. Ein vollständiger Lauf gegen einen byteidentischen Checkout des gesamten Repository-HEAD und den echten deutschen Zielarchivsatz steht noch aus. Wegen der in Untersuchung 2266 festgestellten Abweichungen der vorhandenen lokalen Buildkopie wird kein bestandener Lauf behauptet.
 
 **Nächster Schritt 2271:** Die neue Profilimplementierung aus dem GitHub-HEAD in eine saubere Arbeitskopie übernehmen und `tests/test_target_profiles.py`, `tests/test_geode_alignment.py`, `pcgeos1 doctor` sowie die deutsche Profilvorbereitung ausführen. Erst nach bestandenen Tests den GEOTEST-Build aus dem aktuellen Repository-Stand starten.
