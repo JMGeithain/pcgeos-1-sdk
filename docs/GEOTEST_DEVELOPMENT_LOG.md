@@ -3,7 +3,7 @@
 **Projekt:** erste ausführbare Testanwendung für GeoWorks 1.2 / PC/GEOS 1.x  
 **SDK:** `JMGeithain/pcgeos-1-sdk`, Zweig `main`, SDK 0.1  
 **Protokollstand:** 2026-11-09  
-**Status:** Statische Analyse und Build-Vorbereitung; `GEOTEST.GEO` ist noch nicht erfolgreich kompiliert oder zur Laufzeit getestet.
+**Status:** Erster experimenteller Host-Build von `GEOTEST.GEO` erzeugt und strukturell geprüft (Untersuchung 2264); Reproduzierbarkeit aus GitHub-HEAD noch nicht bestätigt (Untersuchung 2266); echter Laufzeittest in GeoWorks 1.2 steht aus.
 
 ## 1. Verbindliche Projektgrenzen
 
@@ -1629,6 +1629,6 @@ Die vier Dateien werden vor dem Start des Compilers geprüft. Das deutsche Vorbe
 
 ### 31.3 Teststatus
 
-Die acht Profiltests wurden zusätzlich in einer isolierten Testumgebung mit der exakt aus GitHub abgerufenen `target.py`- und Testdatei ausgeführt; alle acht Tests bestanden. Der GEODE-Parser wurde dabei bewusst gemockt, sodass dieser Lauf nur die Profilauflösung, Hash-/Member-Gates und Protokollkontrollen abdeckt. Ein vollständiger Lauf gegen einen byteidentischen Checkout des gesamten Repository-HEAD und den echten deutschen Zielarchivsatz steht noch aus. Wegen der in Untersuchung 2266 festgestellten Abweichungen der vorhandenen lokalen Buildkopie wird kein bestandener Lauf behauptet.
+Die acht Profiltests wurden in einer isolierten Testumgebung mit der exakt aus GitHub abgerufenen `target.py`- und Testdatei ausgeführt; alle acht Tests bestanden. Für diesen Unit-Testlauf wurde der GEODE-Parser bewusst gemockt, sodass er die Profilauflösung, Hash-/Member-Gates und Fehlerreaktionen isoliert prüft. Zusätzlich wurde die exakte GitHub-Fassung von `geode.py` in derselben Umgebung eingesetzt: Der reale normalisierte deutsche Archivsatz wurde mit dem echten Parser erfolgreich als GEOS-Format 1 mit Kernel 622.3 und genau einem UI-Import 693.0 je Datei durch das Profil `geoworks-1.2.8-de` geladen. Ein vollständiger Build aus einem byteidentischen Checkout des gesamten Repository-HEAD steht noch aus. Wegen der in Untersuchung 2266 festgestellten Abweichungen der vorhandenen lokalen Buildkopie wird kein bestandener Lauf behauptet.
 
 **Nächster Schritt 2271:** Die neue Profilimplementierung aus dem GitHub-HEAD in eine saubere Arbeitskopie übernehmen und `tests/test_target_profiles.py`, `tests/test_geode_alignment.py`, `pcgeos1 doctor` sowie die deutsche Profilvorbereitung ausführen. Erst nach bestandenen Tests den GEOTEST-Build aus dem aktuellen Repository-Stand starten.
