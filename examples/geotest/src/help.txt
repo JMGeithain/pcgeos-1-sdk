@@ -1,0 +1,5 @@
+GEOTEST
+
+Minimal GeoWorks 1.x SDK test application.
+
+Click the view or press Enter to exercise an application callback.
