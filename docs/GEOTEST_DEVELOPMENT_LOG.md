@@ -625,3 +625,81 @@ Damit werden genau die elf Bytes `DS:SI` bis `DS:SI+0Ah` nach `ES:(BX+5)` bis `E
 5. Die getrennten Adressbereiche `0B20h` und `10B20h` dürfen nicht vermischt werden.
 
 **Nächster Schritt 2256:** Den Pfad `0BD0h` im CX=0-Zweig von `0B20h` und im Erneuerungspfad von `72Bh` vergleichen. Dabei die Bedeutung der Statusbits `20h` und `40h`, die Rückgaberegister und die Übergabe an `0A3Ch` untersuchen.
+
+
+## 17. Untersuchung 2256 – Status- und Konfigurationspfad `0BD0h`
+
+**Ziel:** Den in Untersuchung 2255 ermittelten CX=0-Zweig von `0B20h` sowie den Aufruf von `0BD0h` aus der Cache-/Erneuerungsroutine `72Bh` vergleichen. Die Untersuchung bleibt bei belegten Register- und Speicheroperationen; die symbolische Bedeutung der Statusbits ist nicht aus den Offsets allein ableitbar.
+
+### 17.1 Eingang und Statusentscheidung
+
+`0BD0h` sichert AX, ES und DS und ruft `0CC5h` auf. `CC5h` interpretiert AL als Index in der Tabelle ab `0E35h:021Ch`, liefert das erste Datensatzbyte in AH und setzt Carry, wenn der Index ungültig ist oder Bit `80h` des Statusbytes fehlt.
+
+Anschließend prüft `0BD0h` Bit `20h` in AH:
+
+- **Bit `20h` gesetzt:** Es folgt `0CA5h`; CX wird auf 3, DX und DI auf null gesetzt. Das untere Nibble von AH wird geprüft. Bei Wert 4 wird CX auf 2 reduziert. Der Kontrollfluss springt anschließend in die gemeinsame Ergebnisaufbereitung ab `0C49h).
+- **Bit `20h` nicht gesetzt:** CX wird null gesetzt und `0A3Ch` aufgerufen. Bei Erfolg wird CL-Bit `10h` gesetzt. Bei Fehler wird erneut `CC5h` aufgerufen und Bit `40h` von AH ausgewertet; abhängig davon wird die Schleife wiederholt oder mit Carry beendet.
+
+**Gesichert:** Bit `20h` entscheidet zwischen einem direkten Statuspfad und einem Pfad, der zusätzliche Daten über `0A3Ch` einliest. Die genaue fachliche Bezeichnung dieses Bits bleibt offen.
+
+### 17.2 Datenquelle von `0A3Ch`
+
+Die Routine `0A3Ch`:
+1. ruft `0CA5h` auf;
+2. übernimmt DS nach ES;
+3. lädt mit `LDS SI,[0192h]` einen Far-Zeiger aus dem Kernel-Datensegment;
+4. ruft `06C6h` mit CS als zusätzlichem Segmentkontext auf;
+5. liest bei erfolgreichem Rücklauf Daten relativ zu SI:
+   - Byte `[SI+15h]` nach `[01A6h]`,
+   - Wort `[SI+18h]` nach `[01A7h]`,
+   - Wort `[SI+1Ah]` nach `[01A9h]`;
+6. verlässt den geschützten Pfad über `0CAC h` und stellt ES/AX wieder her.
+
+**Gesichert:** `0A3Ch` liest drei Felder aus einer über `[0192h]` referenzierten Struktur und übernimmt sie in globale Kernel-Datenfelder. Die Feldbedeutungen sind noch nicht bestimmt.
+
+### 17.3 Gemeinsame Ergebnisaufbereitung
+
+Im Pfad ab `0C1Bh` werden abhängig vom SI-Datensatz entweder Werte aus `[SI+03h]` und `[SI+05h]` übernommen oder – bei einem Marker `29h` an `[SI+26h]` – Werte aus `[SI+27h]` und `[SI+29h]`. Wenn `[SI+07h]` nicht `FFh` ist, wird zuvor `57Ah` aufgerufen; anschließend werden die beiden Werte aktualisiert und `[SI+07h]` auf `FFh` gesetzt.
+
+Danach:
+- CL erhält Bit `02h`;
+- DX wird auf seine unteren zwei Bits maskiert;
+- `0A6Ah` wird mit den aktuellen Registern aufgerufen;
+- bei Erfolg werden weitere Statusbits in CL und DL gesetzt;
+- AL wird dreimal nach links geschoben und mit DL verknüpft.
+
+Bei einem Fehlerpfad wird abhängig von CL-Bit `10h` entweder direkt zurückgekehrt oder `0B87h` als zusätzlicher Prüfschritt aufgerufen.
+
+**Gesichert:** Die Routine bildet aus Statusbyte, Tabellen-/Strukturfeldern und Rückgaben weiterer Kernelhelfer einen kombinierten Ergebniszustand in AL, CL und DL. Ohne Kenntnis der referenzierten Laufzeitdaten ist eine weitergehende semantische Benennung nicht belastbar.
+
+### 17.4 Wrapper `0C97h`, `0C9Eh`, `0CA5h), `0CAC h`, `0CB3h`, `0CBAh`
+
+Diese kurzen Routinen sichern BX, laden jeweils eine Konstante in BX und springen in gemeinsame Kernelpfade:
+
+| Wrapper | BX-Konstante | Ziel |
+|---|---:|---:|
+| `0C97h` | `0186h` | `971Dh` |
+| `0C9Eh` | `0186h` | `9754h` |
+| `0CA5h` | `018Eh` | `9776h` |
+| `0CAC h` | `018Eh` | `978Ch` |
+| `0CB3h` | `0196h` | `971Dh` |
+| `0CBAh` | `0196h` | `9754h` |
+
+Die Konstanten und Sprungziele sind unmittelbar im Code belegt. Ob die Paare jeweils Eintritt/Austritt, Sperre/Freigabe oder andere Kerneloperationen darstellen, ist ohne Analyse der gemeinsamen Ziele `971Dh`, `9754h`, `9776h` und `978Ch` noch nicht abschließend geklärt.
+
+### 17.5 Verbindung zum 11-Byte-Datensatz
+
+Die Routine `0B20h` ruft `0BD0h` nur im Zweig auf, in dem CX bei Eintritt in `0B20h` null ist. Bei erfolgreichem Rücklauf springt sie zurück in den Statusaufbau ab `0B29h`; bei gesetztem Carry wird der Fehlerpfad bei `0B83h` erreicht. Der andere Aufruf aus `72Bh` liegt im Erneuerungspfad eines indexbezogenen Zeigereintrags.
+
+**Gesichert:** `0BD0h` ist eine gemeinsam genutzte Status-/Konfigurationsroutine in zwei verschiedenen Kontrollflusskontexten. Ihre Ergebnisse beeinflussen sowohl die Anlage des 16-Byte-Blocks durch `0B20h` als auch die Erneuerung des indexbezogenen Zeigers aus `72Bh`.
+
+### 17.6 Ergebnis Untersuchung 2256
+
+1. `0BD0h` beginnt mit einer Index-/Statusprüfung über `0CC5h`.
+2. AH-Bit `20h` entscheidet zwischen einem direkten Pfad und dem zusätzlichen Datenzugriff über `0A3Ch`.
+3. `0A3Ch` liest aus der durch `[0192h]` referenzierten Struktur Byte `+15h`, Wort `+18h` und Wort `+1Ah).
+4. Die Routine kombiniert anschließend Status- und Strukturwerte in AL, CL und DL.
+5. `0B20h` nutzt `0BD0h` als Vorprüfung, bevor es den 16-Byte-Block weiter aufbaut.
+6. Die symbolischen Bedeutungen der Statusbits und der externen Strukturfelder bleiben offen.
+
+**Nächster Schritt 2257:** Die gemeinsamen Zielroutinen `971Dh`, `9754h`, `9776h` und `978Ch` untersuchen. Damit soll geklärt werden, welche Kerneloperationen die Wrapper-Konstanten `0186h`, `018Eh` und `0196h` tatsächlich auswählen.
