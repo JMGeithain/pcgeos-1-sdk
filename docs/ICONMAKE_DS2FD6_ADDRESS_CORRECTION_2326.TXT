@@ -1,0 +1,45 @@
+ICONMAKE DS:2FD6 — ADDRESS LABEL CORRECTION TO INVESTIGATION 2325
+Investigation 2326
+Date: 2026-11-09
+
+Correction
+----------
+Investigation 2325 listed some displacement-byte offsets as though they
+were instruction-start offsets. The raw scan found the byte sequence D6 2F
+at the following load-module offsets. These are the displacement field
+positions, not instruction starts:
+
+Displacement offset  Instruction start  File instruction start
+0x18F9              0x18F6             0x1AF6
+0x1914              0x1912             0x1B12
+0x1BA5              0x1BA2             0x1DA2
+0x1CE6              0x1CE4             0x1EE4
+0x1CF2              0x1CF0             0x1EF0
+
+The instruction bytes and decoded operations are:
+- 0x18F6: 88 87 D6 2F — MOV byte [BX+2FD6],AL
+- 0x1912: 88 9F D6 2F — MOV byte [BX+2FD6],BL
+- 0x1BA2: 8A 87 D6 2F — MOV AL,byte [BX+2FD6]
+- 0x1CE4: 8A 87 D6 2F — MOV AL,byte [BX+2FD6]
+- 0x1CF0: 8A 87 D6 2F — MOV AL,byte [BX+2FD6]
+
+The second store loop is therefore:
+  1910  2B DB             SUB BX,BX
+  1912  88 9F D6 2F       MOV [BX+2FD6],BL
+  1916  43                INC BX
+  1917  83 FB 10          CMP BX,10h
+  191A  7C F6             JL 1912
+
+This confirms a zero-fill of 16 bytes at DS:2FD6 through DS:2FE5.
+The first store instruction starts at 0x18F6, not 0x18F9; 0x18F9 is
+where its displacement begins.
+
+This correction is an address-label clarification; it does not change
+the conclusions that there are two actual stores and three actual reads.
+The first store loop's semantics and the source of its AL values remain
+unresolved.
+
+Integrity
+---------
+Read-only reinspection of original ICONMAKE.EXE. No original files,
+GEO files, or TOKEN.DB were modified. GeoWorks 1.x only.
