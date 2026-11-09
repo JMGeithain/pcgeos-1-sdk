@@ -3758,3 +3758,61 @@ Das belegt den tabellengestützten indirekten Eintritt in den FAh-Abbaupfad. Wel
 **Offen:** Identität des durch DS:060B referenzierten Handles; Bedeutung der Tabelle ab 0x9107; Aufrufer und Auswahlkriterium des Eintrags 0x9137; tatsächliche Setzstelle des GEODE-Attributbits DS:3/80h.
 
 **Arbeitsregel:** Weiterhin keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
+
+
+## Untersuchung 2242 – Herkunft von DS:060B und Grenzen der Handle-Identifikation
+
+### 1. Herkunft des Wertes: Initialisierung bei 0x10114
+
+Der Code bei 0x10114 führt zunächst 0x10156 aus. Diese Routine:
+
+1. setzt das temporäre Wort CS:0B91 auf null;
+2. setzt DS auf CS und BP auf null;
+3. ruft den weitreichenden Einstieg 0000:0513 auf;
+4. speichert bei Erfolg BX nach CS:0B91;
+5. ruft 0x6FDF auf und übernimmt dessen AX-Ergebnis als DS.
+
+Der Einstieg 0x0513 ist im Kernel ein Wrapper, der AX=0049h in die Kernel-Aufrufvermittlung 0x1F27 gibt. Die genaue symbolische API-Bezeichnung des Index 49h ist mit den hier vorliegenden Belegen noch nicht gesichert. Deshalb wird die Funktion nicht als MemAlloc oder als eine andere konkrete API benannt.
+
+Wenn der erste Versuch fehlschlägt, versucht 0x10114 einen zweiten Pfad über 0x1014B. Nach Erfolg schreibt 0x10131 BX nach DS:060B. Anschließend wird 0x1019C aufgerufen, das den temporären Handle aus CS:0B91 über 0x6EE4 freigibt und CS:0B91 auf null setzt.
+
+### 2. Bedeutung von 0x6FDF
+
+0x6FDF ruft 0x6FA4 auf und kehrt als Far-Routine zurück. 0x6FA4 prüft den Handle in BX, lädt den Kernel-Datensegmentbezug und erhöht bei gültigem, nichtleerem Handle das Byte [BX+0B]. Das ist der im Kernel an mehreren Stellen verwendete Handle-Lock-/Referenzzählerpfad. AX wird aus [BX] gelesen und damit als Segmentwert zurückgegeben.
+
+Damit ist die Abfolge im Initialisierungspfad konkret:
+- BX wird durch Kernel-Aufruf 49h geliefert;
+- 0x6FDF sperrt/aktiviert den Handlezugriff und liefert dessen Segment in AX;
+- 0x10131 speichert BX als globalen Wert DS:060B;
+- der temporäre Handle CS:0B91 wird danach freigegeben.
+
+Die Identität des Objekts, das der Handle bezeichnet, ist weiterhin nicht geklärt. Insbesondere ist nicht bewiesen, dass es sich um einen GEODE-Handle handelt; die Handle-Tabelle kann auch andere Blocktypen enthalten.
+
+### 3. Weitere Verwendungen von DS:060B
+
+- 0x8841 verwendet DS:060B als Handle, ruft 0x1F72 auf und vergleicht den aus dem Handle-Block bei +50 gelesenen WORD-Wert mit [BX+0E].
+- 0x95F1 lädt DS:060B nach CX und übergibt es an den Kernel-Aufruf 65h.
+- 0x9694 lädt DS:060B nach BX; bei null wird der folgende Pfad übersprungen.
+- 0x99BE vergleicht den Handleinhalt eines aktuellen Blocks mit DS:060B und verzweigt bei Gleichheit über 0x240.
+- 0x9A7C vergleicht CX mit DS:060B. Bei Gleichheit wird DS:060B auf null gesetzt und anschließend 0x9642 mit AX=6 und SI=FFFFh aufgerufen.
+- 0x1D76 liest ES:060B, dereferenziert diesen Handle und liest aus dessen Segment den WORD-Wert bei +50.
+
+Die verschiedenen Verwendungsstellen bestätigen den Handle-Charakter und die Bedeutung des Feldes +50 für den Vergleich. Sie reichen jedoch nicht aus, um das referenzierte Objekt fachlich zu benennen.
+
+### 4. Einordnung der externen historischen Dokumentation
+
+Der Entwurf „PC/GEOS System Software Overview“ vom 10. November 1990 beschreibt Handles als 16-Bit-Referenzen auf Einträge der Handle-Tabelle und nennt verschiedene Arten von Handle-Objekten. Das stützt die methodische Vorsicht: Ein Handle allein identifiziert noch nicht den Typ des referenzierten Objekts. Die Dokumentation belegt jedoch nicht die Bedeutung des konkreten Kernel-Feldes DS:060B oder des API-Index 49h.
+
+Quelle: PC/GEOS System Software Overview, Draft 10 Nov 1990, Suchtreffer/Scan unter lyonlabs.org (Abschnitt „Blocks and Handles“).
+
+### 5. Ergebnis und offene Punkte
+
+**Gesichert:**
+1. DS:060B wird mit einem von Kernel-Aufruf 49h gelieferten Handle beschrieben.
+2. Der Handle wird vor dem Speichern über 0x6FDF validiert/gelockt; der Handle-Lockpfad erhöht [BX+0B] und liefert das Segment.
+3. Der temporäre Handle CS:0B91 wird danach über 0x6EE4 freigegeben.
+4. Der konkrete Inhalt bei Segmentoffset +50 wird in mehreren Pfaden als Vergleichswert verwendet.
+
+**Nicht gesichert:** Symbolischer Name von Kernel-Aufruf 49h; Typ und fachliche Identität des Objekts; ob DS:060B globaler Systemzustand, ein spezieller Kernelblock oder ein GEODE-bezogener Block ist; genauer Zweck des Aufrufs 0x9642 mit AX=6.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
