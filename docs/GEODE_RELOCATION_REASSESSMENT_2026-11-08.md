@@ -3816,3 +3816,64 @@ Quelle: PC/GEOS System Software Overview, Draft 10 Nov 1990, Suchtreffer/Scan un
 **Nicht gesichert:** Symbolischer Name von Kernel-Aufruf 49h; Typ und fachliche Identität des Objekts; ob DS:060B globaler Systemzustand, ein spezieller Kernelblock oder ein GEODE-bezogener Block ist; genauer Zweck des Aufrufs 0x9642 mit AX=6.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
+
+
+## Untersuchung 2243 – Datenfluss von DS:060B in neue Objekte und Abbauzustand
+
+### 1. Der Datenfluss bei 0x1D76–0x1D86
+
+Im Erzeugungspfad 0x1D51–0x1D9A wird ein Handle über 0x6E87 angelegt. Wenn CH-Bit 04h gesetzt ist, wird zunächst AX=FFFFh vorbereitet. Wenn zusätzlich CH-Bit 10h gesetzt ist, geschieht Folgendes:
+
+- 0x1D76 lädt den globalen Handle ES:060B nach BX.
+- 0x1D7B dereferenziert den Handle und setzt ES auf das Segment des referenzierten Blocks.
+- 0x1D7E liest das WORD bei ES:0050h.
+- 0x1D82 ruft 0x9636 auf, das ES wieder auf das Kernel-Datensegment setzt.
+- 0x1D86 schreibt den gelesenen WORD-Wert nach ES:[BX+0Eh] in das gerade erzeugte Objekt.
+
+Das ist ein nachgewiesener Datenfluss aus dem Block hinter DS:060B in das Feld +0E eines neu angelegten Objekts. Der Wert bei +50h ist damit ein vom Erzeugungspfad weitergereichter Kennwert. Ob es sich um eine ID, einen Index, einen Handle oder einen anderen Schlüssel handelt, bleibt offen.
+
+### 2. Der Kernel-Aufruf 0049h: Wrapper und Dispatch
+
+Der Far-Einstieg 0x0513 führt nicht selbst die eigentliche Operation aus:
+- 0x0513 sichert AX, setzt AX=0049h und springt nach 0x050A.
+- 0x050A sichert BP, ruft 0x1F27 auf und stellt danach BX aus BP wieder her.
+- 0x1F27 lädt das Kernel-Datensegment und ruft 0x1F41 auf.
+- 0x1F41 berechnet den Tabelleneintrag als DS:[DS:30 + AX*4] und liest daraus ein WORD-Paar.
+
+Der eigentliche Handler für API-Index 0049h steht daher in der über DS:30 adressierten Dispatch-Tabelle. Die Tabelle ist zur Laufzeit im Kernel-Datensegment verankert; ihr konkreter Eintrag konnte aus der hier betrachteten statischen Disassemblierung allein noch nicht sicher symbolisch benannt werden.
+
+Wichtig: Die zuvor verwendete Bezeichnung „Kernel-Aufruf 49h liefert einen Handle“ beschreibt nur den beobachteten Rückgabewert in BX. Sie identifiziert nicht die Funktion des API-Handlers.
+
+### 3. Der Vergleich in 0x99BE und die Folgeoperationen
+
+Im Pfad 0x9998–0x9A92 wird zunächst das aktuelle Handle aus SS:04 nach ES geladen. Der Code prüft das Attributbit ES:3/80h. Bei gesetztem Bit vergleicht er:
+- DS:FB8 mit ES:50h;
+- anschließend ES:0 mit DS:060B.
+
+Bei Gleichheit wird 0x240 aufgerufen. Diese Routine prüft DS:46/08h und arbeitet dann zwei Handle-Verweise im GEODE-Datenblock ab (ES:C6h und ES:80h), jeweils über die Hilfsroutinen 0x7A8 und 0x893. Der Code belegt damit eine zusätzliche Bereinigungs-/Verwaltungsoperation, aber noch nicht deren genaue fachliche Bezeichnung.
+
+Danach ruft der Pfad 0x288A auf. Diese Routine:
+- dekrementiert den WORD-Zähler ES:26;
+- untersucht den Handle bei ES:42;
+- prüft beim zugehörigen Block das Attributbit DS:3/80h;
+- vermindert DS:05F7;
+- löscht anschließend das Attributbit mit AND 7Fh im GEODE-Block.
+
+Die Prüfung und das Löschen des Bits gehören somit zu einem konkreten Abbaupfad. Die genaue Bedeutung des Bits und die Semantik der Zähler ES:26 und DS:05F7 sind weiterhin offen.
+
+### 4. Einordnung des Abbaus von DS:060B
+
+Im Pfad 0x9A7C–0x9A8F wird CX mit DS:060B verglichen. Nur bei Gleichheit wird DS:060B auf null gesetzt und 0x9642 mit AX=6 sowie SI=FFFFh aufgerufen. 0x9642 verzweigt abhängig von AX; bei AX=6 gelangt der Ablauf in den Zweig 0x964A–0x966D. Dieser setzt einen Kernel-Kontext um und kann bei SI=FFFFh die Zeichenkette bei DS:FFFFh gerade nicht kopieren; stattdessen erfolgt der gemeinsame Abschluss über 0x3D8. Die genaue Wirkung des AX=6-Aufrufs bleibt daher gesondert zu untersuchen.
+
+### 5. Ergebnis / offene Punkte
+
+**Gesichert:**
+1. Der Inhalt des Blocks hinter DS:060B bei +50h wird unter einer bestimmten CH-Bit-Kombination in das Feld +0Eh eines neu angelegten Objekts kopiert.
+2. API-Index 0049h wird über die allgemeine Dispatch-Tabelle bei DS:30 aufgelöst; 0x0513 ist nur der Wrapper.
+3. Der Pfad 0x99BE vergleicht das aktuelle GEODE-Handle mit DS:060B und kann danach 0x240 aufrufen.
+4. 0x240 arbeitet zwei Handle-Verweise im GEODE-Block ab.
+5. 0x288A dekrementiert zwei Verwaltungszähler und löscht GEODE-Attributbit 80h.
+
+**Offen:** Der konkrete Handler für API 0049h; die Semantik des Wertes bei Blockoffset +50h; die Bedeutung des Feldes +0Eh im neu erzeugten Objekt; die fachliche Rolle von 0x240; die Namen und Bedeutung der Zähler ES:26 und DS:05F7; die genaue Wirkung des Aufrufs 0x9642 mit AX=6.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
