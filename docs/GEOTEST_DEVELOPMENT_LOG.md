@@ -52,8 +52,8 @@ Aus dem Gesprächsübergang wurde als letzter Untersuchungsstand genannt:
 
 Vor einer Fortsetzung der Disassemblierungsanalyse müssen feststehen:
 - genaue Kerneldatei und Version,
-- SHA-256 des Kernel-Bodys,
-- SHA-256 der Disassemblierung,
+- SHA-256 des Kernel-Bodys erneut berechnen und mit dem früher dokumentierten Wert vergleichen,
+- SHA-256 der Disassemblierung erneut berechnen und mit dem früher dokumentierten Wert vergleichen,
 - eindeutige Zuordnung der Adressen zu Dateioffset, Kernel-Body-Offset oder Disassembler-Label.
 
 ## 4. Nächste Arbeitsschritte
