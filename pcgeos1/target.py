@@ -21,6 +21,7 @@ PROFILES={
   'hashes':KNOWN,
   'format_version':1,
   'kernel_protocol':[622,3],
+  'ui_protocol':[693,0],
  },
  'geoworks-1.2.8-de':{
   'hashes':{
@@ -57,6 +58,10 @@ def load_templates(gwp,profile='geoworks-pro-1.2'):
                 raise ValueError(f'{name} is GEOS format {info["format_version"]}; profile {profile} requires {spec["format_version"]}')
             if info['kernel_protocol']!=spec['kernel_protocol']:
                 raise ValueError(f'{name} kernel protocol {info["kernel_protocol"]}; profile {profile} requires {spec["kernel_protocol"]}')
+            ui_imports=[item for item in info['imports'] if item['name'].lower()=='ui']
+            if len(ui_imports)!=1 or ui_imports[0]['protocol']!=spec['ui_protocol']:
+                actual=[item['protocol'] for item in ui_imports]
+                raise ValueError(f'{name} UI import protocol(s) {actual}; profile {profile} requires exactly one {spec["ui_protocol"]}')
             out[name]=(data,info,digest)
     return out
 
