@@ -1,0 +1,106 @@
+GEOWORKS 1.x ICON PROVIDER RESOURCE CONTENT AUDIT
+Investigation 2310
+Date: 2026-11-09
+
+Scope
+------
+Static comparison of the original GeoWorks 1.x icon-provider applications:
+GEOWORKS/ICONS/PAPR.000
+GEOWORKS/ICONS/GDOC.000
+GEOWORKS/ICONS/NBAT.000
+
+The files were read from the user's GEOWORKS.zip archive. Parsing used the
+repository's pcgeos1/geode.py bounds-checked reader. This is a static file
+analysis, not a runtime test and not a full semantic decoder of UI resources.
+
+Important correction to the preceding resource audit
+----------------------------------------------------
+The four-character provider token is present in TWO places:
+(1) the GEODE file header at file offset 0x14 (PAPR, gDOC, nBAT), and
+(2) resource 3, where the same token appears as a string alongside
+    "Icon Maker".
+
+Therefore it was incorrect to say that the token was absent from resource 3.
+The resource contains a copy of the token string, but the file-header token
+field remains separately present. No claim is made here about which copy
+GeoManager uses for token matching.
+
+Common GEODE structure
+---------------------
+All three files parse as GEOS 1.x (signature C7 45 CF 53), with:
+- one imported library: "ui"
+- no exported entries
+- seven resources, IDs 0 through 6
+- identical resource 0, 1 and 2 data
+- resource 3 has the same size (320 bytes) and common structure, but its
+  token string differs
+- resources 4, 5 and 6 have the same resource flags (0x1C7A) but differing
+  sizes and contents
+- the same seven relocation records with the same encoded values/targets
+  across all three files
+
+File metadata
+-------------
+PAPR.000: 2208 bytes; header token PAPR; permanent name "icon"; extension
+"app"; resource sizes [0, 96, 208, 320, 160, 272, 752].
+GDOC.000: 2256 bytes; header token gDOC; permanent name "icon"; extension
+"app"; resource sizes [0, 96, 208, 320, 160, 256, 816].
+NBAT.000: 1888 bytes; header token nBAT; permanent name "icon"; extension
+"app"; resource sizes [0, 96, 208, 320, 144, 208, 512].
+
+Resource observations
+---------------------
+R0: zero-sized in all three files.
+R1: 96 bytes, identical in all three files; 8 relocation bytes.
+R2: 208 bytes, identical in all three files; 4 relocation bytes. The ASCII
+    string "Exit" occurs in this resource.
+R3: 320 bytes in all three files; common structure. ASCII strings include
+    the provider token (PAPR/gDOC/nBAT) and "Icon Maker".
+R4: sizes 160 / 160 / 144 bytes for PAPR / GDOC / NBAT.
+R5: sizes 272 / 256 / 208 bytes.
+R6: sizes 752 / 816 / 512 bytes.
+R4-R6 have different bodies in the three providers. Their resource flags are
+0x1C7A in each file. The current analysis does NOT assign semantic labels
+such as "color icon", "monochrome icon", "application code", or "document
+icon" to R4-R6: that requires decoding the resource payload format and
+matching it to the GEOS 1.x UI/moniker definitions.
+
+Relocation observations
+-----------------------
+Each file has the same relocation pattern:
+- R1: two import-class records at offsets 0x40 and 0x42 (info bytes 0x11,
+  0x12; import index 0).
+- R2, R3, R4, R5, R6: one resource-class record each at offset 0x00
+  (info byte 0x23; target resource IDs 2, 3, 4, 5, 6 respectively).
+
+These are parser-level decoded fields. The semantic names of the relocation
+operations are not inferred here.
+
+SHA-256
+-------
+PAPR.000  30b08761294ccd7762c686ca3d477e509cb454f56b6c7db5aa2b1497efbabfbe
+GDOC.000  fe19cbcb46c2a92cf02da64c963facb8decb95d7e60bca34eb0d1c5e00b01733
+NBAT.000  1071e86b13b73a6032764e410474a4aec28727169a99a7f127ba8c246c6a210f
+
+Conclusions and next work
+-------------------------
+1. The provider token is duplicated in the file header and in resource 3.
+2. The providers share a common small GEODE/UI framework and identical
+   relocation topology.
+3. The provider-specific payload is concentrated in R3-R6; R4-R6 are the
+   main binary-difference area.
+4. Resource IDs and flags alone are insufficient to identify payload
+   semantics. Next step: inspect the resource payloads against GeoWorks 1.x
+   resource declarations/compiled UI structures and decode the moniker
+   data, without modifying any original file.
+5. No GEO was built, no TOKEN.DB was modified, and no original archive file
+   was changed during this audit.
+
+Reproducibility
+---------------
+Inputs:
+- GEOWORKS.zip, paths listed above
+- pcgeos-1-sdk/pcgeos1/geode.py from the uploaded SDK archive
+
+This report deliberately distinguishes directly parsed facts from unresolved
+interpretations. It does not use PC/GEOS 2.x or FreeGEOS as a semantic source.
