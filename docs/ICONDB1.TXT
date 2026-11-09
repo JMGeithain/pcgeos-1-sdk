@@ -1,0 +1,92 @@
+# GeoWorks 1.2 icon/token archive audit
+
+**Date:** 2026-11-09  
+**Scope:** PC/GEOS 1.x / GeoWorks 1.2 only  
+**Input:** user-supplied `GEOWORKS.zip`  
+**Repository:** `JMGeithain/pcgeos-1-sdk`, branch `main`
+
+## Purpose
+
+This audit checks the original GeoWorks icon documentation and representative files before designing a separate GEOTEST document-file icon. It distinguishes (a) small icon-provider applications, (b) file-type token mappings in `GEOS.INI`, and (c) actual GEOS document files.
+
+## 1. Original documentation
+
+### `GEOWORKS/ICONS/ICONINST.TXT`
+
+The document explicitly says that each icon-provider file is a small PC/GEOS application which does nothing beyond starting, closing, and being moved in GeoManager. Its **DOS filename stem is the token name**. The supplied icon-provider files in that archive use manufacturer ID **255** in the `filenameTokens` mapping.
+
+Example from the original instructions:
+
+```ini
+[fileManager]
+filenameTokens = {
+    *.BAT = "nBAT",255
+}
+```
+
+The same document shows existing system mappings with manufacturer ID 0, for example `*.TXT = "FILE",0,"NPAD",0`. Therefore the manufacturer ID is part of the GEOS.INI token mapping; it must not be inferred from the four-byte file type field in a GEOS file header.
+
+### `GEOWORKS/ICONS/DOS_ICON.TXT`
+
+This document states:
+- the icon/token code is four characters and case-sensitive;
+- the code is quoted and followed by a manufacturer ID in `filenameTokens`;
+- the GEOS file type is at offset `0x14`;
+- the creator is at offset `0x1A);
+- the long filename begins at offset `0x20`;
+- the creator of PC/GEOS applications is `GEOS`.
+
+It also warns that some token entries in `TOKEN.DB` are duplicates and that not all duplicate icons worked consistently. It lists icons found only in TOKEN.DB separately from those available through normal token mappings.
+
+## 2. Header checks on supplied files
+
+The following byte fields were read directly from the supplied archive. Offsets are hexadecimal; values are four-byte ASCII fields.
+
+| Archive path | Size | Type at 14h | Creator at 1Ah | Long name at 20h |
+|---|---:|---|---|---|
+| `GEOWORKS/ICONS/PAPR.000` | 2,208 | `PAPR` | `GEOS` | `PAPR` |
+| `GEOWORKS/ICONS/GDOC.000` | 2,256 | `gDOC` | `GEOS` | `gDOC` |
+| `GEOWORKS/ICONS/NBAT.000` | 1,888 | `nBAT` | `GEOS` | `nBAT` |
+| `GEOWORKS/DOCUMENT/TESTICON.000` | 1,846 | `Icon` | `GEOS` | `Testicon` |
+| `GEOWORKS/DOCUMENT/TEST/TESTICON.000` | 1,814 | `Icon` | `GEOS` | `testicon` |
+
+This confirms a useful distinction:
+- `PAPR.000`, `GDOC.000`, and `NBAT.000` are icon-provider application files whose filename stems are used as token names in the documented mapping.
+- The two `TESTICON.000` files are actual GEOS data files with type `Icon` and creator `GEOS`. Their header type is not a four-character icon token such as `GTD1`.
+
+The two TESTICON files are not byte-identical: their sizes and long-name capitalization differ. This audit does not infer further semantics from that difference.
+
+## 3. Implications for GEOTEST
+
+1. Keep the GEOTEST application token `GTS1` (manufacturer ID 0) separate from any future document-file icon token.
+2. A proposed token such as `GTD1` is **not yet validated**. The original documentation establishes the mapping mechanism, but not that this exact token or a `.GTD` file extension is a native GEOS document type.
+3. The icon-provider pattern suggests a small provider application named with the desired four-character token and a corresponding `filenameTokens` entry with manufacturer ID 255. This is a documented historical pattern, but the exact GEOTEST provider should be tested in a disposable GeoWorks 1.2 installation before adoption.
+4. A true GEOS document has its own GEOS file type and creator fields. The observed `Icon` type on TESTICON is a reference, not proof that GEOTEST documents should use that type.
+5. Do not modify the production `TOKEN.DB` to fill blank entries. The supplied documentation explicitly notes duplicate and potentially inconsistent entries; test token registration separately.
+
+## 4. Corrections to earlier working notes
+
+- Manufacturer ID 255 is specified by `ICONINST.TXT` for the supplied icon-provider token mappings. It is **not** read from offsets 0x14 or 0x1A.
+- Offset 0x14 is the file type; offset 0x1A is the creator; offset 0x20 begins the long filename.
+- `TESTICON.000` is a GEOS document with type `Icon`, not an icon-provider application whose token is necessarily `TESTICON`.
+- The proposed `GTD1` token and `*.GTD` mapping remain design candidates only; they have not been validated by GeoWorks.
+
+## 5. Source fingerprints
+
+SHA-256 values of the exact archive members inspected:
+
+| File | SHA-256 |
+|---|---|
+| `ICONINST.TXT` | `ded23c228823339332f95a1a76ce62d730eb6e7db99fed8219ae9bfaf29af09e` |
+| `DOS_ICON.TXT` | `ee2d5213900f73cd96035d4801d0dc3731e73434892e7f5a3370c18f06286a84` |
+| `PAPR.000` | `30b08761294ccd7762c686ca3d477e509cb454f56b6c7db5aa2b1497efbabfbe` |
+| `GDOC.000` | `fe19cbcb46c2a92cf02da64c963facb8decb95d7e60bca34eb0d1c5e00b01733` |
+| `NBAT.000` | `1071e86b13b73a6032764e410474a4aec28727169a99a7f127ba8c246c6a210f` |
+| `DOCUMENT/TESTICON.000` | `58fac1222f12b31744ff62a189b339b084f5bf5076a76e06a888c20e8f988fdb` |
+| `DOCUMENT/TEST/TESTICON.000` | `20aeae7719c9175f2b9d4938d487499668a27fb065ab80650ddb454b3fec85f3` |
+
+## 6. Reproducibility and exclusions
+
+The checks were performed by reading archive members directly and inspecting the bytes at offsets 0x14, 0x1A, and 0x20. Original files were not modified.
+
+The proprietary `GEOWORKS.zip`, `TOKEN.DB`, and extracted GEOS binaries are not included in this public repository. Only this audit and source fingerprints are committed. No GEO build, ICONMAKE conversion, TOKEN.DB modification, or GeoWorks runtime test was performed as part of this audit.
