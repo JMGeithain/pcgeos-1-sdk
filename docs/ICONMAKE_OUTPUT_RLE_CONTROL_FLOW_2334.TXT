@@ -1,0 +1,184 @@
+ICONMAKE.EXE – Kontrollflussanalyse der Ausgaberoutine 0x1694
+Untersuchung 2334
+Stand: 2026-11-09
+
+Quelle und Adressierung
+Original ICONMAKE.EXE aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße 19.477 Bytes, MZ-Header 0x200 Bytes.
+Alle Adressen unten sind Offsets im geladenen Modul.
+Die Instruktionsgrenzen wurden mit 8086-Disassemblierung ab 0x1694
+gegen die Rohbytes geprüft.
+
+1. Parameter und globale Variablen
+Prolog:
+  1694 55             PUSH BP
+  1695 8B EC          MOV BP,SP
+  1697 8B 56 04       MOV DX,[BP+04]
+
+Der 16-Bit-Parameter liegt somit in DX; die Routine verwendet DL
+für Bytevergleiche und Byteausgabe.
+
+Globale Speicherstellen:
+- DS:2FD4h: Modus-/Schalterwort; wird zu Beginn geprüft.
+- DS:06AAh: Zeiger auf das aktuelle Steuer-/Längenbyte im Ausgabestrom.
+- DS:2FE6h: aktueller Ausgabepufferzeiger.
+
+Die semantischen Namen sind Funktionsbeschreibungen aus dem
+beobachteten Zugriffsmuster, keine originalen Symbolnamen.
+
+2. Direkter Ausgabepfad
+  169A CMP word [2FD4h],0
+  169F JNE 16A9h
+  16A1 CMP DX,FFFFh
+  16A4 JE 16A9h
+  16A6 JMP 172Fh
+
+Wenn [2FD4h] null und der Parameter nicht FFFFh ist, wird die
+Kompressions-/Steuerlogik übersprungen. Ab 0x172F wird DL direkt
+an den aktuellen Ausgabepufferzeiger geschrieben und der Zeiger
+inkrementiert:
+  172F MOV BX,[2FE6h]
+  1733 MOV [BX],DL
+  1735 INC word [2FE6h]
+  1739 ... RET
+
+3. Sonderwert FFFFh
+Wenn DX=FFFFh:
+- bei [2FD4h]=0 führt der Sprung zu 0x16A9 und dann in den
+  Sonderzweig;
+- bei [2FD4h]!=0 ebenfalls.
+Der Zweig:
+  16A9 CMP DX,FFFFh
+  16AC JNE 16B8h
+  16AE MOV word [06AAh],0
+  16B4 ... RET
+
+FFFFh setzt also den Zeiger-/Statuswert DS:06AAh auf null und
+beendet den Aufruf. Ob dies ein expliziter Flush/Abschlussmarker
+des umgebenden Formats ist, muss anhand der Aufrufer bestätigt
+werden; die Wirkung selbst ist eindeutig.
+
+4. Aufbau eines neuen Ausgabesegments
+Wenn DX nicht FFFFh und [06AAh] null ist:
+  16B8 CMP word [06AAh],0
+  16BD JE 1720h
+
+Ab 0x1720 wird der aktuelle Ausgabepufferzeiger als neues
+Steuerbyte-Feld reserviert:
+  1720 MOV BX,[2FE6h]
+  1724 INC word [2FE6h]
+  1728 MOV [06AAh],BX
+  172C MOV byte [BX],00h
+
+Danach läuft die Ausführung in 0x172F weiter und schreibt DL
+als Nutzbyte in den Puffer. Der erste Bytewert eines Segments
+ist somit ein zunächst auf 00h gesetztes Steuer-/Längenbyte.
+
+5. Literalbereich / positiver Zähler
+Wenn [06AAh] auf ein Steuerbyte zeigt, dessen Wert nicht negativ
+und nicht null ist, wird der neue Parameter mit den letzten zwei
+Ausgabebytes verglichen:
+  16BF MOV BX,[06AAh]
+  16C3 CMP byte [BX],00h
+  16C6 JL 1710h
+  16C8 JE 1702h
+  16CA MOV BX,[2FE6h]
+  16CE CMP [BX-1],DL
+  16D1 JNE 1702h
+  16D3 CMP [BX-2],DL
+  16D6 JNE 1702h
+
+Bei abweichendem Byte wird das Steuerbyte erhöht, sofern es noch
+nicht 7Fh ist:
+  1702 MOV BX,[06AAh]
+  1706 CMP byte [BX],7Fh
+  1709 JE 1720h
+  170B INC byte [BX]
+  170D JMP 172Fh
+
+Danach wird das neue Nutzbyte ausgegeben. Das Muster entspricht
+einem Literalblock mit positivem Zähler; die genaue Zählkonvention
+(Anzahl Bytes oder Anzahl-1) muss durch vollständige Beispiel-
+Sequenzen bestätigt werden.
+
+6. Erkennung einer Wiederholung und Rücknahme von Literalen
+Wenn die letzten beiden ausgegebenen Bytes beide gleich DL sind,
+wird der Literalblock in einen Wiederholungsblock umgewandelt.
+Der Zweig bei 0x16D8 prüft das Steuerbyte:
+  16D8 MOV BX,[06AAh]
+  16DC CMP byte [BX],01h
+  16DF JLE 16F6h
+
+Für Zähler >1:
+  16E1 SUB byte [BX],02h
+  16E4 MOV BX,[2FE6h]
+  16E8 DEC BX
+  16E9 DEC BX
+  16EA MOV [06AAh],BX
+  16EE MOV byte [BX],FEh
+  16F1 ... RET
+
+Für Zähler <=1:
+  16F6 MOV byte [BX],FEh
+  16F9 DEC word [2FE6h]
+  16FD ... RET
+
+Das Programm schreibt FEh als Steuerwert und verändert den
+Ausgabepufferzeiger bzw. den Steuerbyte-Zeiger so, dass die
+zuletzt ausgegebenen Wiederholungsbytes nicht als normale
+Literalbytes stehen bleiben. Die unterschiedlichen Zweige
+behandeln kurze und längere Literalblöcke verschieden.
+
+7. Fortsetzung eines Wiederholungsblocks
+Wenn das Steuerbyte negativ ist, springt der Code zu 0x1710:
+  1710 CMP [BX+1],DL
+  1713 JNE 1720h
+  1715 CMP byte [BX],80h
+  1718 JLE 1720h
+  171A DEC byte [BX]
+  171C ... RET
+
+Bei passendem Nutzbyte und Steuerbyte größer als 80h wird das
+Steuerbyte dekrementiert. Andernfalls beginnt bei 0x1720 ein
+neues Segment. Das bestätigt einen negativen Zählerbereich für
+Wiederholungsblöcke und die Wiederholung des Bytes an [BX+1].
+
+8. Vorläufige Formatinterpretation
+Der Kontrollfluss zeigt:
+- positive Steuerbytes bis 7Fh für Literalbereiche;
+- negative Steuerbytes bzw. den Bereich oberhalb 80h für
+  Wiederholungsbereiche;
+- FEh als spezieller Steuerwert, der beim Übergang nach Erkennung
+  gleicher Bytes geschrieben wird;
+- 00h als initiales Steuerbyte eines neuen Bereichs;
+- FFFFh als Funktionsparameter, der DS:06AAh zurücksetzt.
+
+Dies ist ein RLE-artiges Packverfahren. Ein vollständiger,
+bytegenauer Beleg der endgültigen Formatkonvention erfordert noch
+eine Rekonstruktion der Pufferbeispiele und der Aufrufreihenfolge.
+Insbesondere wird hier nicht behauptet, dass es sich um ein
+bekanntes Standardformat handelt.
+
+9. Korrektur zum Bericht 2333
+Der erste Bericht 2333 enthielt bei mehreren Sprungzielen und
+Instruktionsgrenzen ungenaue Adressen. Maßgeblich sind die hier
+aufgeführten Startadressen:
+  16A9 statt 16A8
+  16B8 statt 16B7
+  172F als direkter Byte-Schreibpfad
+  1733 als MOV [BX],DL
+Die Variablen DS:06AAh und DS:2FE6h sind hier anhand ihrer
+tatsächlichen Zugriffe beschrieben.
+
+Nächste Schritte
+- Die Aufrufstellen 0x1B03 und 0x1C1B–0x1D18 samt Parametern
+  vergleichen und feststellen, welche Datenströme RLE-kodiert sind.
+- Den Pufferbereich und dessen Initialisierung rückverfolgen.
+- Ein kleines Beispiel der Steuerbyte-Sequenz aus dem Kontrollfluss
+  ableiten und gegen echte ICONMAKE-Ausgabe prüfen.
+
+Ergebnisstatus
+Die RLE-artige Segment-/Längenlogik ist durch den Kontrollfluss
+und die Bytezugriffe nachgewiesen. Die genaue externe Format-
+Spezifikation und Zählkonvention bleiben offen.
