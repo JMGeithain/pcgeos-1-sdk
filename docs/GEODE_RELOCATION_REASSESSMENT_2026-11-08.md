@@ -3649,3 +3649,53 @@ Die Routine `0x85B1` prüft zusätzlich das GEODE-Attributbit `DS:3 & 0x80`. Das
 **Offen:** Bedeutung des Kennwertes +6; Bedeutung des GEODE-Attributbits 0x80; Lebenszyklus und Freigabe der Zuordnung; welche öffentlichen GEODE-/Ressourcenoperationen die beiden Suchrichtungen verwenden.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2240 – FAh-Kennwerte: Paritätszweige und GEODE-Attributbit 0x80
+
+### 1. Neue Beobachtung: Die Kennwerte werden später umgeschrieben
+
+Der Erzeugungspfad 0x8533 vergibt zunächst 1, 3, 5, …. Die Folge ist aber nicht unveränderlich. Die Routine 0x89xx durchläuft die FAh-Liste und prüft bei jedem Eintrag das niederwertigste Bit von [SI+6]:
+
+- Ist Bit 0 gesetzt (ungerader Kennwert), ruft sie 0x851B auf und schreibt dessen AX-Ergebnis anschließend zurück nach [SI+6] (0x8998–0x899B).
+- Ist Bit 0 nicht gesetzt (gerader Kennwert), ruft sie 0x8841 auf und übergibt das Ergebnis über 0xA5B1 weiter (0x898E–0x8996).
+
+Damit ist gesichert: Die ungeraden Werte sind der anfängliche Zustand der Kennwertvergabe; die Liste wird später in mindestens zwei unterschiedliche Verarbeitungspfade überführt. Die geraden Werte sind nicht einfach weitere Werte der ursprünglichen Vergabefolge.
+
+### 2. Was 0x8841 tatsächlich entscheidet
+
+0x8841 liest den globalen Wert DS:060B, ruft 0x1F72 auf und vergleicht dessen AX-Ergebnis mit [BX+0E]. Es liefert:
+- FFFEh, wenn beide Werte gleich sind;
+- FFFDh, wenn sie verschieden sind.
+
+Das sind konkrete Sentinel-Rückgabewerte. Ihre fachliche Bedeutung ist noch nicht identifiziert. Insbesondere darf FFFEh/FFFDh nicht ohne weitere Belege als Ressourcen-ID oder Statuscode benannt werden.
+
+### 3. Attributbit 0x80: weitere Verwendungsstellen
+
+Die Prüfung GEODE-DS:[3] & 80h ist nicht auf 0x85B1 beschränkt. Weitere Fundstellen im selben Kernel zeigen:
+
+- 0x1C16 verzweigt abhängig von diesem Bit und schreibt in einem weiteren GEODE-Datenblock Werte an die Offsets +08 und +0A.
+- 0x2655 wählt abhängig vom Bit einen Wert 0046h oder 005Eh für DS:36.
+- 0x277B erhöht bei gesetztem Bit den WORD-Zähler DS:26.
+- 0x28A7 prüft das Bit im Zuge eines Freigabe-/Abbaupfades; 0x28BD löscht es anschließend mit AND 7Fh.
+
+Zusätzlich setzt 0x1BF2 das Bit mit OR 80h. Zusammengenommen belegt das einen zustandsabhängigen GEODE-Pfad mit Auswirkungen auf Datenübernahme, Größenwahl und Lebenszyklus-Zähler. Die genaue symbolische Bedeutung des Bits ist anhand dieser Stellen allein noch nicht bewiesen.
+
+### 4. Entfernen eines FAh-Eintrags
+
+Der Abbaupfad 0x856C–0x85AB sucht den Eintrag über 0x85B1, liest dessen Verkettungszeiger aus [SI+4], schreibt diesen Zeiger in den vorherigen Link-Slot (ES:[DI]) und gibt danach den Eintrags-Handle über 0x6E2F frei. Das ist ein eindeutiges Unlink-and-free-Verfahren.
+
+Der Pfad wird im untersuchten Code nicht durch einen direkten CALL 0x856C erreicht; ein direkter Aufrufer ist in der linearen Disassemblierung nicht sichtbar. Die Routine kann daher über einen indirekten Dispatch oder einen externen Eintrittspunkt erreicht werden. Der konkrete Auslöser bleibt offen.
+
+### 5. Zwischenfazit
+
+**Gesichert:**
+1. FAh-Kennwerte starten ungerade bei 1 und steigen bei der Anlage um 2.
+2. Eine spätere Listenverarbeitung unterscheidet ungerade und gerade Kennwerte und schreibt Kennwerte um.
+3. 0x8841 liefert abhängig von einem Vergleich mit DS:060B die Werte FFFEh oder FFFDh.
+4. GEODE-Attributbit DS:3/80h beeinflusst mehrere Initialisierungs- und Abbaupfade.
+5. FAh-Einträge werden aus der Liste ausgehängt und ihr Handle wird freigegeben.
+
+**Noch offen:** Die semantischen Namen der Kennwerte und Sentinel-Werte, die symbolische Bedeutung des Attributbits, die Rolle der globalen Variable DS:060B sowie der indirekte Eintritt in 0x856C.
+
+**Arbeitsregel unverändert:** Keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
