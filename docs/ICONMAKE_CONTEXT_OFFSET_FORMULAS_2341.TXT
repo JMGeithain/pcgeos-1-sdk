@@ -1,0 +1,75 @@
+ICONMAKE – Rekonstruktion der Kontext-Offsets +02h bis +0Ch
+Untersuchungsschritt 2341
+Stand: 10. November 2026
+
+Ziel
+Die in 144Ch gesetzten Kontextfelder +02h bis +0Ch algebraisch aus dem 8086-Code rekonstruieren. Zusätzlich wird die Beziehung zwischen dem Ressourcenblock ab +012Eh und der von 1558h verwendeten Tabelle präzisiert.
+
+Untersuchungsbasis
+ICONMAKE.EXE aus GEOWORKS.zip, Ladebereich ab Dateioffset 0200h, Datei /tmp/mod.bin (18.965 Bytes). Die nachfolgenden Instruktionsadressen sind Ladebereichsoffsets. Die Bytes wurden erneut mit objdump im 8086-Modus disassembliert.
+
+1. Beginn des zusammenhängenden Nutzdatenbereichs
+144Ch beschafft bei 14C3h über 212Ch einen Block der Größe:
+  [BP-06] + 012Eh
+Der Zeiger auf diesen Block wird bei 14C9h in [BP-02] gespeichert.
+
+Anschließend werden Daten hineinkopiert:
+- 0060h Wörter (= 00C0h Bytes) ab Blockoffset +000Eh (14DEh–14E8h).
+- 0030h Wörter (= 0060h Bytes) ab Blockoffset +00CEh (14CEh–14DCh).
+- [BP-06] Bytes ab Blockoffset +012Eh (14EAh–14FEh), aus dem zuvor initialisierten Dateikontext gelesen.
+
+Damit beginnt der zuletzt eingelesene Ressourcen-/Tabellenbereich bei Blockoffset +012Eh. Der Rückgabewert von 144Ch ist der Blockanfang.
+
+2. Exakte Formeln für die Kontextfelder
+Setze:
+  B = Blockanfang (Wert [BP-02])
+  P = B + 012Eh (Beginn des zuletzt eingelesenen Datenbereichs)
+  a = WORD PTR [BP-14h]
+  b = WORD PTR [BP-12h]
+  c = WORD PTR [BP-0Eh]
+
+Die Berechnung in 1501h–1547h ergibt:
+
+  Kontext +02h = P
+  Kontext +04h = P + 4*a
+  Kontext +06h = P + 4*a + 6*b
+  Kontext +08h = P + 4*a + 6*b + 2*c
+  Kontext +0Ah = P + 4*a + 6*b + 4*c
+  Kontext +0Ch = P + 4*a + 6*b + 6*c
+
+Das folgt direkt aus den Instruktionsfolgen:
+  1504 MOV [BX+02h],SI
+  150E ADD SI,AX       ; AX = 4*a
+  1510 MOV [BX+04h],SI
+  151E ADD AX,SI       ; AX = 6*b + SI
+  1524 MOV [BX+06h],AX
+  1527..152F           ; +2*c
+  1532..153C           ; +2*c
+  153F..1547           ; +2*c
+
+Die Felder sind somit Segment-/DS-Offsets innerhalb des dynamisch beschafften Kontextblocks, keine externen Dateiadressen. Sie teilen den Datenbereich ab P in aufeinanderfolgende Abschnitte auf.
+
+3. Bedeutung von +08h für 1558h
+1558h lädt:
+  1560 MOV SI,[BP+04]      ; Kontextzeiger
+  1563 MOV BX,[SI+08]      ; DS-Offset auf Teilbereich
+  1566 MOV DI,[BP+06]      ; Index
+  1569 SHL DI,1
+  156B SHL DI,1
+  156D MOV AX,[BX+DI]
+  156F MOV DX,[BX+DI+2]
+
+Damit ist jetzt eindeutig: Kontext +08h ist ein Offsetzeiger in den dynamisch aufgebauten Block. Der dort beginnende Teilbereich wird als Tabelle von 4-Byte-Einträgen adressiert. Ein Eintrag wird anhand des Indexes [BP+06] ausgewählt.
+
+Die vier Bytes des Eintrags werden als zwei 16-Bit-Wörter geladen und anschließend von 1558h für die Positionsberechnung im Dateistrom verwendet. Der Tabelleneintrag selbst ist also nicht der Ressourcenheader, sondern ein Index-/Positionsverzeichnis, über das 1558h zum Ressourceninhalt gelangt.
+
+4. Grenzen der Interpretation
+Die Formeln belegen die Lage der Abschnitte relativ zum Blockanfang. Sie belegen nicht die semantische Benennung der drei Größen a, b und c. Insbesondere darf aus der Tabellenbreite von vier Bytes allein noch keine bestimmte offizielle Ressourcenformatbezeichnung abgeleitet werden.
+
+Die Routine 144Ch liest einen Bereich der Größe [BP-06] in den Speicher ab P. Die genaue Bedeutung der einzelnen Teilbereiche wird durch die Kontextoffsets eingegrenzt; die fachliche Bedeutung der Inhalte muss noch anhand ihrer Verbraucher und realer Ressourcendateien bestätigt werden.
+
+5. Korrektur/Präzisierung zu 2340
+Die Formulierung „+08h als Tabellenzeiger“ war im Bericht 2340 als Arbeitsbeschreibung noch zu allgemein. Jetzt ist die Adressbeziehung präzisiert: +08h enthält einen DS-Offset in den von 144Ch aufgebauten Block, genauer P + 4*a + 6*b + 2*c. Es ist kein roher Dateioffset aus der Ressourcendatei.
+
+6. Nächster Schritt
+Die drei Größen a, b und c an ihre Ladequellen im 00C0h-/0060h-Headerbereich zurückverfolgen. Danach werden die Tabelleninhalte und Verbraucher der benachbarten Abschnitte +02h, +04h, +06h, +08h, +0Ah und +0Ch untersucht. Anschließend kann der Tabellenindex aus dem Aufrufer mit konkreten PAPR-/GDOC-Ressourcen abgeglichen werden.
