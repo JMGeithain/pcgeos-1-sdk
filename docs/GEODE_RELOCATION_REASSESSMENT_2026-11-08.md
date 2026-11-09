@@ -3242,3 +3242,94 @@ Die online verfügbare FreeGEOS-Dokumentation beschreibt ausdrücklich die SDK-/
 Als nächstes werden die Schreibstellen `0x28D0`, `0x2B7E`, `0x2B96`, `0x2BC4`, `0x8542`, `0x994E`, `0xA08D` und `0xAB87` jeweils rückwärts und vorwärts verfolgt. Ziel ist festzustellen, ob sie dasselbe erste WORD-Feld markieren oder ob einzelne Stellen andere Handle-/Objektlayouts verwenden.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2235 – Vergleich der Sondermarker F4h bis FCh
+
+Die in Untersuchung 2234 angekündigten Schreibstellen wurden mit ihren unmittelbaren Erzeugungs- und Verbraucherpfaden verglichen. Die Ergebnisse stützen die Deutung als Sondermarker im oberen Byte des ersten WORDs, nicht als eigenständiges Statusfeld.
+
+### 1. F4h bei 0x28C4–0x28D5
+
+```asm
+28C4  push ds
+28C5  call 0x9630
+28C8  mov  bx,ss:[2]
+28CD  call 0x6DAC
+28D0  mov  byte [bx+1],0xF4
+28D4  pop ds
+28D5  retf
+```
+
+Die Routine fordert einen neuen Handle-Datensatz aus der Freiliste an und schreibt danach `F4h` in das obere Byte des ersten WORDs. Der Low-Byte-Anteil wird hier nicht überschrieben; er stammt aus der Initialisierung in `0x6DAC` und ist null. Der resultierende erste WORD-Wert ist damit `F400h`.
+
+### 2. F8h und F7h bei 0x2B6B–0x2BC4
+
+Der Code legt zunächst einen Datensatz über `0x6DAC` an und füllt Felder +2, +4 und +0A. Bei gesetztem Bit `0x2000` in DI:
+
+- erhält der erste Datensatz bei `0x2B7E` den oberen Bytewert `F8h`;
+- es werden weitere Datensätze angelegt;
+- jeder Folgedatensatz erhält bei `0x2B96` den oberen Bytewert `F7h`;
+- die Einträge werden über Felder +2, +4 und +6 verkettet.
+
+Im alternativen Zweig wird bei `0x2BC1` das Feld +6 mit BP belegt und bei `0x2BC4` der obere Bytewert `F9h` gesetzt.
+
+Die Routinen unterscheiden somit mehrere Sonderobjekt-Layouts, die alle das obere Byte des ersten WORDs für einen Marker verwenden. Die genaue Objektsemantik wird aus diesem Ausschnitt allein nicht benannt.
+
+### 3. FEh bei 0x9942–0x9967
+
+Ein weiterer Datensatz wird durch `0x6DAC` angefordert. Danach:
+
+```asm
+994E  mov  byte [bx+1],0xFE
+9952  mov  byte [bx],al
+9954  mov  byte [bx+0A],al
+9957  mov  [bx+8],bp
+995A  mov  [bx+4],si
+995D  mov  [bx+2],di
+```
+
+Hier wird zunächst der Marker im oberen Byte und anschließend ein Wert im unteren Byte des ersten WORDs gesetzt. Der vollständige erste WORD-Wert ist also nicht notwendigerweise `FE00h`; das obere Byte `FEh` bleibt aber die Kennzeichnung dieses Datensatzformats.
+
+### 4. F6h bei 0xA081–0xA0A2
+
+Auch hier wird ein Handle-Datensatz über `0x6DAC` angefordert. Danach setzt der Code:
+
+- oberes Byte des ersten WORDs auf `F6h`;
+- unteres Byte auf AL;
+- Felder +0C, +0A, +04, +06 und +0E mit übergebenen Werten.
+
+Dies ist ein zweiter direkter Nachweis, dass das obere Byte als Marker dient, während das untere Byte im selben WORD einen zusätzlichen Wert tragen kann.
+
+### 5. FCh bei 0xAB7D–0xAB9C
+
+Der Code initialisiert ebenfalls einen Datensatz über `0x6DAC` und schreibt:
+
+```asm
+AB84  mov  byte [bx],0x01
+AB87  mov  byte [bx+1],0xFC
+AB8E  mov  [bx+0A],ax
+AB94  mov  [bx+0C],bp
+AB97  mov  [bp+8],bx
+```
+
+Das erste WORD lautet danach `FC01h`. Die folgenden Felder bilden eine Rückverweis-/Verknüpfungsstruktur. Auch hier ist `FCh` kein isoliertes Bytefeld neben einem Segmentzeiger, sondern Teil des ersten WORDs, das in diesem Datensatz gerade keinen normalen Segmentwert darstellt.
+
+### 6. Konsequenz für 0x20CB
+
+Die verschiedenen Beispiele belegen ein einheitliches Muster:
+
+- gewöhnliche Speicherblock-Handles verwenden das erste WORD als Segmentwert;
+- bestimmte Kernelobjekte verwenden das obere Byte dieses WORDs als Marker (F4h, F6h, F7h, F8h, F9h, FCh, FEh);
+- das untere Byte kann je nach Datensatzlayout null oder ein zusätzlicher Wert sein;
+- `0x20CB` prüft das obere Byte auf `>= F0h`, bevor es das erste WORD als ES-Segment lädt.
+
+Damit ist die Prüfung als Schutz vor der Fehlinterpretation eines markierten Handle-WORDs als gewöhnliche Segmentadresse zu verstehen. Sie ist nicht als allgemeine „Statusbyte-Klasse“ zu dokumentieren.
+
+### 7. Noch offene Punkte
+
+- Die symbolische Bedeutung jedes Markers (F4/F6/F7/F8/F9/FC/FE) muss anhand seiner vollständigen Aufrufer und Verbraucher bestimmt werden.
+- F5/FA sind ebenfalls nach demselben Schema zu untersuchen; ihre Schreibstellen wurden bereits gefunden, aber die Verbraucherpfade sind noch nicht ausreichend verfolgt.
+- F3 ist als Freilistenmarker nachgewiesen.
+- Der Grenzwert F0 ist durch den Segment-/Marker-Unterschied technisch plausibel; ob alle Werte F0–FF reserviert sind, ist aus den bisher untersuchten Stellen allein nicht vollständig bewiesen.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
