@@ -34,7 +34,10 @@ def build(project_path,gwp,build_dir=None,toolchain='auto'):
     cfg=load_project(project_path);root=cfg['_root'];sdk=Path(__file__).resolve().parents[1]
     out=(Path(build_dir) if build_dir else root/'build').resolve();out.mkdir(parents=True,exist_ok=True)
     tc=detect(toolchain);flags=flags_for(tc)+cfg.get('cflags',[])
-    templates=load_templates(gwp,strict=not cfg.get('allow_unknown_target',False))
+    if cfg.get('allow_unknown_target') is True:
+        raise ValueError('allow_unknown_target is no longer supported; select a named target_profile')
+    profile=cfg.get('target_profile','geoworks-pro-1.2')
+    templates=load_templates(gwp,profile=profile)
     spin,spinq,_=templates['SPINTEXT.GEO']; viewer,viewerq,_=templates['VIEWER.GEO']
     help_path=root/cfg.get('help','src/help.txt');help_text=help_path.read_text(encoding='ascii') if help_path.exists() else cfg['long_name']
     ui3,ui4,uimap=build_basic_ui(resource_bytes(spin,spinq,3),resource_bytes(spin,spinq,4),
@@ -61,7 +64,7 @@ def build(project_path,gwp,build_dir=None,toolchain='auto'):
     engine=bytearray(65520);engine[:4]=b'PGS1';w(engine,4,0x0001);w(engine,20,used);engine[0x100:0x100+len(edata)]=edata
     result,info,pack=package_from_skeleton(spin,code,bytes(engine),ui3,ui4,syms,cfg)
     output=root/cfg['output'];output.write_bytes(result)
-    report={'sdk_version':'0.1','status':'experimental; exact target template build required','project':cfg['long_name'],
+    report={'sdk_version':'0.1','status':'experimental; exact target template build required','project':cfg['long_name'],'target_profile':profile,
             'output':str(output),'sha256':sha(result),'bytes':len(result),'toolchain':{'family':tc.family,'version':tc.version},
             'kernel_protocol':info['kernel_protocol'],'imports':info['imports'],'resources':len(info['resources']),
             'code_bytes':len(code),'engine_used':used,'instrumentation':instrumentation,'ui':uimap,'pack':pack,
