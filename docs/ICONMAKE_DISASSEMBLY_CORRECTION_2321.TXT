@@ -1,0 +1,85 @@
+ICONMAKE.EXE DISASSEMBLY CORRECTION AND VERIFIED 4-BIT PATH
+Investigation 2321
+Date: 2026-11-09
+Scope: original GeoWorks-era ICONMAKE 1.0 DOS executable.
+
+Important correction to investigation 2320
+------------------------------------------
+The offsets 0x1E6C and 0x1ED5 were previously described as part of the
+4-bit pixel conversion routine. Re-disassembly of the MZ load image shows
+that this interpretation was incorrect:
+- 0x1E6C is an ADD SP,4 instruction following a call at 0x1E69.
+- 0x1ED5 is a PUSH [BP+4] in a parameter setup sequence; the following
+  call is to 0x2E9A.
+These offsets do not establish the claimed pixel conversion routine.
+The earlier interpretation in ICONMAKE_CODE_DISASSEMBLY_FINDINGS_2320.TXT
+must therefore be treated as superseded where it identifies those offsets
+as the EGA conversion routine.
+
+Verified EGA/nibble translation sequence
+----------------------------------------
+The actual disassembly contains a clear two-nibble translation sequence
+at load-image offsets 0x1CD5–0x1CFE:
+
+1CD5  mov bx,[40EA]
+1CD9  mov bl,[bx+si]
+1CDB  sub bh,bh
+1CDD  mov ax,bx
+1CDF  and bx,000F
+1CE2  mov cx,ax
+1CE4  mov al,[bx+2FD6]
+1CE8  mov bx,cx
+1CEA  mov cl,04
+1CEC  shr bx,cl
+1CEE  mov dx,ax
+1CF0  mov al,[bx+2FD6]
+1CF4  cbw
+1CF5  shl ax,cl
+1CF7  mov cx,ax
+1CF9  mov al,dl
+1CFB  cbw
+1CFC  or cx,ax
+1CFE  push cx
+1CFF  call 1694
+
+This sequence:
+- reads a source byte from the buffer addressed through [40EA]+SI;
+- translates the low nibble through the table at 2FD6;
+- translates the high nibble through the same table;
+- shifts one translated value by four bits;
+- combines the two translated values;
+- passes the packed result to routine 0x1694.
+
+This is strong direct evidence for a nibble-to-nibble lookup/packing stage.
+It does not yet identify the exact semantics of every table entry or prove
+that routine 0x1694 writes directly into the native R6 resource.
+
+Related bit-oriented sequence
+-----------------------------
+At 0x1B7D–0x1B96 the program reads bits from a buffer/table and assembles
+a value in DI. At 0x1BA0–0x1BB0 it masks a nibble, translates through the
+same table at 0x2FD6, and combines it with high bits from DI.
+This appears to be another image conversion path, but its precise image
+class and caller must still be traced.
+
+Next trace targets
+------------------
+- Determine the initialization and all 16 entries of the translation table
+  at 0x2FD6.
+- Trace the routine at 0x1694, including its callers and output buffer.
+- Trace the caller of the 0x1CD5 sequence to establish the image mode.
+- Compare table values and emitted bytes with extracted R6 payloads.
+- Trace the transparency key logic separately.
+
+Confidence
+----------
+The instruction sequence at 0x1CD5–0x1CFE is directly verified from the
+MZ load image disassembly. The inference that it is a 4-bit pixel translation
+stage is strongly supported by the two-nibble lookup and repacking pattern.
+Its connection to the exact GEODE R6 resource writer is not yet proven.
+
+Integrity
+---------
+Read-only analysis of ICONMAKE.EXE. No source or binary was modified.
+No GEO or TOKEN.DB was modified. No PC/GEOS 2.x or FreeGEOS assumptions
+were used.
