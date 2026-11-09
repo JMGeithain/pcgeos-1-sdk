@@ -3170,3 +3170,75 @@ Die Schwelle `0xF0` trennt daher in diesem Pfad normale Handle-Datensätze von d
 - warum die Prüfung den gesamten Bereich ab `F0` sperrt und ob es weitere Sonderfälle unterhalb `F0` gibt.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2234 – Korrektur: +1 ist das obere Byte des Segment-WORDs
+
+Diese Untersuchung korrigiert ausdrücklich die Interpretation aus Untersuchung 2233: Das Byte `[Handle+1]` ist im hier untersuchten Handle-Layout nicht als unabhängiges Statusbyte zu behandeln. Es ist das obere Byte des WORD-Feldes bei `[Handle]`.
+
+### 1. Direkter Nachweis aus dem Freigabepfad
+
+Die Freigaberoutine `0x6E2F` setzt:
+
+```asm
+6E49  xor  ax,ax
+6E4B  mov  [bx],ax
+6E4D  mov  [bx+8],ax
+6E50  mov  byte [bx+1],0xF3
+```
+
+Die ersten beiden Schreibzugriffe setzen das WORD bei Offset 0 zunächst auf null; der dritte setzt dessen oberes Byte auf `F3h`. Das resultierende WORD bei Offset 0 ist damit `F300h`, nicht null. Anschließend wird der Eintrag über Offset +6 in die Freiliste eingehängt.
+
+Das ist ein starker Beleg dafür, dass `F3h` hier ein Sonderwert im oberen Byte des ersten WORDs ist. Es ist nicht ein separates Feld neben einer weiterhin gültigen Segmentadresse.
+
+### 2. Wiederverwendung aus der Freiliste
+
+Die Routine `0x6DAC` nimmt den Freilistenkopf aus `DS:0E48`, folgt dem Verkettungsfeld bei +6 und initialisiert den wiederverwendeten Eintrag. Dabei setzt sie unter anderem:
+
+- WORD bei +0 auf null,
+- WORDs bei +2, +4 und +6 auf null,
+- WORD bei +8 aus dem gesicherten Eingangsregister,
+- Felder +0A, +0C und +0E auf null.
+
+Das obere Byte bei +1 wird in dieser Routine nicht separat beschrieben. Es wird durch das Löschen des gesamten WORDs bei +0 mit zurückgesetzt. Wenn der Block anschließend tatsächlich im Speicher angelegt wird, wird das Segment-WORD bei +0 mit dem tatsächlichen Segmentwert belegt.
+
+### 3. Warum 0x20CB gegen F0h prüft
+
+Die relevante Sequenz lautet:
+
+```asm
+20D1  mov  di,es:[bx+8]       ; Owner-Handle
+20D5  cmp  byte es:[di+1],0xF0
+20DA  jae  0x20F2
+20DC  mov  es,word es:[di]   ; Segment-WORD des Owner-Handles
+```
+
+Die Routine prüft somit das obere Byte des Segment-WORDs, bevor sie dessen gesamten Inhalt als Segmentwert verwendet. Ein Wert ab `F0h` wird nicht als gewöhnlicher GEODE-Segmentzeiger akzeptiert.
+
+Das passt zum Freigabepfad: Ein freigegebener Handle kann ein Sonder-WORD wie `F300h` tragen. Würde `0x20CB` dieses WORD ungeprüft nach ES laden, würde es eine Sondermarkierung als Segment interpretieren.
+
+### 4. Konsequenz für die Werte F3h bis FEh
+
+Die in Untersuchung 2233 aufgelisteten Konstanten bleiben als tatsächliche Schreibwerte belegt. Ihre Interpretation wird aber eingeschränkt:
+
+- `F3h` ist im Freigabepfad der obere Bytewert des Sonder-WORDs `F300h`.
+- Die weiteren Werte `F4h` bis `FEh` dürfen nicht allein aufgrund der Schreibstellen als eigenständige Handle-Typen oder Statuscodes bezeichnet werden.
+- Für jede dieser Konstanten muss geprüft werden, ob sie ebenfalls das obere Byte eines Segment-/Zeiger-WORDs überschreibt oder in einem anderen Layout vorkommt.
+
+### 5. Korrektur der vorherigen Dokumentation
+
+Die Formulierung „Offset +1 ist ein klassifizierendes Handle-Statusfeld“ aus Untersuchung 2233 wird hiermit zurückgenommen. Präziser ist:
+
+**Offset +1 ist das obere Byte des WORD-Feldes bei Handle-Offset 0.** Im normalen Speicherblockfall enthält dieses WORD eine Segmentadresse; in bestimmten Sonder- oder Freigabezuständen kann es einen reservierten Marker tragen.
+
+Die Prüfung `>= F0h` in `0x20CB` ist daher als Plausibilitäts-/Sonderwertprüfung vor dem Laden des Owner-Segments zu verstehen. Die genaue Bedeutung jedes Markers bleibt offen.
+
+### 6. Quellenabgrenzung
+
+Die online verfügbare FreeGEOS-Dokumentation beschreibt ausdrücklich die SDK-/Systemarchitektur von GEOS 2.0. Sie bestätigt allgemein, dass Handle-Einträge 16 Byte umfassen und unterschiedliche Kernelobjekte referenzieren können, wird hier aber nicht als Beleg für die interne Feldsemantik oder Markerwerte von GeoWorks 1.x verwendet. Maßgeblich bleiben die Bytes und Kontrollflüsse des untersuchten GeoWorks-1.x-Kernels.
+
+### 7. Nächste Prüfung
+
+Als nächstes werden die Schreibstellen `0x28D0`, `0x2B7E`, `0x2B96`, `0x2BC4`, `0x8542`, `0x994E`, `0xA08D` und `0xAB87` jeweils rückwärts und vorwärts verfolgt. Ziel ist festzustellen, ob sie dasselbe erste WORD-Feld markieren oder ob einzelne Stellen andere Handle-/Objektlayouts verwenden.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
