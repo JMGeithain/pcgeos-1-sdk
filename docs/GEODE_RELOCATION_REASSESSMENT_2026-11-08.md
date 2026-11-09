@@ -3580,3 +3580,72 @@ Der interne Nachweis stammt aus dem untersuchten GeoWorks-1.x-Kernel-Load-Image.
 - welcher öffentliche Dateisystemdienst diesen internen Datensatz erzeugt.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2239 – FAh-Liste als Zuordnung Handle ↔ Kennwert
+
+Die FAh-Liste wurde über die Such- und Rückgabehilfen `0x85B1`, `0x85DE` und `0x85F1` weiter analysiert. Der bisherige Befund „GEODE-bezogene globale Liste“ lässt sich präzisieren: Sie enthält eine verkettete Zuordnung zwischen einem Handle und einem zweiten WORD-Kennwert.
+
+### 1. Suche nach Handle: 0x85B1
+
+```asm
+85B1  call 0x9630
+85B4  mov  di,[bx+8]       ; Owner-Handle
+85B7  mov  es,[di]         ; Owner-Segment
+85B9  test byte es:[3],80h
+85C1  mov  cx,es:[4A]
+85C6  mov  di,4Ch
+85C9  mov  si,es:[di]      ; Listenanfang
+85D0  cmp  bx,[si+2]       ; gespeicherter Handle
+85D5  lea  di,[si+4]       ; Link-Feld
+85D8  mov  es,ds
+85DA  jmp  85C9
+```
+
+Die Routine prüft zunächst ein Attributbit `0x80` im Owner-GEODE-Datenblock. Nur wenn es gesetzt ist, durchsucht sie die Liste ab GEODE-Offset `0x4C`. Verglichen wird der Eingabehandle BX mit dem WORD im Listeneintrag bei +2.
+
+Bei Treffer bleibt SI auf dem passenden Listeneintrag; Carry wird gelöscht. Bei fehlendem GEODE-Attribut oder fehlendem Eintrag wird Carry gesetzt.
+
+### 2. Handle zu Kennwert: 0x85DE
+
+`0x85DE` ruft `0x85B1` auf. Bei Treffer gibt es das WORD bei Eintragsoffset +6 in AX zurück. Die Liste liefert somit zu einem gefundenen Handle einen zweiten Kennwert.
+
+### 3. Kennwert zurück zu Handle: 0x85F1
+
+Die Gegenrichtung ist ebenfalls vorhanden:
+
+- BX bezeichnet den Owner-Kontext; falls BX null ist, wird der aktuelle Handle aus `SS:2` verwendet.
+- Das Segment des Owner-GEODE wird aus dem ersten WORD des Owner-Handles geladen.
+- Die Routine durchläuft die Liste ab GEODE-Offset `0x4C`.
+- Sie vergleicht den Eingabewert AX mit dem WORD bei Eintragsoffset +6.
+- Bei Treffer liefert sie das WORD bei +2 als Handle in BX zurück.
+
+Damit ist die Zuordnung bidirektional: Handle `+2` ↔ Kennwert `+6`.
+
+### 4. Vergabe des Kennwerts in 0x8533
+
+Beim Erzeugen eines FAh-Eintrags wird:
+- +2 mit dem eingehenden AX belegt;
+- +4 als Verkettungszeiger auf den bisherigen Listenanfang gesetzt;
+- +6 initial auf 1 gesetzt, wenn die Liste leer ist;
+- andernfalls +6 aus dem bisherigen Kopf-Eintrag +6 übernommen und um 2 erhöht.
+
+Die Werte bei +6 bilden damit innerhalb dieser Liste eine fortlaufende Folge mit Schrittweite 2 (Startwert 1). Das ist als Vergaberegel belegt. Ob der Kennwert ein Ressourcenindex, ein Slot, eine ID oder ein anderer Token ist, ist noch nicht gesichert.
+
+### 5. Zusammenhang mit dem Owner-GEODE
+
+Die Liste liegt im GEODE-Datenblock:
+- `DS:4C` = Listenanfang;
+- jedes Element `+4` = nächster Listeneintrag;
+- `+2` = gespeicherter Handle;
+- `+6` = zugeordneter Kennwert.
+
+Die Routine `0x85B1` prüft zusätzlich das GEODE-Attributbit `DS:3 & 0x80`. Das zeigt, dass diese Zuordnung nur für GEODEs mit diesem Attribut aktiviert wird. Die genaue Bedeutung des Attributbits und des Kennwertes bleibt offen.
+
+### 6. Ergebnis / nächste Prüfung
+
+**Gesichert:** Die FAh-Liste ist eine pro-GEODE verkettete, bidirektional durchsuchbare Zuordnung zwischen Handle und WORD-Kennwert. Der Kennwert wird bei neuen Einträgen mit Startwert 1 und danach Schrittweite 2 vergeben.
+
+**Offen:** Bedeutung des Kennwertes +6; Bedeutung des GEODE-Attributbits 0x80; Lebenszyklus und Freigabe der Zuordnung; welche öffentlichen GEODE-/Ressourcenoperationen die beiden Suchrichtungen verwenden.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
