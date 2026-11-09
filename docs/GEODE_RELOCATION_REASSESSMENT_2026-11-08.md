@@ -2861,3 +2861,51 @@ Warum die beiden Ressourcen desselben GEODEs auf denselben Dateioffset zeigen un
 **Quellenbasis:** Deutscher Originalkernel `GEOWORKS/KERNEL.OLD`, Load-Image-Offsets `0x1CF7–0x1D98`, `0x6E87–0x6E9A`, `0x7363–0x73A1`, `0x72EC`; Originaldateien BLANK.GEO und DISK.GEO. Statische Disassemblierung und Register-/Datenflussanalyse; kein Laufzeittest.
 
 **Unverändert:** Originalarchiv, Originalkernel, gepatchter Kernel, GEO-Dateien und SDK-Quelltexte. Kein `geoTest.geo` erstellt.
+
+
+## Untersuchung 2229 – Korrektur der ersten Ressourcentabelle: Deskriptorzeiger statt Größenwerte
+
+### 2229.1 – Neue Gegenprüfung anhand des Resource Descriptor / Dispatcher Audits
+
+Eine Gegenprüfung mit dem separat erhaltenen Prüfprotokoll `SVGA16_RESOURCE_DESCRIPTOR_DISPATCH_AUDIT.txt` (50 Assertions, Originalkernel-Disassembly SHA-256 `9356bbc05b83106f1e72f47ec6cb75163b1d1e5ed73152507203ead542d71461`) korrigiert die Interpretation aus Untersuchung 2228.
+
+Die WORD-Einträge ab `DS:003A` sind nicht unmittelbar die angeforderten Speichergrößen. Die Routine `0x1D9C` verwendet den Eintrag als Zeiger auf einen Deskriptor und liest aus diesem Deskriptor die WORD-Felder bei Offset `+0` und `+2`. Das Audit bestätigt insbesondere:
+
+- `0x1D9C` holt den ersten Zeiger aus der Tabelle bei `DS:003A`;
+- es liest den Deskriptorwert bei Offset `+2`;
+- dieser Wert wird mit 16 skaliert;
+- die daraus berechnete Größe wird auf eine 16-Byte-Grenze ausgerichtet;
+- anschließend werden die Verwaltungs-/Ladepfade über `0x701B` und `0x20FE` aufgerufen;
+- die Verarbeitung läuft über die weiteren Tabelleneinträge.
+
+Damit sind die zuvor als direkte Bytegrößen ausgegebenen Werte – etwa `0`, `0x10`, `0x20` und `0x370` – zunächst Zeigerwerte bzw. Deskriptorpositionen. Ihre numerische Ähnlichkeit mit plausiblen Größen war kein ausreichender Beleg für eine Größeninterpretation.
+
+### 2229.2 – Explizite Rücknahme von Aussagen aus Untersuchung 2228
+
+Die folgenden Aussagen aus 2228 werden zurückgenommen und dürfen nicht als Grundlage für einen GEODE-Aufbau verwendet werden:
+
+1. Die Tabelle ab `DS:003A` sei eine Tabelle direkter angeforderter Bytegrößen.
+2. Der Eintrag `0` bei Ressource 0 belege eine Nullgrößenanforderung.
+3. Der Sonderpfad `0x1D5F–0x1D62` könne deshalb als Nullgrößen-Sonderfall des Ressourceneintrags 0 interpretiert werden.
+
+Die beobachtete Speicherverwaltungsroutine `0x7363` rundet einen ihr übergebenen Wert mit `(AX + 15) >> 4` auf Absatzgröße um. Das bleibt ein eigenständiger Befund über diese Hilfsroutine. Es beweist aber nicht, dass die WORD-Einträge aus `DS:003A` selbst Bytegrößen sind.
+
+### 2229.3 – Aktuelles, korrigiertes Tabellenmodell
+
+Der aktuell belegte Aufbau des eingelesenen `8*n`-Byte-Bereichs lautet:
+
+| Bereich | Elementbreite | Sicherer Befund |
+|---|---:|---|
+| `DS:003A` | 2 Byte je Ressource | Zeiger auf Ressourcendeskriptoren |
+| `DS:003C` | 4 Byte je Ressource | 32-Bit-Dateioffset, niederwertiges WORD zuerst |
+| `DS:003E` | 2 Byte je Ressource | Relokationszahl je Ressource |
+
+Die zusätzlichen `2*n` Flagbytes werden separat in einen Stackpuffer eingelesen. Die Deskriptorzeiger und die DWORD-Dateioffsets sind verschiedene Datenstrukturen und dürfen nicht vermischt werden.
+
+### 2229.4 – Noch offene Deskriptorsemantik
+
+Das Audit belegt den Zugriff auf die WORD-Felder bei Deskriptoroffset `+0` und `+2` sowie die Multiplikation des zweiten WORDs mit 16. Es belegt außerdem die Ausrichtung des berechneten Ergebnisses auf 16 Byte. Die exakte semantische Benennung beider Deskriptorfelder, die Herkunft des Abzugswerts im Stackframe und die vollständige Beziehung zur an `0x20FE` übergebenen Leselänge bleiben offen. Diese Namen werden erst nach erneuter Prüfung der Originalbytes und aller relevanten Aufrufer vergeben.
+
+**Quellenbasis:** `SVGA16_RESOURCE_DESCRIPTOR_DISPATCH_AUDIT.txt` (50 Assertions; Prüfsummenangabe des verwendeten `KERNEL.OLD`-Disassemblys siehe Audit), bisherige GEODE-Loader-Analyse im Dossier, insbesondere `0x1D9C`, `0x701B`, `0x20FE` und die Tabellenberechnung in `0x1C76`. Das Prüfprotokoll ist ein unabhängiger statischer Auditbeleg, ersetzt aber nicht die erneute bytegenaue Gegenprüfung der Originaldatei in dieser Sitzung.
+
+**Status:** Die Aussagen 2228.1–2228.4 zur direkten Größentabelle sind ausdrücklich superseded. Die Befunde zur 16-Byte-Ausrichtung der Hilfsroutine bleiben isoliert bestehen. Originalarchiv, Kernel, GEO-Dateien und SDK-Quelltexte unverändert; kein `geoTest.geo` erstellt.
