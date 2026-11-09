@@ -3100,3 +3100,73 @@ Diese Zuordnung erklärt, warum `0x20CB` vom Ressourcenhandle zunächst zu einem
 **Offen:** die Bedeutung des Statusbytes `[owner_handle+1]` und insbesondere die Semantik des Abbruchvergleichs gegen `0xF0`. Dafür müssen die Erzeugungs-, Freigabe- und Statusänderungspfade des Kernel-Handle-Datensatzes vollständig verglichen werden.
 
 Weiterhin keine Änderungen an Originaldateien, kein Patch und keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2233 – Handle-Statusbyte und Abgrenzung bei 0xF0
+
+### 1. Der Vergleich in 0x20CB
+
+Der Code lautet:
+
+```asm
+20D1  mov  di,es:[bx+8]       ; Owner-Handle
+20D5  cmp  byte es:[di+1],0xF0
+20DA  jae  0x20F2             ; bei >= F0: keine GEODE-Suche
+```
+
+Der Vergleich ist unsigned. Er verwirft daher nicht einen einzelnen Sonderwert `0xF0`, sondern alle Statusbytes von `0xF0` bis `0xFF`. Erst bei einem Statusbyte unter `0xF0` wird das erste WORD des Owner-Handle-Datensatzes als Segment benutzt und die Ressourcentabelle durchsucht.
+
+### 2. Nachweis: Offset +1 ist ein Handle-Typ-/Statusfeld
+
+Im Kernel finden sich zahlreiche direkte Zuweisungen konstanter Werte an Handle-Offset +1. Beispiele aus dem Load-Image:
+
+| Adresse | Wert | unmittelbarer Codekontext |
+|---|---:|---|
+| `0x0B23` | `F5` | Initialisierung eines Handle-Datensatzes im Pfad ab `0x0B20` |
+| `0x11E9` | `FD` | Aufbau eines verketteten Datensatzes; Felder +2/+3/+4/+6/+0C werden ebenfalls gesetzt |
+| `0x28D0` | `F4` | eigener Rücksprung-/Freigabepfad nach `0x6DAC` |
+| `0x2B7E` | `F8` | Aufbau eines größeren, verketteten Datensatzes |
+| `0x2B96` | `F7` | Initialisierung eines zugehörigen Folgedatensatzes |
+| `0x2BC4` | `F9` | alternativer Zweig der Datensatzinitialisierung |
+| `0x6E50` | `F3` | Eintrag in die Kernel-Freiliste; Felder +0, +6 und +8 werden passend dazu gesetzt |
+| `0x8542` | `FA` | Aufbau eines verketteten Kernel-Datensatzes |
+| `0x994E` | `FE` | Aufbau eines Datensatzes mit Feldern +0A, +08, +04, +02, +0C |
+| `0xA08D` | `F6` | Initialisierung eines weiteren Kernel-Datensatztyps |
+| `0xAB87` | `FC` | Aufbau eines Datensatzes mit Rückverweis bei +8 und Verknüpfung bei +0C |
+
+Daneben gibt es echte Nullsetzungen des Feldes, etwa `0x7614` (`mov byte [si+1],0`). Das Feld ist somit nicht einfach ein einzelnes „gültig/ungültig“-Bit. Es wird als klassifizierender Statuswert beschrieben.
+
+### 3. Freiliste als besonders klarer Gegenbeleg
+
+Bei `0x6E2F–0x6E5E` wird ein Handle-Datensatz in die Freiliste eingehängt:
+
+- `0x6E4B`: WORD bei +0 wird auf null gesetzt.
+- `0x6E4D`: WORD bei +8 wird auf null gesetzt.
+- `0x6E50`: Byte bei +1 erhält `0xF3`.
+- `0x6E57`: alter Freilistenkopf wird bei +6 gespeichert.
+- `0x6E5A`: neuer Freilistenkopf wird auf BX gesetzt.
+
+Das belegt unmittelbar, dass mindestens `0xF3` ein besonderer Freilisten-/Freigabestatus ist. Ein solcher Datensatz darf selbstverständlich nicht als GEODE-Owner-Handle interpretiert werden.
+
+### 4. Vergleich mit normalen GEODE- und Ressourcenhandles
+
+Die GEODE-Initialisierung speichert bei `0x1B81–0x1B85` den GEODE-eigenen Handle in +8. Weitere Ladepfade schreiben denselben Owner-Bezug ebenfalls in +8. Die Routine `0x20CB` prüft anschließend das Statusbyte dieses Owner-Handles.
+
+Die Schwelle `0xF0` trennt daher in diesem Pfad normale Handle-Datensätze von den im Kernel durch Werte `F0–FF` markierten Sonderklassen. Die Beispiele oben zeigen konkrete Sonderwerte im Bereich `F3–FE`; die vollständige Belegung aller 16 Werte ist damit noch nicht bestimmt.
+
+**Wichtige Einschränkung:** Aus den Konstanten allein werden keine symbolischen Namen wie „Thread“, „Semaphore“, „VM-Handle“ oder „Dateihandle“ abgeleitet. Dafür sind die jeweiligen Erzeugungs- und Verbraucherpfade vollständig zu verfolgen. Die externe PC/GEOS-2.0-Dokumentation zur Handle-Tabelle beschreibt zwar 16-Byte-Handleeinträge und unterschiedliche Handle-Verwendungen, ist aber ausdrücklich kein Beweis für identische interne Statuscodes in GeoWorks 1.x.
+
+### 5. Ergebnis
+
+**Gesichert:**
+- `[owner_handle+1] >= 0xF0` führt in `0x20CB` zum Abbruch der GEODE-Ressourcenauflösung.
+- Offset +1 ist ein klassifizierendes Handle-Statusfeld; es enthält mehrere konstante Sonderwerte.
+- `0xF3` ist im untersuchten Code ausdrücklich der Status eines in die Freiliste eingehängten Handle-Datensatzes.
+- Die Werte `F4–FE` treten in weiteren spezialisierten Kernel-Datensatz-Aufbaupfaden auf.
+
+**Noch offen:**
+- vollständige Zuordnung jedes Statuswertes `F0–FF`;
+- genaue Statusklasse des Owner-Handles im regulären GEODE-Ladefall;
+- warum die Prüfung den gesamten Bereich ab `F0` sperrt und ob es weitere Sonderfälle unterhalb `F0` gibt.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
