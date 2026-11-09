@@ -44,11 +44,11 @@ Bit-/Pufferverarbeitung weiterverwendet.
 Im Code ab 0x1CCB wird ein Eingabebyte aus DS:[...+40EAh]
 geladen, das untere Nibble mit 0Fh maskiert und anschließend über
 die Mapping-Tabelle umgesetzt:
-  0x1CD6: 8B 1E EA 40    MOV BX,[40EAh]
-  0x1CDA: 8A 18          MOV BL,[BX]
-  0x1CDC: 2A FF          SUB BH,BH
-  0x1CDE: 8B C3          MOV AX,BX
-  0x1CE0: 83 E3 0F       AND BX,000Fh
+  0x1CD5: 8B 1E EA 40    MOV BX,[40EAh]
+  0x1CD9: 8A 18          MOV BL,[BX]
+  0x1CDB: 2A FF          SUB BH,BH
+  0x1CDD: 8B C3          MOV AX,BX
+  0x1CDF: 83 E3 0F       AND BX,000Fh
   0x1CE2: 8A 87 D6 2F    MOV AL,[BX+2FD6h]
 
 Anschließend wird das obere Nibble des ursprünglichen Bytes
