@@ -1,0 +1,131 @@
+ICONMAKE.EXE – Aufruferanalyse der Routine 0x1694
+Untersuchung 2335
+Stand: 2026-11-09
+
+Quelle
+Original ICONMAKE.EXE aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+MZ-Header 0x200 Bytes; alle Adressen sind Load-Modul-Offsets.
+Bytegenaue Disassemblierung mit 8086-Modus gegen /tmp/mod.bin.
+
+1. Aufrufstellen und übergebene Daten
+
+A) 0x1B03 – einzelner berechneter Wert
+  1AF5 XOR AX,AX
+  1AF7 PUSH AX
+  1AF8 CALL 173Eh
+  1AFE XOR AX,[06C0h]
+  1B02 PUSH AX
+  1B03 CALL 1694h
+Der Wert für 0x1694 entsteht aus dem Nullwert/Ergebnis der Routine
+0x173E und einer XOR-Verknüpfung mit DS:06C0h. Der genaue Zweck
+dieses Aufrufzweigs hängt vom umgebenden Schleifenzustand ab.
+
+B) 0x1C1B – Daten aus temporärem Puffer DS:06C2h
+  1C14 MOV AL,[06C2h+SI]
+  1C18 SUB AH,AH
+  1C1A PUSH AX
+  1C1B CALL 1694h
+Die Schleife läuft über (Länge+7)>>3 Bytes, also eine auf Byte-
+Grenzen gerundete Bit-/Maskenpufferlänge. Vorher wird DS:06C2h
+mit 0x80 Bytes auf null gesetzt und im vorangehenden Verarbeitungsteil
+bitweise befüllt (OR mit einer gesetzten Bitmaske).
+
+C) 0x1C31 – Abschlussmarker
+  1C2D MOV AX,FFFFh
+  1C30 PUSH AX
+  1C31 CALL 1694h
+Der Parameter FFFFh setzt in 0x1694 DS:06AAh auf null. Er ist
+ein Steueraufruf, kein Nutzbyte.
+
+D) 0x1C4C – temporärer Bytepuffer DS:1846h
+  1C45 MOV AL,[1846h+SI]
+  1C49 SUB AH,AH
+  1C4B PUSH AX
+  1C4C CALL 1694h
+Die Schleife gibt (Länge+1)>>1 Bytes aus dem temporären Bereich
+DS:1846h aus. Dieser Bereich wurde zuvor durch das Packen von
+Nibble-/Bitinformationen aufgebaut.
+
+E) 0x1C60 – weiterer Abschlussmarker
+  1C5C MOV AX,FFFFh
+  1C5F PUSH AX
+  1C60 CALL 1694h
+
+F) 0x1C96 – invertierte Bytes aus DS:[2FC8h]
+  1C8B MOV BX,[2FC8h]
+  1C8F MOV AL,[BX+SI]
+  1C91 NOT AL
+  1C93 SUB AH,AH
+  1C95 PUSH AX
+  1C96 CALL 1694h
+Die Bytes werden vor dem Aufruf bitweise invertiert.
+
+G) 0x1CBF – Bytes aus DS:[40EAh], XOR DS:06C0h
+  1CB2 MOV BX,[40EAh]
+  1CB6 MOV AL,[BX+SI]
+  1CB8 SUB AH,AH
+  1CBA XOR AX,[06C0h]
+  1CBE PUSH AX
+  1CBF CALL 1694h
+
+H) 0x1CFF – Farb-/Nibble-Mapping
+  1CDF AND BX,000Fh
+  1CE4 MOV AL,[BX+2FD6h]
+  ...
+  1CF0 MOV AL,[BX+2FD6h]
+  ...
+  1CFC OR CX,AX
+  1CFE PUSH CX
+  1CFF CALL 1694h
+Hier wird ein Eingabebyte in zwei Nibbles zerlegt, beide Nibbles
+werden über DS:2FD6h übersetzt und zum Ergebnisbyte kombiniert.
+
+I) 0x1D18 – Abschlussmarker
+  1D14 MOV AX,FFFFh
+  1D17 PUSH AX
+  1D18 CALL 1694h
+
+2. Erkenntnis zur Rolle von 0x1694
+Die Aufrufstellen zeigen, dass 0x1694 nicht ausschließlich die
+farbkonvertierten Bytes verarbeitet. Sie wird auch für temporäre
+Bit-/Bytepuffer, invertierte Bytes und XOR-transformierte Bytes
+verwendet. Der Aufrufer liefert jeweils einen 16-Bit-Wert; FFFFh
+ist ein spezieller Steuerwert.
+
+Die Routine 0x1694 hat zwei Betriebsarten:
+- Bei DS:2FD4h = 0 und Parameter != FFFFh: direkter Byte-Write
+  über DS:2FE6h.
+- Bei DS:2FD4h != 0: zustandsabhängige RLE-artige Segmentlogik
+  mit Literal- und Wiederholungszweigen.
+Der Abschlusswert FFFFh setzt DS:06AAh unabhängig davon zurück.
+
+3. Datenfluss für den untersuchten Farbpfad
+PCX-/Eingabepuffer DS:[40EAh]
+  -> Eingabebyte
+  -> zwei 4-Bit-Indizes
+  -> Mapping DS:2FD6h
+  -> zusammengesetztes Ergebnisbyte
+  -> Aufruf 0x1694
+  -> abhängig von DS:2FD4h direkter oder RLE-artiger Ausgabepfad.
+
+4. Grenzen des Befunds
+Die Aufrufstellen belegen unterschiedliche Datenquellen und
+Transformationen, aber noch nicht, dass alle Zweige in einem
+einzigen Lauf ausgeführt werden. Der Wert von DS:2FD4h muss bis
+zu seiner Initialisierung und zu den Aufrufern zurückverfolgt
+werden, um zu bestimmen, welche Ausgabepfade für welche
+Icon-/PCX-Varianten aktiv sind.
+
+Nächste Schritte
+- Initialisierung und alle Schreibzugriffe auf DS:2FD4h verfolgen.
+- Routine 0x173E untersuchen, da sie unmittelbar vor 0x1B03
+  und auch in weiteren Aufrufpfaden erscheint.
+- DS:1846h, DS:06C2h, DS:2FC8h, DS:40EAh und DS:2FE6h als
+  Quell-/Zielpuffer in den umgebenden Funktionen zuordnen.
+
+Ergebnisstatus
+Neun direkte Aufrufstellen und ihre unmittelbar sichtbaren
+Datenquellen bzw. Steuerparameter sind erfasst. Der Datenfluss
+zum Farb-Mapping-Pfad ist nachvollzogen; die Auswahl der
+Kompressionsbetriebsart bleibt noch offen.
