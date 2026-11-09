@@ -3877,3 +3877,8 @@ Im Pfad 0x9A7C–0x9A8F wird CX mit DS:060B verglichen. Nur bei Gleichheit wird 
 **Offen:** Der konkrete Handler für API 0049h; die Semantik des Wertes bei Blockoffset +50h; die Bedeutung des Feldes +0Eh im neu erzeugten Objekt; die fachliche Rolle von 0x240; die Namen und Bedeutung der Zähler ES:26 und DS:05F7; die genaue Wirkung des Aufrufs 0x9642 mit AX=6.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
+
+
+### Korrektur zu Untersuchung 2243: Sonderzweig 0x9642 mit SI=FFFFh
+
+Die Beschreibung des Zweigs 0x9642 mit AX=0006h und SI=FFFFh wird präzisiert: 0x964A erkennt AX=6 und springt nach 0x965C. Dort führt der Vergleich SI=FFFFh direkt zum gemeinsamen Ausgang 0x966D. Der Zeichenketten-Kopierpfad ab 0x9667 wird in diesem Fall übersprungen. Daraus folgt keine Dereferenzierung von DS:FFFFh; die frühere Formulierung, dieser Bereich werde „gerade nicht kopiert“, war missverständlich und wird hiermit ersetzt. Die konkrete Wirkung des gemeinsamen Abschlusses 0x3D8 bleibt offen.
