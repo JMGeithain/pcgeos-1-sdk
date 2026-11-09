@@ -48,13 +48,9 @@ Aus dem Gesprächsübergang wurde als letzter Untersuchungsstand genannt:
 - offene Nachbar-/Unterroutine-Adressen `0BD0h`, `0CACh` und `0CC5h`
 - beobachteter Kopiervorgang bei `0B6Fh–0B75h` mit elf Bytes
 
-**Beweisstatus:** Diese Angaben sind hier zunächst nur als übernommene Arbeitsnotiz festgehalten. Die Datei `KERNEL_DIS.TXT` ließ sich laut Nutzer nicht erstellen. Bei der Suche im vorhandenen Projektdossier wurde jedoch ein früher dokumentierter, abweichender Dateiname gefunden: `kernel_original_body.dis` (nicht `KERNEL_DIS.TXT`). Das zugehörige Original-Binary wurde als `kernel_original_body.bin` geführt. Ein älterer Audit-Nachtrag dokumentiert dafür folgende SHA-256-Werte: Binary `948324ccd5fac49172548209c8137530dbdee6e3a64c81e2c52c503f5d85552d`, Disassemblierung `9356bbc05b83106f1e72f47ec6cb75163b1d1e5ed73152507203ead542d71461`. Diese Hashwerte stammen aus früheren Dossier-/Auditunterlagen; die beiden Quelldateien selbst wurden in dieser Fortsetzung nicht erneut geöffnet und gehasht. Die früher dokumentierte Arbeitsbasis ist damit identifizierbar, aber noch nicht aktuell reproduziert. Es werden daraus keine neuen Aussagen über Registerverträge, Kontrollfluss oder GEOTEST-ABI abgeleitet.
+**Beweisstatus:** Diese Angaben sind hier zunächst nur als übernommene Arbeitsnotiz festgehalten. Die Datei `KERNEL_DIS.TXT` ließ sich laut Nutzer nicht erstellen. Die Quelle wurde deshalb aus dem nun bereitgestellten Archiv `GEOWORKS.zip` wiederhergestellt. Darin liegen `GEOWORKS/KERNEL.OLD` (72.688 Bytes) und `GEOWORKS/KERNEL.EXE` (72.736 Bytes). Verwendet wurde ausschließlich `KERNEL.OLD`; `KERNEL.EXE` blieb unangetastet. Der MZ-Header von `KERNEL.OLD` umfasst 96 Paragraphen = 1.536 Bytes. Der danach extrahierte Kernel-Body umfasst 71.152 Bytes und hat SHA-256 `948324ccd5fac49172548209c8137530dbdee6e3a64c81e2c52c503f5d85552d` – exakt den bereits im früheren Dossier dokumentierten Wert. Die Disassemblierung wurde reproduzierbar mit `objdump -D -b binary -m i8086 kernel_original_body.bin` erzeugt. Ihre SHA-256-Prüfsumme lautet `9356bbc05b83106f1e72f47ec6cb75163b1d1e5ed73152507203ead542d71461` und stimmt ebenfalls exakt mit dem früher dokumentierten Wert überein. Ein früherer Audit-Ankercheck wurde erneut ausgeführt: 53 von 53 Adressanker vorhanden. Damit ist die frühere Originalanalysegrundlage erfolgreich wiederhergestellt und unabhängig hashbestätigt. Die Originaldateien wurden nicht verändert; die Binärdateien werden aus Urheberrechtsgründen nicht in dieses öffentliche Repository hochgeladen.
 
-Vor einer Fortsetzung der Disassemblierungsanalyse müssen feststehen:
-- genaue Kerneldatei und Version,
-- SHA-256 des Kernel-Bodys erneut berechnen und mit dem früher dokumentierten Wert vergleichen,
-- SHA-256 der Disassemblierung erneut berechnen und mit dem früher dokumentierten Wert vergleichen,
-- eindeutige Zuordnung der Adressen zu Dateioffset, Kernel-Body-Offset oder Disassembler-Label.
+Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klären. Im reproduzierten Disassembly erscheinen die korrespondierenden Stellen als `10B20h`, `10B6Fh`, `10CAC h` und `10CC5h`; `10BD0h` liegt innerhalb einer Instruktion und ist kein Instruktionsanfang. Deshalb dürfen die verkürzten Angaben `0B20h`, `0BD0h`, `0CACh` und `0CC5h` nicht ungeprüft als gleichbedeutende Labels verwendet werden. Insbesondere ist `10B20h` zunächst nur ein Disassembly-Offset; seine Funktion als Code oder Daten muss anhand der Aufrufer und Kontrollflussreferenzen bestimmt werden.
 
 ## 4. Nächste Arbeitsschritte
 
@@ -83,8 +79,9 @@ Vor einer Fortsetzung der Disassemblierungsanalyse müssen feststehen:
 | Repository und Schreibberechtigung | bestätigt |
 | SDK 0.1 Buildarchitektur | aus Repository-Dokumentation bestätigt |
 | GeoWorks-1.2 Zielprotokolle | dokumentiert: Kernel 622.3, UI 693.0 |
-| Untersuchungsnotiz 2245 | übernommen; frühere Originalquellen-Hashes im Dossier wiedergefunden, Dateien aktuell noch nicht erneut verifiziert |
-| frühere Originaldisassemblierung `kernel_original_body.dis` | Hash in Dossier dokumentiert; Datei aktuell nicht erneut verifiziert |
+| Untersuchungsnotiz 2245 | übernommen; Adressnotation wird gegen das wiederhergestellte Disassembly geprüft |
+| Originalkernel-Body | aus `GEOWORKS/KERNEL.OLD` extrahiert; SHA-256 exakt bestätigt |
+| Originaldisassemblierung | mit objdump neu erzeugt; SHA-256 exakt bestätigt; 53/53 Anker vorhanden |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
