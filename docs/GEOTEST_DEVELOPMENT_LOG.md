@@ -116,6 +116,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2271 | Neun Profil-/Bypass-Unit-Tests, Parser-Absatzregression und realer deutscher Profil-Parse erfolgreich ausgeführt |
 | Untersuchung 2272 | GitHub Actions testet den aktuellen Repository-Checkout erfolgreich: Python-Compile, Profiltests und GEODE-Absatzregression PASS |
 | Untersuchung 2273 | Build mit rekonstruierter GitHub-Quellfassung wiederholt; identischer GEO-Hash, Quellbyteidentität weiterhin offen |
+| Untersuchung 2274 | Schwerer Fehler im Prozessmethoden-Farzeiger entdeckt und korrigiert: Ressourcenwort/Offsetwort vertauscht; Relokation lag auf falschem WORD |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1800,3 +1801,77 @@ Die CI führt Python-Compile, die neun Profiltests und die GEODE-Absatzregressio
 6. Ein Laufzeittest in GeoWorks 1.2 wurde weiterhin nicht ausgeführt.
 
 **Nächster Schritt 2274:** Für die endgültige Quellreproduzierbarkeit muss eine echte, byteidentische Repository-Arbeitskopie bereitgestellt werden (z. B. durch einen vom Nutzer heruntergeladenen GitHub-Quellarchiv-Download). Danach alle Git-Blob-SHAs vor dem Build prüfen, den Build erneut ausführen und den resultierenden Hash mit `9ace19da...` vergleichen. Erst anschließend wird die GEOTEST-Datei in einer gesicherten GeoWorks-1.2-Installation gestartet.
+
+
+## 35. Untersuchung 2274 – Prozessmethoden-Farzeiger: Bytevergleich mit BOUNCE.GEO und SPINTEXT.GEO
+
+Ziel: Vor einem GeoWorks-Lauf die von SDK 0.1 erzeugte Prozessmethodentabelle direkt mit den originalen 1.x-Referenzdateien vergleichen. Die Datei GEOWORKS.zip enthält dafür GEOWORKS/WORLD/BOUNCE.GEO und GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO. Beide wurden mit dem aktuellen GEODE-Parser aus dem Archiv gelesen; die Originaldateien blieben unverändert.
+
+### 35.1 Originalbefund
+
+| Referenzdatei | DGROUP-Ressource 1 | Methodenanzahl bei DGROUP+46h | Erster Handlerdatensatz | Relokation |
+|---|---:|---:|---|---:|
+| BOUNCE.GEO | 240 Bytes | 7 | 02 00 38 00 | Ressource 1, Offset 0062h |
+| SPINTEXT.GEO | 160 Bytes | 8 | 02 00 38 00 | Ressource 1, Offset 0062h |
+
+Die Bytes 02 00 38 00 ergeben zwei WORDs: erstes WORD Ressourcen-ID 0002h, zweites WORD Codeoffset 0038h. Die Relokationsstreams beider Originaldateien enthalten am ersten Handlerdatensatz den Eintrag 22 00 62 00. Der Zieloffset ist also 0062h, das erste WORD des Vier-Byte-Farzeigers. Die weiteren Handlerdatensätze folgen im Abstand von vier Bytes; auch ihre Relokationen zeigen auf das jeweils erste WORD.
+
+Gesicherter Befund für diese beiden GeoWorks-1.x-Prozessklassen: Ein Method-Handler-Farzeiger ist hier als Ressourcen-WORD gefolgt vom Offset-WORD gespeichert; die Relokation sitzt auf dem Ressourcen-WORD.
+
+### 35.2 Fehler im bisherigen SDK-Packer
+
+Die bisherige Implementierung in pcgeos1/packer.py schrieb für jeden Handler zuerst den Codeoffset, danach Ressourcen-ID 2 und die Relokation auf das zweite WORD. Das war genau umgekehrt zum Originalformat.
+
+Der alte experimentelle Build GEOTEST.GEO mit SHA-256 9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b enthält diese vertauschten Methodenzeiger. Dieser alte Build darf nicht als Laufzeittestkandidat verwendet werden. Die bloße Parser-Akzeptanz hat den Fehler nicht erkannt, weil der GEODE-Container formal parsebar blieb.
+
+### 35.3 Korrektur
+
+pcgeos1/packer.py wurde geändert:
+1. Die Prozessmethoden werden in write_process_methods() zentral geschrieben.
+2. Jeder Handler erhält das Paar (resource_id=2, code_offset).
+3. Die Relokation (0x22, 0, pointer_offset) zeigt auf das erste WORD.
+4. Fehlende Handler-Symbole werden direkt beim Erzeugen der Methodentabelle abgewiesen.
+
+Die neue Regression tests/test_process_method_table.py prüft Message-IDs, Wortreihenfolge, Ressourcen-ID, Codeoffset und Relokationsposition. Der Workflow .github/workflows/sdk-tests.yml wurde um diesen Test ergänzt.
+
+### 35.4 Korrigierter lokaler Build
+
+Der korrigierte Packer wurde lokal auf das deutsche Profilarchiv angewendet. Für alle acht Methodeneinträge wurde die resultierende DGROUP-Ressource erneut gelesen:
+
+| Index | Message | Ressourcen-WORD | Codeoffset | Relokation auf Ressourcen-WORD |
+|---:|---:|---:|---:|---|
+| 0 | 0A01h | 2 | 002Fh | PASS |
+| 1 | 0A03h | 2 | 0071h | PASS |
+| 2 | 0004h | 2 | 0068h | PASS |
+| 3 | 0057h | 2 | 0074h | PASS |
+| 4 | 0049h | 2 | 0089h | PASS |
+| 5 | 00C3h | 2 | 00B1h | PASS |
+| 6 | 007Bh | 2 | 00ECh | PASS |
+| 7 | 0C0Ah | 2 | 0148h | PASS |
+
+Für jeden Eintrag wurde bestätigt: Ressourcen-WORD = 2; Codeoffset liegt innerhalb der 1.397 Bytes großen Code-Ressource; genau eine Relokation vom Typ 0x22 zeigt auf das erste WORD.
+
+Der korrigierte Host-Build hat 70.794 Bytes, 12 Ressourcen und 41 Relokationen. Neuer SHA-256-Wert:
+
+3f72580d9a6f89bd2b99d01efb8fbc77f91bf49de520690c3a5c8b73759478aa
+
+Dieser Hash unterscheidet sich vom fehlerhaften Vorab-Build. Das Ergebnis ist weiterhin nur strukturell geprüft und nicht in GeoWorks 1.2 gestartet.
+
+### 35.5 Teststatus und Grenzen
+
+- Die zwei neuen Methodentabellentests bestanden lokal.
+- Die bereits vorhandenen neun Profiltests und die GEODE-Absatzregression müssen nach dem neuen Packer-Commit erneut in GitHub Actions laufen.
+- Der korrigierte Build wurde aus der vorhandenen rekonstruierten lokalen Buildkopie erzeugt. Die vollständige Byteidentität aller SDK-Quelldateien mit GitHub-HEAD ist weiterhin nicht bestätigt.
+- Das Original-BOUNCE.GEO wurde nur lesend analysiert. Es wurde nicht in das öffentliche Repository hochgeladen.
+- Ein Laufzeittest in GeoWorks 1.2 steht weiterhin aus.
+
+### 35.6 Ergebnis Untersuchung 2274
+
+1. Die Originale BOUNCE.GEO und SPINTEXT.GEO belegen für ihre Prozessmethodentabellen die Reihenfolge Ressourcen-WORD, Offset-WORD.
+2. Die Relokation gehört auf das erste WORD des Farzeigers.
+3. Der alte Packer hatte Wortreihenfolge und Relokationsziel vertauscht.
+4. Der Fehler ist korrigiert und durch zwei neue Unit-Tests abgesichert.
+5. Der bisherige Buildhash 9ace19da... ist als fehlerhafter Zwischenstand gekennzeichnet und darf nicht getestet werden.
+6. Der korrigierte Buildhash lautet 3f72580d...; Laufzeit- und vollständige Quellreproduzierbarkeit bleiben offen.
+
+Nächster Schritt 2275: GitHub Actions mit dem neuen Methodentabellentest vollständig durchlaufen lassen. Anschließend den korrigierten Build-Bericht und die Artefakte aktualisieren. Danach die übrigen Prozessmethoden-Message-IDs und den nativen Aufrufvertrag der acht Handler gegen BOUNCE.GEO, SPINTEXT.GEO und den Kernel prüfen; erst dann den Laufzeittest freigeben.
