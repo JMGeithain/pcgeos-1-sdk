@@ -1,0 +1,93 @@
+ICONMAKE.EXE – Untersuchung der Empfängerroutine 0x1694
+Untersuchung 2333
+Stand: 2026-11-09
+
+Quelle
+Original ICONMAKE.EXE aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+MZ-Header 0x200 Bytes; Offsets beziehen sich auf das Load-Modul
+/tmp/mod.bin.
+
+1. Einstieg und Parameter
+Die Routine beginnt bei 0x1694:
+  1694 55             PUSH BP
+  1695 8B EC          MOV BP,SP
+  1697 8B 56 04       MOV DX,[BP+04]
+Der übergebene 16-Bit-Wert wird also zunächst in DX geladen.
+Der Aufruf aus dem Nibble-Konvertierungspfad erfolgt bei 0x1CFF:
+  1CFE 51             PUSH CX
+  1CFF E8 92 F9       CALL 1694h
+  1D02 83 C4 02       ADD SP,2
+
+2. Zustandsabhängige Verarbeitung
+Die Routine greift auf folgende globale Speicherstellen zu:
+  DS:2FD4h – wird am Anfang auf 0 geprüft.
+  DS:06AAh – wird als Zeiger/Statusfeld verwendet und beschrieben.
+  DS:2FE6h – wird als Zeiger/Index für Vergleichszugriffe verwendet.
+
+Ein Teil der Instruktionsfolge:
+  1699 83 3E D4 2F 00  CMP word [2FD4h],0
+  169E 75 08             JNE 16A8h
+  16A0 83 FA FF          CMP DX,FFFFh
+  16A3 74 03             JE 16A8h
+  16A5 E9 86 00          JMP 1730h
+  16A8 83 FA FF          CMP DX,FFFFh
+  16AB 75 0A             JNE 16B7h
+  16AD C7 06 AA 06 00 00 MOV word [06AAh],0
+  16B3 8B E5             MOV SP,BP
+  16B5 5D                POP BP
+  16B6 C3                RET
+
+Die Routine hat somit einen Sonderpfad für den Wert FFFFh und
+einen weiteren Pfad, der von [2FD4h] abhängt.
+
+3. Puffer- und Zustandszugriffe
+Ab 0x16B7 wird [06AAh] geprüft und als Zeiger in BX geladen.
+Es folgen byteweise Vergleiche über [BX], [BX-1] und [BX-2].
+Später wird [06AAh] verändert und Bytewerte wie FEh bzw. 00h
+werden über [BX] geschrieben. Außerdem wird [2FE6h] inkrementiert
+oder dekrementiert.
+
+Das Muster belegt eine zustandsbehaftete Ausgabe-/Pufferverwaltung.
+Die Routine ist kein einfacher direkter Schreibzugriff auf eine
+Pixeladresse: sie entscheidet anhand des Parameters und des
+bestehenden Pufferzustands über mehrere Pfade.
+
+4. Aufrufstellen
+Im Modul wurden direkte Near-Call-Aufrufe auf 0x1694 gefunden bei:
+  0x1B03
+  0x1C1B
+  0x1C31
+  0x1C4C
+  0x1C60
+  0x1C96
+  0x1CBF
+  0x1CFF
+  0x1D18
+
+Der Aufruf 0x1CFF ist der unmittelbar aus dem untersuchten
+Nibble-Mapping-Pfad. Die übrigen Aufrufstellen gehören zum
+umgebenden Konvertierungs-/Ausgabecode und müssen einzeln mit
+ihren Argumenten untersucht werden.
+
+5. Noch nicht bewiesen
+Aus den hier aufgeführten Zugriffen allein lässt sich nicht sicher
+ableiten, ob 0x1694 eine PCX-RLE-Kompressionsroutine, ein allgemeiner
+Byte-Writer oder ein anderer Zwischenpuffer-Mechanismus ist.
+Insbesondere sind die Semantik von DS:2FD4h, DS:2FE6h und DS:06AAh
+sowie die vollständigen Schreibziele noch nicht abschließend geklärt.
+Eine Bezeichnung als RLE-Encoder wäre daher derzeit eine Hypothese
+und wird in diesem Bericht ausdrücklich vermieden.
+
+Nächste Schritte
+- Kontrollfluss von 0x1694 vollständig und bytegenau auflösen.
+- Aufrufstellen 0x1B03 und 0x1C1B–0x1D18 mit Stackargumenten
+  vergleichen.
+- Schreibzugriffe auf DS:06AAh und DS:2FE6h rückverfolgen.
+- Erst danach die Funktion als Pixel-Ausgabe, Packroutine oder
+  Kompressionsstufe klassifizieren.
+
+Ergebnisstatus
+Nachgewiesen sind der 16-Bit-Parameter, die zustandsabhängige
+Verarbeitung, die drei globalen Speicherstellen und neun direkte
+Aufrufstellen. Die endgültige Funktionsbezeichnung bleibt offen.
