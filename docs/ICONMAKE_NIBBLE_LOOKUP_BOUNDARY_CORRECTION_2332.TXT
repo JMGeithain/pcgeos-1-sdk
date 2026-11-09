@@ -1,0 +1,74 @@
+ICONMAKE.EXE – Korrektur der Nibble-Lookup-Instruktionsgrenzen
+Untersuchung 2332
+Stand: 2026-11-09
+
+Anlass
+Die erneute Prüfung der Originalbytes in /tmp/mod.bin zeigt, dass die
+vorherigen Berichte 2330 und 2331 die Instruktionsstart-Adresse des
+ersten Nibble-Lookups bei 0x1CE2 falsch angegeben haben. 0x1CE2 ist
+der Beginn einer anderen Instruktion. Diese Korrektur ist maßgeblich.
+
+1. Bytegenauer Ablauf ab 0x1CD0
+  1CD0: 25 FF 3F       AND AX,3FFFh
+  1CD3: 74 3B          JZ 1D10h
+  1CD5: 8B 1E EA 40    MOV BX,[40EAh]
+  1CD9: 8A 18          MOV BL,[BX]
+  1CDB: 2A FF          SUB BH,BH
+  1CDD: 8B C3          MOV AX,BX
+  1CDF: 83 E3 0F       AND BX,000Fh
+  1CE2: 8B C8          MOV CX,AX
+  1CE4: 8A 87 D6 2F    MOV AL,[BX+2FD6h]
+  1CE8: 8B D9          MOV BX,CX
+  1CEA: B1 04          MOV CL,04h
+  1CEC: D3 EB          SHR BX,CL
+  1CEE: 8B D0          MOV DX,AX
+  1CF0: 8A 87 D6 2F    MOV AL,[BX+2FD6h]
+  1CF4: 98             CBW
+  1CF5: D3 E0          SHL AX,CL
+  1CF7: 8B C8          MOV CX,AX
+  1CF9: 8A C2          MOV AL,DL
+  1CFB: 98             CBW
+  1CFC: 0B C8          OR CX,AX
+  1CFE: 51             PUSH CX
+  1CFF: E8 92 F9       CALL 1694h
+  1D02: 83 C4 02       ADD SP,2
+
+2. Sicherer Befund
+- Der gelesene Bytewert kommt aus [BX] über den Zeiger DS:[40EAh].
+- Das untere Nibble wird durch AND BX,000Fh gebildet.
+- 0x1CE4 liest den Mappingwert aus DS:[BX+2FD6h].
+- Der ursprüngliche Bytewert wird über CX gesichert.
+- Anschließend wird eine Kopie um vier Bits nach rechts geschoben.
+- 0x1CF0 liest den Mappingwert für das obere Nibble.
+- Danach werden die beiden Werte durch SHL und OR wieder zu einem
+  Byte zusammengesetzt und an die Routine 0x1694 übergeben.
+
+Damit ist der konkrete Ablauf dieses Pfads bytegenau:
+Eingabebyte -> zwei 4-Bit-Indizes -> zwei Tabellen-Lookups ->
+Zusammensetzen des Ergebnisbytes -> Aufruf 0x1694.
+
+3. Korrektur früherer Berichte
+Bericht 2330:
+- Die Angabe 0x1CE2 als Tabellen-Leseinstruktion ist falsch.
+- Richtig ist 0x1CE4.
+
+Bericht 2331:
+- Die Angabe 0x1CE2 als Tabellen-Leseinstruktion ist falsch.
+- Richtig ist 0x1CE4.
+- Die Instruktion bei 0x1CE2 lautet MOV CX,AX.
+- Die Instruktion bei 0x1CDF lautet AND BX,000Fh.
+
+Die übrigen in den Berichten genannten Startadressen 0x1BA3 und
+0x1CF0 sind durch die vorliegenden Bytes bestätigt.
+
+4. Bedeutung und Grenzen
+Der Ablauf belegt, dass die 16-Byte-Tabelle DS:2FD6h zur Umsetzung
+beider Nibbles eines Eingabebytes verwendet wird. Das Ergebnis wird
+an 0x1694 weitergereicht. Die genaue Funktion von 0x1694 und die
+Herkunft der Daten bei DS:40EAh sind noch separat zu untersuchen.
+
+Quelle
+Original ICONMAKE.EXE aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+MZ-Header 0x200 Bytes; alle oben genannten Offsets sind
+Load-Modul-Offsets.
