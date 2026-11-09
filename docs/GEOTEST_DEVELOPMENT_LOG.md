@@ -103,6 +103,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2258 | Warte-/Aufweckpfade und Scheduler-Wartelisten statisch untersucht |
 | Untersuchung 2259 | Objektliste, Speicherfreiliste und Scheduler-Warteliste strukturell getrennt; unterschiedliche Linkfelder belegt |
 | Untersuchung 2260 | Synchronisationsobjekte anhand konkreter Aufruferprofile zugeordnet; Startwerte weiterhin offen |
+| Untersuchung 2261 | MZ-Header und Relokation `CS:962Eh` ausgewertet; Segmentnotation präzisiert |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
@@ -1020,3 +1021,86 @@ Für die bisherigen Abschnitte zu `05AEh), `05B2h), `05B8h/05BAh), `0E48h), `0FB
 6. Frühere Segmentangaben in diesem Dossier werden durch diese Präzisierung als Offset-/Displacement-Bezeichnungen interpretiert, sofern der Zugriff über die Segmentladehelfer erfolgt.
 
 **Nächster Schritt 2262:** Den GeoWorks-Ladepfad bzw. Kernel-Startvertrag untersuchen, um die tatsächliche Ladeabsatzkonvention zu bestimmen und den direkten Immediate-Segmentwert bei `9ADFH) gegen den relocierbaren Wert zu prüfen. Danach kann die Segmentnotation im Dossier endgültig vereinheitlicht werden.
+
+
+## 23. Untersuchung 2262 – Kompatibilitätsprüfung des bereitgestellten `GEOWORKS.zip` mit SDK 0.1
+
+**Ziel:** Prüfen, ob das vom Nutzer bereitgestellte Archiv `GEOWORKS.zip` direkt als SDK-Zielarchiv verwendet werden kann. Grundlage sind die tatsächlichen ZIP-Mitglieder, ihre SHA-256-Prüfsummen, der Parser aus `pcgeos1/geode.py` sowie die verbindlichen Zielpfade und Hashes in `pcgeos1/target.py` und `docs/TARGET_COMPATIBILITY.md`.
+
+### 23.1 Vom SDK erwartete Zielmitglieder
+
+`pcgeos1/target.py` verlangt jeweils genau ein ZIP-Mitglied mit diesen Endungen:
+
+| Template | erwartete Endung |
+|---|---|
+| SPINTEXT | `/WORLD/EXTRAS/SPINTEXT.GEO` |
+| NOTEPAD | `/WORLD/NOTEPAD.GEO` |
+| VIEWER | `/WORLD/VIEWER.GEO` |
+| TERM | `/WORLD/TERM.GEO` |
+
+Die Funktion `member()` bricht ab, wenn nicht genau ein passendes Mitglied gefunden wird. Erst danach erfolgt die SHA-256-Prüfung.
+
+### 23.2 Tatsächliche Mitglieder im Nutzerarchiv
+
+| Template | Archivpfad | Bytes | SHA-256 |
+|---|---|---:|---|
+| SPINTEXT | `GEOWORKS/WORLD/SPINTEXT.GEO` | 3.764 | `6a9ddda1c491438d29b10c044eb92e5b9e8bd701c922172dd6bb89988e2c1261` |
+| SPINTEXT | `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` | 3.748 | `18f2075c9d61fe7231b1dacae8c171e68c2028ef2fca6d40a6694158fdfcb9fd` |
+| NOTEPAD | `GEOWORKS/WORLD/NOTEPAD.GEO` | 8.070 | `a1ebd0cb84712a126b1f67f5fd1ca6b57f8bda2e9038e9224ba16ebc008f9ea9` |
+| NOTEPAD | `GEOWORKS/DOCUMENT/NOTEPAD.GEO` | 8.070 | `3d0bbaf6640eecca7c884a3351ddd957435096af6ff0b6b02793fa9eb7286b29` |
+| VIEWER | `GEOWORKS/WORLD/VIEWER.GEO` | 59.984 | `c884b76cdc4f9119d4794f7830d5438e0abcc1d92d3cc248aa912bde85ed43e7` |
+| TERM | `GEOWORKS/WORLD/TERM.GEO` | 63.718 | `a62ebc0fb3c01acb4b59c8172d20d520653822a6d42f0bec4831dfdb93e1cf3a` |
+
+**Pfadbefund:** Im bereitgestellten Archiv gibt es kein Mitglied, das auf `/WORLD/EXTRAS/SPINTEXT.GEO` endet. Deshalb scheitert bereits die Mitgliederauflösung für SPINTEXT. Die übrigen erwarteten Endungen sind jeweils eindeutig vorhanden.
+
+### 23.3 Vergleich mit den im SDK hinterlegten Hashes
+
+Das SDK erwartet folgende SHA-256-Werte:
+
+| Template | SDK-Hash | Nutzerarchiv |
+|---|---|---|
+| SPINTEXT | `848f5afb43a2184b01d2a4ad3231957b6ab9936006b23b4b2a260d1224d44370` | kein passender Hash |
+| NOTEPAD | `edc48848ff4b9d2880e715bbb29532f14b3b54293c45159c467e33e2af841d1b` | kein passender Hash |
+| VIEWER | `3d433a39c455a9cea242763dad0e3f681b4196fb7b1a75a08ca47e1aa8aa4a30` | kein passender Hash |
+| TERM | `2d66ac2ff9fd24c4591303b2cba7cec6f40f0d52b4f3d75d9e0cdaa5fc1be542` | kein passender Hash |
+
+Keines der passenden bzw. ähnlich benannten GEO-Mitglieder aus dem Nutzerarchiv besitzt den im SDK hinterlegten Hash.
+
+### 23.4 Positiver Format- und Protokollbefund
+
+Die sechs oben genannten Dateien wurden zusätzlich mit dem im Repository vorhandenen bounds-geprüften GEODE-Parser untersucht. Alle sechs Dateien lassen sich als GEOS-1.x-Format 1 parsen.
+
+Für die ausgewählten Dateien aus `WORLD` ergeben sich:
+
+| Datei | GEOS-Format | Release | Kernelprotokoll | UI-Protokoll |
+|---|---:|---|---|---|
+| SPINTEXT | 1 | 1.2.7.2 | 622.3 | 693.0 |
+| NOTEPAD | 1 | 1.2.8.5 | 622.3 | 693.0 |
+| VIEWER | 1 | 1.2.8.16 | 622.3 | 693.0 |
+| TERM | 1 | 1.2.8.3 | 622.3 | 693.0 |
+
+Damit ist die grundlegende Format- und Protokollfamilie mit dem im SDK dokumentierten Zielprotokoll vereinbar. Das beweist jedoch nicht, dass die privaten Objekt- und Ressourcenlayouts der vier Templates byte- oder ABI-kompatibel mit den im SDK erwarteten Vorlagen sind.
+
+### 23.5 Warum `allow_unknown_target` allein nicht genügt
+
+Das Projektfeld `allow_unknown_target=true` setzt beim Aufruf von `load_templates()` lediglich `strict=False` und schaltet damit die Hashprüfung ab. Die ZIP-Mitgliedersuche mit den fest codierten Endungen läuft unverändert weiter. Der fehlende Pfad `/WORLD/EXTRAS/SPINTEXT.GEO` bleibt deshalb ein unmittelbarer Abbruchgrund.
+
+Eine temporäre Archivkopie mit angepasstem SPINTEXT-Pfad könnte diesen ersten Abbruch umgehen. Mit `allow_unknown_target=true` ließe sich dann ein experimenteller Host-Build versuchen. Das wäre aber kein bestätigter Zielprofil-Support: Die abweichenden Hashes und privaten Ressourcenlayouts müssten zuvor separat auditiert werden.
+
+### 23.6 Konsequenz für den ersten `GEOTEST.GEO`-Build
+
+**Gesicherter Befund:** Das bereitgestellte `GEOWORKS.zip` kann mit der unveränderten SDK-0.1-Zielauflösung nicht direkt als Buildziel verwendet werden. Es fehlen der erwartete SPINTEXT-Pfad und sämtliche vier exakten Template-Hashes.
+
+**Positiver Befund:** Die vorhandenen Templates sind valide GEOS-1.x-Geodes mit Kernelprotokoll 622.3 und UI-Protokoll 693.0. Ein eigenes, ausdrücklich als experimentell gekennzeichnetes Profil für diese deutsche GeoWorks-1.2.8-Installation ist daher ein sinnvoller nächster Prüfpfad; Kompatibilität der UI-Templates ist damit noch nicht bestätigt.
+
+**Keine Änderung vorgenommen:** Weder `target.py` noch die Originaldateien oder das Nutzerarchiv wurden verändert. Es wurde noch kein `GEOTEST.GEO`-Build ausgeführt.
+
+### 23.7 Ergebnis Untersuchung 2262
+
+1. Der unveränderte SDK-0.1-Loader findet im Nutzerarchiv kein passendes SPINTEXT-Mitglied am erwarteten Pfad.
+2. Alle vier erwarteten Template-Hashes weichen von den vorhandenen Dateien ab.
+3. Die vorhandenen Dateien sind parsebare GEOS-1.x-Geodes mit Kernel 622.3 und UI 693.0.
+4. `allow_unknown_target=true` umgeht nur die Hashprüfung, nicht die Pfadauflösung.
+5. Ein separates deutsches Zielprofil muss Pfade und Hashes ausdrücklich dokumentieren und die verwendeten UI-Ressourcen vor dem Build strukturell vergleichen.
+
+**Nächster Schritt 2263:** Ein explizites Zielprofil `geoworks-1.2.8-de` für das Nutzerarchiv vorbereiten. Zunächst SPINTEXT-Ressourcen R03/R04 und VIEWER-Ressourcen R0C/R1C gegen die vom SDK erwarteten Objekt-/LMem-Annahmen prüfen; erst nach bestandener Prüfung die Pfadauflösung profilabhängig ergänzen. Das strikte Standardprofil bleibt unverändert.
