@@ -1,0 +1,76 @@
+PAPR ICONMAKE PCX ↔ GEODE RESOURCE HEADER COMPARISON
+Investigation 2317
+Date: 2026-11-09
+
+Inputs
+------
+- User-supplied PAPR_CGA.PCX
+- User-supplied PAPR_HGC.PCX
+- User-supplied PAPR_EGA.PCX
+- GEOWORKS/ICONS/PAPR.000 from GEOWORKS.zip
+
+PCX files were opened with Pillow and their dimensions, mode, and pixel
+planes inspected. PAPR.000 was parsed with the repository's bounds-checked
+GeoWorks 1.x GEODE reader. Resources R4-R6 were extracted without changes.
+
+Observed PCX properties
+-----------------------
+PAPR_CGA.PCX: 48 x 14, mode 1 (one-bit monochrome)
+PAPR_HGC.PCX: 48 x 30, mode 1 (one-bit monochrome)
+PAPR_EGA.PCX: 48 x 30, mode P (paletted); PCX header specifies 4 bits per
+pixel in one plane.
+
+Observed provider payload headers
+----------------------------------
+Each R4-R6 is an LMem resource with a two-entry handle table. The large
+second chunk starts at resource offset 0x2C. Its first 16 bytes are:
+
+R4:
+  61 30 00 0E 00 1A 65 00 30 00 0E 00 01 00 00 7F
+
+R5:
+  41 30 00 1E 00 1A D6 00 30 00 1E 00 01 00 00 7F
+
+R6:
+  46 30 00 1E 00 1A BD 02 30 00 1E 00 01 11 00 7F
+
+A clear structural correspondence is visible:
+- R4 contains the values 0x0030 and 0x000E at payload offsets +8/+10:
+  48 x 14, matching the CGA PCX dimensions.
+- R5 contains 0x0030 and 0x001E at +8/+10:
+  48 x 30, matching the HGC PCX dimensions.
+- R6 contains 0x0030 and 0x001E at +8/+10:
+  48 x 30, matching the EGA PCX dimensions.
+
+The following word at +12 differs:
+- R4: 0x0001
+- R5: 0x0001
+- R6: 0x1101
+
+Interpretation and confidence
+-----------------------------
+The matching width/height fields provide strong evidence for the mapping:
+  R4 ↔ CGA (48x14)
+  R5 ↔ HGC (48x30)
+  R6 ↔ EGA (48x30)
+
+This is a header-level match, not yet a complete pixel-data decode. The
+difference 0x0001 versus 0x1101 is consistent with R6 using a different
+pixel/moniker encoding from R4 and R5, but the exact meaning of 0x11 is not
+yet proven from the 1.x structure definitions. Do not label it "4 bpp"
+without that definition or a full decoder.
+
+What remains
+------------
+- Decode the complete payload and compare its rendered pixels against the
+  extracted PCX images.
+- Confirm any transparency convention (the PCX display background is not
+  sufficient evidence of GEOS transparency).
+- Repeat the extraction on GDOC.000 to confirm the mapping on a second
+  independent provider.
+
+Integrity
+---------
+No source or original GEODE was modified. No new GEO was built. TOKEN.DB
+was not changed. The PCX files were only read. This audit is restricted to
+GeoWorks 1.x; no PC/GEOS 2.x or FreeGEOS definitions were used.
