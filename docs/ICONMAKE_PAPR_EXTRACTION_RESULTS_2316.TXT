@@ -1,0 +1,93 @@
+ICONMAKE EXTRACTION RESULT — PAPR.000
+Investigation 2316
+Date: 2026-11-09
+
+Input files supplied by the user
+-------------------------------
+PAPR_CGA.PCX
+PAPR_HGC.PCX
+PAPR_EGA.PCX
+
+All three files were opened and decoded successfully as PCX images.
+
+Measured image properties
+-------------------------
+PAPR_CGA.PCX
+- Dimensions: 48 x 14 pixels
+- PCX version: 0
+- Encoding: PCX RLE
+- Bits per pixel per plane: 1
+- Number of color planes: 1
+- Bytes per scanline: 6
+- Decoded pixel values: 0 and 255 only
+- File size: 231 bytes
+- SHA-256: f4cf994249a93c9d3f95617e1d4cce84b52b3c04caf3d2d33f2959fa785d5fa4
+
+PAPR_HGC.PCX
+- Dimensions: 48 x 30 pixels
+- PCX version: 0
+- Encoding: PCX RLE
+- Bits per pixel per plane: 1
+- Number of color planes: 1
+- Bytes per scanline: 6
+- Decoded pixel values: 0 and 255 only
+- File size: 334 bytes
+- SHA-256: c9d98d2f96d0b91e3e7d0836a6e12bb816b33b1e37f4425ca644930b95b635b5
+
+PAPR_EGA.PCX
+- Dimensions: 48 x 30 pixels
+- PCX version: 5
+- Encoding: PCX RLE
+- Bits per pixel per plane: 4
+- Number of color planes: 1
+- Bytes per scanline: 24
+- Palette: 16 entries in the PCX header
+- Actually used palette indices: 0, 4, 5, 7, 8, 12, 13, 14, 15
+- File size: 967 bytes
+- SHA-256: 897b20853b05d19cd51d1fc78d2e37d8b9e009eb44057a74692a2e0fcf12e1e0
+
+EGA palette values actually used
+--------------------------------
+Index 0:  RGB 0,0,0
+Index 4:  RGB 128,0,0
+Index 5:  RGB 128,0,128
+Index 7:  RGB 192,192,192
+Index 8:  RGB 128,128,128
+Index 12: RGB 255,85,85
+Index 13: RGB 255,85,255
+Index 14: RGB 255,255,85
+Index 15: RGB 255,255,255
+
+What this confirms
+------------------
+1. The three ICONMAKE extraction outputs match the documented dimensions
+   exactly: 48x14 monochrome, 48x30 monochrome, and 48x30 EGA palette.
+2. The CGA and HGC files are 1-bit single-plane PCX images.
+3. The EGA file is a 4-bit single-plane PCX image with a 16-entry palette;
+   nine palette indices are actually used in the decoded pixels.
+4. The extraction operation has therefore succeeded for PAPR.000.
+
+What it does not yet confirm
+----------------------------
+This analysis has not yet mapped these three PCX outputs to provider
+resources R4, R5 and R6. The fact that the extracted PCX images have known
+dimensions and color depths is not sufficient to assign resource IDs.
+A byte-level decode/comparison of the provider resources is still needed.
+
+The displayed EGA preview shows colored pixels and magenta background
+areas, but no transparency semantics are inferred from that appearance.
+The PCX header/palette data must be checked against ICONMAKE documentation
+before assigning a transparent color index.
+
+Next step
+---------
+Run the same documented ICONMAKE extraction on a second known provider,
+or decode the three LMem payloads from PAPR.000 using the exact GeoWorks
+1.x icon resource format. Compare resulting pixels and dimensions to the
+PCX outputs. This should identify which resource contains each icon mode.
+
+Integrity
+---------
+The three uploaded PCX files were read only. No original GEOWORKS.zip
+member was changed. No GEO was built and TOKEN.DB was not modified.
+No PC/GEOS 2.x or FreeGEOS definitions were used.
