@@ -87,12 +87,64 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 | Untersuchung 2247 | Querverweise und Aufrufziele `0399h`, `2588h`, `101CBh` untersucht; DS-Segmentkorrektur dokumentiert |
 | Untersuchung 2248 | Wiederholte `05B8h`-Far-Aufrufe verglichen; gemeinsame Dispatch-Schnittstelle als Hypothese markiert |
 | Untersuchung 2249 | Schreibzugriffe auf `05B8h/05BAh` vollständig verglichen; Offset-/Segment-Paar nachgewiesen |
+| Untersuchung 2250 | DI-Aufrufvarianten und unterschiedliche Rückgabekanäle verglichen; keine einheitliche Callback-Signatur unterstellt |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
 | Start in GeoWorks 1.2 | ausstehend |
 
 
+
+
+## 11. Untersuchung 2250 – DI-Selektoren und Rückgabekanäle der Callback-Aufrufe
+
+**Methode:** Die direkten Aufrufstellen von `lcall DS:[05B8h]` und `lcall ES:[05B8h]` wurden jeweils mit den unmittelbar davor- und danachliegenden Instruktionen geprüft. Die Tabelle beschreibt nur Register und Flags, die aus dem lokalen Maschinencode sicher ablesbar sind; sie weist keine nicht belegten semantischen Namen zu.
+
+### 11.1 Aufrufvertrag je Fundstelle
+
+| Aufrufstelle | Segmentbasis | DI beim Aufruf | Vorher erkennbare Parameter | Direkt danach ausgewerteter Rückgabekanal |
+|---|---|---:|---|---|
+| `0E7Dh` | DS | `18h` | `CX=[01A0h]`, `DX=0`; zuvor `CB3h`, `9630h` | kein unmittelbarer Test; danach `CBAh` |
+| `0F20h` | ES | `12h` | `9636h`, danach `172Fh` und `15EBh`; DI wird explizit gesetzt | danach `1628h`, `1736h`; kein unmittelbarer Carry-Test |
+| `0F3Bh` | DS | `06h` | `BL=[BX]`, `BH=0`; Flags werden vor dem Callback gesichert | Flags werden unmittelbar danach mit `popf` wiederhergestellt; Ergebnisflags des Callbacks werden damit absichtlich verworfen |
+| `0F4Eh` | DS | `08h` | DI wird auf `08h` gesetzt; `9630h` liefert BX-Kontext | Flags werden mit `pushf`/`popf` über den Callback hinweg bewahrt; Ergebnisflags werden nicht ausgewertet |
+| `0F76h` | ES | `16h` | `9636h`; BX, DI und ES werden gesichert | Rückkehr ohne unmittelbaren Flag-Test; Register werden wiederhergestellt |
+| `1189h` | DS | nicht lokal gesetzt | AL wird aus dem Byte bei DS:BX geladen; DI stammt aus dem Aufruferkontext | kein unmittelbarer Rückgabewerttest; DS wird wiederhergestellt |
+| `129Bh` | DS | `0Ah` | AL=`[BX]`, CL=`[SI]` | unmittelbar `SAHF` aus AH; danach `JE`. Der Callback liefert hier erkennbar einen AH-Statuscode, dessen gesetzte Statusbits in FLAGS übertragen werden |
+| `1321h` | ES | `04h` | AX wird vor dem Aufruf gesichert | unmittelbar `POP CX` (ändert FLAGS nicht), danach `JB`: Carry-Flag des Callback-Aufrufs wird ausgewertet; bei Carry Sprung, sonst Aufruf `11CBh` |
+| `13A8h` | DS | `0Ch` | AL wird aus `[BX]` geladen; DS und weitere Register sind gesichert | AL wird direkt danach mit `FFh` überschrieben; später werden Strukturbytes bei BX+2/BX+3 ausgewertet. Kein direkter AL-Rückgabewertbeleg |
+| `10BCFh` | DS | `14h` | BX wird aus `ES:[0040h]` geladen, das Byte `[BX]` wird nach BL übernommen | danach wird DI aus Stack restauriert und BL nach DS:DI geschrieben; Carry/AH werden hier nicht explizit ausgewertet |
+
+### 11.2 Präzisierung der Rückgabeflags
+
+Die Aufrufstellen zeigen unterschiedliche Konventionen und dürfen nicht zu einem einzigen Rückgabeprotokoll zusammengezogen werden:
+
+- Bei `0F3Bh` und `0F4Eh` werden die Prozessorflags über den Callback mit `PUSHF`/`POPF` gesichert. Ein Ergebnis in CF oder anderen FLAGS-Bits wird an diesen Stellen bewusst nicht übernommen.
+- Bei `129Bh` wird nach dem Callback `SAHF` ausgeführt. Damit werden Statusbits aus AH in FLAGS übertragen; danach prüft `JE` das Zero-Flag. Der unmittelbar sichtbare Rückgabekanal ist hier also AH, nicht einfach das durch den Far-Aufruf hinterlassene FLAGS-Register.
+- Bei `1321h` wird nach dem Callback lediglich `POP CX` ausgeführt. `POP` verändert die Statusflags nicht; `JB` wertet deshalb das vom Callback hinterlassene Carry-Flag aus.
+- Bei `10BCFh` wird das von der Callback-Funktion möglicherweise veränderte BL anschließend in eine Speicherstelle geschrieben. Das ist ein sichtbarer Datenrückkanal; eine allgemeine Bedeutung von BL ist noch nicht bekannt.
+- Die übrigen Aufrufstellen belegen im unmittelbaren Nachlauf keinen spezifischen Rückgabekanal. Daraus folgt nicht, dass sie keine Rückgabe liefern, sondern nur, dass der lokale Code sie nicht direkt auswertet.
+
+### 11.3 Wichtige Korrektur zur Schnittstellenhypothese
+
+Die wiederholte Verwendung desselben Far-Zeigers und der DI-Werte belegt eine gemeinsame indirekte Aufrufstelle bzw. Dispatch-Mechanik. Sie beweist jedoch **keine einheitliche Callback-Signatur**. Segmentbasis, DI, Eingaberegister, Registererhaltung und Rückgabekanal variieren. Für eine belastbare API-Rekonstruktion muss jeder DI-Selektor separat behandelt werden.
+
+### 11.4 Initialisierungsbefunde – engere Formulierung
+
+- `FAD1h` schreibt CS nach `DS:[05BAh]`, nachdem DS in `FAC8h–FACBh` explizit auf `0E35h` gesetzt wurde. Das setzt nur das Segmentwort; ein dazugehöriger Schreibzugriff auf `05B8h` ist an dieser Stelle nicht vorhanden.
+- `0F0Ah` schreibt null nach `DS:[05BAh]`, nachdem `9630h` den DS-Kontext vorbereitet hat; DS wird danach wiederhergestellt.
+- `10BB5h–10BB8h` schreibt beide Wörter nach `DS:[05B8h]` und `DS:[05BAh]`. Das Datenpaar stammt aus dem Objektkontext, den der Aufruf `0000:2588h` in DS:SI zurückgibt.
+- Die lineare Disassemblierung enthält keinen direkten Near-CALL auf `FAC7h` oder `FAD1h`. Deshalb ist `FAC7h` zwar ein sichtbarer Codeblock, aber der genaue externe Einstieg/Aufrufer ist mit dieser einfachen direkten Referenzsuche nicht bestimmt.
+
+### 11.5 Ergebnis Untersuchung 2250
+
+1. Der gemeinsame Operand `05B8h` ist ein Callback-/Dispatch-Zeiger, aber die Aufrufkonvention ist selektorabhängig.
+2. DI-Werte `04h`, `06h`, `08h`, `0Ah`, `0Ch`, `12h`, `14h`, `16h`, `18h` sind belegt; `1189h` verwendet DI aus dem Aufruferkontext.
+3. `129Bh` verwendet AH als Statuswort für `SAHF`/`JE`; `1321h` wertet CF direkt aus; `10BCFh` verwendet BL als Datenrückkanal.
+4. Bei `0F3Bh` und `0F4Eh` werden FLAGS über den Aufruf hinweg wiederhergestellt; die Callback-Flags sind dort nicht das Ergebnis.
+5. Die bisherige Sammelbezeichnung „gemeinsame Callback-Schnittstelle“ ist auf „gemeinsame Dispatch-Mechanik mit mehreren selektorspezifischen Verträgen“ zu präzisieren.
+
+**Nächster Schritt 2251:** Die Aufrufstellen nach DI-Selektor gruppieren und ihre übergeordneten öffentlichen Wrapper bzw. Entry-Points bestimmen. Danach die Datenstrukturen hinter BX/SI und die Hilfsfunktionen `9630h`/`9636h` untersuchen, um die Bedeutung der übergebenen Objektkontexte zu identifizieren.
 
 ## 6. Änderungs- und Belegregel
 
