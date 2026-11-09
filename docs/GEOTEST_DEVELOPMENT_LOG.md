@@ -119,6 +119,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2274 | Erste Farzeiger-Fehlinterpretation durch korrekte Tabellenposition widerlegt; ursprüngliche Reihenfolge des Packers bestätigt |
 | Untersuchung 2275 | Korrekte Farzeiger-Serialisierung in Hilfsfunktion gekapselt; Offset/Resource- und Relokationsregression ergänzt |
 | Untersuchung 2276 | Acht Prozessmethoden und ihre Eintrittspunkte statisch gegen Original-1.x-Code und Nachrichtenvertrag geprüft; Help-Nachricht 0C0Ah intern abgeglichen |
+| Untersuchung 2277 | Superclass-Aufrufe 01E9h und Help-ObjMessage-Pfad 0096h/00A9h mit Originalcode und SDK-Aufrufen abgeglichen |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1986,3 +1987,59 @@ Damit sind UI-Trigger und Prozesshandler auf denselben projektspezifischen Nachr
 6. Die vollständige Nachrichten-ABI und der tatsächliche Fenster-/Input-Lebenszyklus bleiben bis zum GeoWorks-1.2-Lauftest offen.
 
 **Nächster Schritt 2277:** Die vollständigen Methodenpfade von native_open, native_attach, native_view_closed und native_expose mit dem Originalkernel-Ordinal 01E9h und den Aufrufkonventionen abgleichen. Danach native_key und native_select einschließlich Rückgabewerten, Registererhalt und Superclass-Fallback prüfen. Die Laufzeitprüfung bleibt weiterhin zwingend.
+
+
+## 38. Untersuchung 2277 – Superclass- und ObjMessage-Aufrufpfade
+
+Ziel: Die in Untersuchung 2276 identifizierten Lifecycle- und Help-Handler auf die konkreten Kernelaufrufe zurückführen und gegen Originalcode aus GeoWorks 1.x vergleichen.
+
+### 38.1 ObjCallSuperNoLock – Kernelordinal 01E9h
+
+Der technische Bericht identifiziert ObjCallSuperNoLock im untersuchten 1.x-Zielkernel als Kernelordinal 01E9h. Der dokumentierte Aufrufvertrag verwendet DS:DI für die ClassStruct und AX für die Nachricht; die übrigen Nachrichtenargumente bleiben erhalten.
+
+Im SDK-Assembler wird K 489 verwendet. 489 dezimal entspricht 01E9h. Die Handler native_open, native_attach und native_view_closed setzen DI auf 0040h und rufen anschließend diesen Kernelordinal auf.
+
+Der Bytevergleich mit BOUNCE.GEO und SPINTEXT.GEO zeigt denselben Grundaufbau: DI wird auf 0040h gesetzt, danach folgt ein Far-Aufruf auf Kernelordinal 01E9h. Im Open-Pfad wird zuvor ES nach DS übernommen. Das SDK übernimmt diese Segmentvorbereitung ebenfalls in native_open. Damit ist der Superclass-Aufrufpfad nicht aus einer späteren GEOS-Version abgeleitet, sondern am Original-1.x-Code ausgerichtet.
+
+Offen bleibt die Laufzeitbestätigung, dass DS beim Eintritt in native_attach und native_view_closed in allen relevanten Aufrufpfaden wie erwartet auf die Prozess-DGROUP zeigt. Die Originalhandler verwenden dieselbe implizite Segmentannahme; ein echter Starttest bleibt erforderlich.
+
+### 38.2 Close-Rückgabe
+
+native_close führt XOR CX,CX aus und kehrt mit RETF zurück. Der technische Bericht dokumentiert CX=0 für den alten Close-Handler als bewusste Begrenzung, damit kein späterer State-Block in ein altes State-Format geschrieben wird. Die Implementierung stimmt mit diesem dokumentierten 1.x-Verhalten überein.
+
+### 38.3 Help-ObjMessage-Pfad
+
+Der SDK-Help-Handler führt für Nachricht 0C0Ah folgende Folge aus:
+1. SI erhält den Chunkoffset 00A0h (Help-Dialog).
+2. AX erhält die UI-Nachricht 4197h.
+3. BX wird mit 3 initialisiert (UI-Ressourcen-ID).
+4. Kernelordinal 0096h wird aufgerufen.
+5. DI erhält 8000h.
+6. Kernelordinal 00A9h wird aufgerufen.
+
+Der technische Bericht dokumentiert ObjMessage als Kernelordinal 00A9h und den synchronen Aufruf mit AX=Nachricht, BX=laufendem Blockhandle, SI=Chunk und DI=8000h. Das SDK folgt diesem dokumentierten ObjMessage-Aufbau.
+
+Auch BOUNCE.GEO verwendet in seiner Code-Ressource die Sequenz BX=3, Kernelordinal 0096h, anschließend SI/AX setzen und Kernelordinal 00A9h aufrufen. Damit ist die zweistufige Auflösung der UI-Ressource vor ObjMessage im Original-1.x-Code belegt. Die genaue Semantik der UI-Nachricht 4197h und der Laufzeitempfänger des Help-Dialogs werden hier noch nicht als abschließend bewiesen bezeichnet.
+
+### 38.4 Grenzen der Prüfung
+
+- Der Aufruf von ObjCallSuperNoLock ist mit dem alten Kernelordinal und den Originalhandlern abgeglichen.
+- Der Help-Aufruf verwendet die im 1.x-Bericht dokumentierte ObjMessage-Schnittstelle und eine auch in BOUNCE beobachtete Ressourcenauflösung.
+- Die Nachrichten- und Registerwerte sind statisch nachvollzogen; Fensterlebenszyklus, GState-Gültigkeit, Fokus und tatsächliche Dialoganzeige wurden nicht zur Laufzeit beobachtet.
+- Insbesondere native_select Rückgabewert AX=8000h und die vollständige Semantik der Start-Select-Nachricht bleiben Laufzeitprüfpunkte.
+- Die 386+-Beschränkung der C-Engine bleibt bestehen; native_open überspringt die Engineinitialisierung, wenn die CPU-Prüfung fehlschlägt.
+
+### 38.5 CI-Stand
+
+GitHub Actions Run 42608561425 auf Commit e7c0fba03815d005db6f48e6c69350893ee530b2 ist completed / success. Python-Compile, neun Zielprofiltests, zwei Prozessmethodentests und die GEODE-Absatz-/Relokationsregression bestanden.
+
+### 38.6 Ergebnis Untersuchung 2277
+
+1. Die Superclass-Aufrufe der Lifecycle-Handler verwenden den für GeoWorks 1.x dokumentierten Kernelordinal 01E9h.
+2. Der Open-/Attach-/View-Closed-Aufbau stimmt mit den untersuchten Originalhandlern überein.
+3. Die Close-Rückgabe CX=0 entspricht dem dokumentierten alten Verhalten.
+4. Der Help-Pfad verwendet ObjMessage über Kernelordinal 00A9h mit DI=8000h und die in BOUNCE beobachtete Ressourcenauflösung über 0096h.
+5. Die konkrete Semantik von UI-Nachricht 4197h und die Laufzeitinteraktion bleiben offen.
+6. Die Anwendung ist weiterhin nicht in GeoWorks 1.2 gestartet worden.
+
+**Nächster Schritt 2278:** Die nativen Draw-/Expose-Aufrufe K 211, K 212, K 446 und K 447 sowie die in draw_native verwendeten Grafikordinale mit Original-1.x-Referenzcode abgleichen. Danach die Registerverträge von native_select und native_key einschließlich Rückgabewert und Superclass-Fallback prüfen. Erst danach ist ein kontrollierter Startversuch in der gesicherten GeoWorks-1.2-Installation sinnvoll.
