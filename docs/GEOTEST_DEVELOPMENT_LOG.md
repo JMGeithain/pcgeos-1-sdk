@@ -86,11 +86,49 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 | Untersuchung 2246 | Daten-/Codegrenze und Codekandidat `10B53h–10BD6h` statisch untersucht; Funktionsvertrag offen |
 | Untersuchung 2247 | Querverweise und Aufrufziele `0399h`, `2588h`, `101CBh` untersucht; DS-Segmentkorrektur dokumentiert |
 | Untersuchung 2248 | Wiederholte `05B8h`-Far-Aufrufe verglichen; gemeinsame Dispatch-Schnittstelle als Hypothese markiert |
+| Untersuchung 2249 | Schreibzugriffe auf `05B8h/05BAh` vollständig verglichen; Offset-/Segment-Paar nachgewiesen |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
 | Start in GeoWorks 1.2 | ausstehend |
 
+
+
+## 10. Untersuchung 2249 – Initialisierung und Speicherung des Far-Zeigers `05B8h/05BAh`
+
+### 10.1 Vollständige direkte Schreibzugriffe im Disassembly
+
+Die Suche nach direkten Speicher-Schreibbefehlen auf `05B8h` und `05BAh` ergibt im vorliegenden Kernel-Body:
+
+| Offset | Befehl | Kontext / Wirkung |
+|---|---|---|
+| `0F0Ah` | `movw $0,05BAh` | setzt das Segmentwort des Zeigers auf null; DS wurde unmittelbar zuvor durch `9630h` vorbereitet und danach wiederhergestellt. |
+| `FAD1h` | `mov CS,05BAh` | setzt das Segmentwort auf den aktuellen Code-Segmentwert. Im vorangehenden Block `FAC7h–FACBh` wird DS explizit auf `0E35h` gesetzt. |
+| `10BB5h` | `mov AX,05B8h` | schreibt das Offsetwort. AX stammt aus dem bei `2588h` zurückgegebenen DS:SI-Objektkontext. |
+| `10BB8h` | `mov BX,05BAh` | schreibt das zugehörige Segmentwort. BX stammt aus demselben zurückgegebenen Kontext. |
+
+Im untersuchten vollständigen Disassembly wurde kein weiterer direkter Schreibzugriff auf `05B8h` gefunden. Die direkten Schreibzugriffe auf `05BAh` sind auf die drei oben genannten Stellen beschränkt.
+
+### 10.2 Bedeutung des Wortpaares
+
+Mehrere Instruktionen rufen `05B8h` mit `lcall` indirekt auf. Die Instruktion `lcall m16:16` liest dabei einen vier Byte langen Far-Zeiger aus dem durch DS bzw. ES bestimmten Speichersegment. Das unmittelbar benachbarte Wort bei `05BAh` ist somit das zweite Wort dieses Zeigers. Die Schreibfolge `AX -> 05B8h` und `BX -> 05BAh` bei `10BB5h–10BB8h` bestätigt diese Paarstruktur unmittelbar.
+
+**Gesicherter Befund:** `05B8h/05BAh` bilden in dem jeweils adressierten Datensegment ein Offset-/Segment-Wortpaar für indirekte Far-Aufrufe. Welche konkrete Callback-Funktion dahinterliegt, hängt vom aktuellen Inhalt und von DS/ES des Aufrufers ab.
+
+### 10.3 Initialisierungsvarianten
+
+- `FAD1h`: setzt in DS=`0E35h` das Segmentwort `05BAh` auf CS. Das ist eine explizite Default-Segmentinitialisierung; das Offsetwort `05B8h` wird an dieser Stelle nicht geschrieben.
+- `10BB5h–10BB8h`: überschreibt Offset und Segment mit den beiden Wörtern, die nach Aufruf `2588h` aus dem ausgewählten Objekt gelesen wurden.
+- `0F06h–0F10h`: setzt das Segmentwort auf null. Das kann den Far-Zeiger deaktivieren bzw. als nicht verfügbar markieren; diese Wirkung ist plausibel, aber abhängig vom aufrufenden Segment und der weiteren Prüfung.
+
+### 10.4 Konsequenz für die bisherigen Untersuchungen
+
+1. Die Formulierung „gemeinsame Callback-/Dispatch-Schnittstelle“ aus Untersuchung 2248 ist nun stärker belegt: der gemeinsame Operand ist tatsächlich ein gespeicherter indirekter Far-Zeiger.
+2. Die Segmentpräfixe sind wesentlich: `DS:[05B8h]` und `ES:[05B8h]` adressieren jeweils ein Wortpaar im aktuellen DS- bzw. ES-Segment. Die Datenadresse ist daher nicht global konstant.
+3. Die genaue Callback-API ist noch nicht bestimmt. Die unterschiedlichen DI-Selektoren und Registerparameter müssen pro Aufrufer ausgewertet werden.
+4. Die Default-Initialisierung bei `FAD1h` erklärt, warum `05BAh` zunächst auf CS gesetzt werden kann, während spätere Setup-Pfade das Zeigerpaar durch einen aus einem Objekt gelesenen Zeiger ersetzen.
+
+**Nächster Schritt 2250:** Den Initialisierungspfad ab `FAC7h` und die Auswahl-/Ersetzungssequenz `10B53h–10BB8h` als zusammenhängenden Lebenszyklus modellieren. Anschließend für jeden DI-Selektor die konkreten Parameter und Rückgabeflags aus den Aufrufern tabellarisch rekonstruieren.
 
 ## 6. Änderungs- und Belegregel
 
