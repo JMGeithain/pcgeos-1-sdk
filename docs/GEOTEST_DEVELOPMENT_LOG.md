@@ -98,142 +98,6 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 
 
 
-## 11. Untersuchung 2250 – DI-Selektoren und Rückgabekanäle der Callback-Aufrufe
-
-**Methode:** Die direkten Aufrufstellen von `lcall DS:[05B8h]` und `lcall ES:[05B8h]` wurden jeweils mit den unmittelbar davor- und danachliegenden Instruktionen geprüft. Die Tabelle beschreibt nur Register und Flags, die aus dem lokalen Maschinencode sicher ablesbar sind; sie weist keine nicht belegten semantischen Namen zu.
-
-### 11.1 Aufrufvertrag je Fundstelle
-
-| Aufrufstelle | Segmentbasis | DI beim Aufruf | Vorher erkennbare Parameter | Direkt danach ausgewerteter Rückgabekanal |
-|---|---|---:|---|---|
-| `0E7Dh` | DS | `18h` | `CX=[01A0h]`, `DX=0`; zuvor `CB3h`, `9630h` | kein unmittelbarer Test; danach `CBAh` |
-| `0F20h` | ES | `12h` | `9636h`, danach `172Fh` und `15EBh`; DI wird explizit gesetzt | danach `1628h`, `1736h`; kein unmittelbarer Carry-Test |
-| `0F3Bh` | DS | `06h` | `BL=[BX]`, `BH=0`; Flags werden vor dem Callback gesichert | Flags werden unmittelbar danach mit `popf` wiederhergestellt; Ergebnisflags des Callbacks werden damit absichtlich verworfen |
-| `0F4Eh` | DS | `08h` | DI wird auf `08h` gesetzt; `9630h` liefert BX-Kontext | Flags werden mit `pushf`/`popf` über den Callback hinweg bewahrt; Ergebnisflags werden nicht ausgewertet |
-| `0F76h` | ES | `16h` | `9636h`; BX, DI und ES werden gesichert | Rückkehr ohne unmittelbaren Flag-Test; Register werden wiederhergestellt |
-| `1189h` | DS | nicht lokal gesetzt | AL wird aus dem Byte bei DS:BX geladen; DI stammt aus dem Aufruferkontext | kein unmittelbarer Rückgabewerttest; DS wird wiederhergestellt |
-| `129Bh` | DS | `0Ah` | AL=`[BX]`, CL=`[SI]` | unmittelbar `SAHF` aus AH; danach `JE`. Der Callback liefert hier erkennbar einen AH-Statuscode, dessen gesetzte Statusbits in FLAGS übertragen werden |
-| `1321h` | ES | `04h` | AX wird vor dem Aufruf gesichert | unmittelbar `POP CX` (ändert FLAGS nicht), danach `JB`: Carry-Flag des Callback-Aufrufs wird ausgewertet; bei Carry Sprung, sonst Aufruf `11CBh` |
-| `13A8h` | DS | `0Ch` | AL wird aus `[BX]` geladen; DS und weitere Register sind gesichert | AL wird direkt danach mit `FFh` überschrieben; später werden Strukturbytes bei BX+2/BX+3 ausgewertet. Kein direkter AL-Rückgabewertbeleg |
-| `10BCFh` | DS | `14h` | BX wird aus `ES:[0040h]` geladen, das Byte `[BX]` wird nach BL übernommen | danach wird DI aus Stack restauriert und BL nach DS:DI geschrieben; Carry/AH werden hier nicht explizit ausgewertet |
-
-### 11.2 Präzisierung der Rückgabeflags
-
-Die Aufrufstellen zeigen unterschiedliche Konventionen und dürfen nicht zu einem einzigen Rückgabeprotokoll zusammengezogen werden:
-
-- Bei `0F3Bh` und `0F4Eh` werden die Prozessorflags über den Callback mit `PUSHF`/`POPF` gesichert. Ein Ergebnis in CF oder anderen FLAGS-Bits wird an diesen Stellen bewusst nicht übernommen.
-- Bei `129Bh` wird nach dem Callback `SAHF` ausgeführt. Damit werden Statusbits aus AH in FLAGS übertragen; danach prüft `JE` das Zero-Flag. Der unmittelbar sichtbare Rückgabekanal ist hier also AH, nicht einfach das durch den Far-Aufruf hinterlassene FLAGS-Register.
-- Bei `1321h` wird nach dem Callback lediglich `POP CX` ausgeführt. `POP` verändert die Statusflags nicht; `JB` wertet deshalb das vom Callback hinterlassene Carry-Flag aus.
-- Bei `10BCFh` wird das von der Callback-Funktion möglicherweise veränderte BL anschließend in eine Speicherstelle geschrieben. Das ist ein sichtbarer Datenrückkanal; eine allgemeine Bedeutung von BL ist noch nicht bekannt.
-- Die übrigen Aufrufstellen belegen im unmittelbaren Nachlauf keinen spezifischen Rückgabekanal. Daraus folgt nicht, dass sie keine Rückgabe liefern, sondern nur, dass der lokale Code sie nicht direkt auswertet.
-
-### 11.3 Wichtige Korrektur zur Schnittstellenhypothese
-
-Die wiederholte Verwendung desselben Far-Zeigers und der DI-Werte belegt eine gemeinsame indirekte Aufrufstelle bzw. Dispatch-Mechanik. Sie beweist jedoch **keine einheitliche Callback-Signatur**. Segmentbasis, DI, Eingaberegister, Registererhaltung und Rückgabekanal variieren. Für eine belastbare API-Rekonstruktion muss jeder DI-Selektor separat behandelt werden.
-
-### 11.4 Initialisierungsbefunde – engere Formulierung
-
-- `FAD1h` schreibt CS nach `DS:[05BAh]`, nachdem DS in `FAC8h–FACBh` explizit auf `0E35h` gesetzt wurde. Das setzt nur das Segmentwort; ein dazugehöriger Schreibzugriff auf `05B8h` ist an dieser Stelle nicht vorhanden.
-- `0F0Ah` schreibt null nach `DS:[05BAh]`, nachdem `9630h` den DS-Kontext vorbereitet hat; DS wird danach wiederhergestellt.
-- `10BB5h–10BB8h` schreibt beide Wörter nach `DS:[05B8h]` und `DS:[05BAh]`. Das Datenpaar stammt aus dem Objektkontext, den der Aufruf `0000:2588h` in DS:SI zurückgibt.
-- Die lineare Disassemblierung enthält keinen direkten Near-CALL auf `FAC7h` oder `FAD1h`. Deshalb ist `FAC7h` zwar ein sichtbarer Codeblock, aber der genaue externe Einstieg/Aufrufer ist mit dieser einfachen direkten Referenzsuche nicht bestimmt.
-
-### 11.5 Ergebnis Untersuchung 2250
-
-1. Der gemeinsame Operand `05B8h` ist ein Callback-/Dispatch-Zeiger, aber die Aufrufkonvention ist selektorabhängig.
-2. DI-Werte `04h`, `06h`, `08h`, `0Ah`, `0Ch`, `12h`, `14h`, `16h`, `18h` sind belegt; `1189h` verwendet DI aus dem Aufruferkontext.
-3. `129Bh` verwendet AH als Statuswort für `SAHF`/`JE`; `1321h` wertet CF direkt aus; `10BCFh` verwendet BL als Datenrückkanal.
-4. Bei `0F3Bh` und `0F4Eh` werden FLAGS über den Aufruf hinweg wiederhergestellt; die Callback-Flags sind dort nicht das Ergebnis.
-5. Die bisherige Sammelbezeichnung „gemeinsame Callback-Schnittstelle“ ist auf „gemeinsame Dispatch-Mechanik mit mehreren selektorspezifischen Verträgen“ zu präzisieren.
-
-**Nächster Schritt 2251:** Die Aufrufstellen nach DI-Selektor gruppieren und ihre übergeordneten öffentlichen Wrapper bzw. Entry-Points bestimmen. Danach die Datenstrukturen hinter BX/SI und die Hilfsfunktionen `9630h`/`9636h` untersuchen, um die Bedeutung der übergebenen Objektkontexte zu identifizieren.
-
-
-## 12. Untersuchung 2251 – Segmentladehelfer `9630h` und `9636h`
-
-### 12.1 Überlappende Eintrittspunkte
-
-Der lineare Disassembler zeigt bei `962Eh` zunächst Bytes `35 0E 2E` als Teil einer vermeintlichen `xor`-Instruktion. Die zahlreichen relativen CALL-Ziele `9630h` und `9636h` springen jedoch absichtlich in diese Bytefolge hinein:
-
-- Ab `9630h` werden die Bytes `2E 8E 1E 2E 96 C3` als `mov DS, CS:[962Eh] ; ret` ausgeführt.
-- Ab `9636h` werden die Bytes `2E 8E 06 2E 96 C3` als `mov ES, CS:[962Eh] ; ret` ausgeführt.
-- Die zwei Bytes an `CS:962Eh` sind `35 0E`, also der Wortwert `0E35h` in Little-Endian-Reihenfolge.
-
-**Befund:** `9630h` lädt `DS=0E35h`; `9636h` lädt `ES=0E35h`. Es handelt sich um zwei absichtlich überlappende Einstiegspunkte, nicht um normale unabhängige Funktionen im linearen Disassembly. Die Bytes `35 0E` sind zugleich Daten (Segmentkonstante) und werden bei linearer Disassemblierung fälschlich als Beginn einer arithmetischen Instruktion gelesen.
-
-### 12.2 Auswirkungen auf die bisherigen Callback-Aufrufstellen
-
-- Bei Aufrufstellen, die unmittelbar zuvor `9630h` ausführen und DS danach nicht ändern, ist `DS=0E35h` vor dem Callback konkret belegt. Das betrifft u. a. `0E7Dh`, `0F3Bh`, `0F4Eh`, `1189h`, `129Bh` und `13A8h`.
-- Bei Aufrufstellen, die unmittelbar zuvor `9636h` ausführen und ES danach nicht ändern, ist `ES=0E35h` belegt. Das betrifft `0F20h`, `0F76h` und `1321h`.
-- Die Callback-Aufrufe verwenden somit in diesen Pfaden nicht irgendeinen beliebigen aktuellen Segmentwert, sondern gezielt den Segmentwert `0E35h` aus `CS:[962Eh]`.
-- Der Block `10B53h–10BD6h` setzt DS zunächst aus BX (`10B53h`), führt später `DS=CS` aus (`10B94h–10B95h`) und ruft `101CBh` auf. Diese Setup-Routine setzt am Ende DS erneut auf `0E35h`. Der anschließende Zugriff `DS:[05B8h]` liegt daher ebenfalls im Segment `0E35h`.
-
-### 12.3 Präzisierung der Zeigerinitialisierung
-
-Die zuvor dokumentierte Schreibstelle `FAD1h` setzt in DS=`0E35h` das Wort `DS:[05BAh]` auf den aktuellen CS-Wert. Damit ist die Initialisierung des Segmentwortes im zentralen Segment `0E35h` bestätigt. `0F0Ah` löscht ebenfalls `DS:[05BAh]`, wobei `9630h` DS ausdrücklich auf `0E35h` setzt. Die Schreibsequenz `10BB5h–10BB8h` erfolgt nach `101CBh`, das DS auf `0E35h` setzt; sie überschreibt beide Wörter im selben zentralen Segment.
-
-**Wichtige Korrektur:** Die frühere Formulierung, die Segmentbasis der Callback-Aufrufe sei jeweils allgemein vom gerade aktuellen DS/ES abhängig, war zu weit gefasst. Die Instruktion nutzt technisch DS bzw. ES, aber die untersuchten Wrapper laden diese Register unmittelbar davor gezielt mit `0E35h`. In diesen Fällen ist die konkrete Zeigeradresse `0E35h:05B8h`.
-
-### 12.4 Konsequenz
-
-Der Callback-/Dispatch-Zeiger ist für die untersuchten Kernelpfade zentral im Segment `0E35h` gespeichert. Der indirekte Aufruf über ES ist kein Hinweis auf einen zweiten, eigenständigen Callback-Speicherbereich, wenn ES zuvor durch `9636h` geladen wurde; er adressiert dann denselben Zeiger `0E35h:05B8h`.
-
-**Nächster Schritt 2252:** Die Datensegmentkonstante `0E35h` und den Inhalt des Segmentes rund um `05A0h–0620h` anhand der Kernel-Initialisierung und aller Schreibzugriffe strukturieren. Insbesondere die benachbarten Werte `05ABh`, `05B1h`, `05B2h`, `05B4h`, `05B6h`, `05B8h`, `05BAh`, `05AEh` und `0609h` auf ihre Beziehungen untersuchen.
-
-
-## 13. Untersuchung 2252 – Datenstrukturen im Segment `0E35h`
-
-**Grundlage:** Quellidentität des Kernels unverändert; Analyse der absoluten Datenzugriffe im Disassembly. Die Segmentladehelfer aus Untersuchung 2251 belegen für die betreffenden Kernelpfade `DS=0E35h` bzw. `ES=0E35h`. Die Datei `KERNEL.OLD` enthält jedoch nicht den zur Laufzeit vollständig initialisierten Inhalt dieses Datensegments. Deshalb werden hier Strukturbeziehungen aus den Instruktionen abgeleitet, nicht vermeintliche Anfangswerte aus gleichnamigen Offsets im Kernel-Code-Image.
-
-### 13.1 Verkettete Liste mit Kopfzeiger `05B2h`
-
-Die Routine `11CBh` erzeugt einen Listenknoten:
-
-1. `9630h` lädt DS auf `0E35h`.
-2. Über `6DACh` wird Speicher angefordert; BX zeigt anschließend auf den neuen Knoten.
-3. Der Code schreibt mehrere Felder relativ zu BX, u. a. Byte bei `BX+0`, Statusbyte bei `BX+1`, Bytes bei `BX+2`/`BX+3`, Wortfelder bei `BX+6`, `BX+0Ch` und `BX+0Eh`.
-4. Bei `11F5h` wird der bisherige Kopf `[05B2h]` nach SI geladen und bei `[BX+4]` als Nachfolger gespeichert.
-5. Bei `11FCh` wird BX als neuer Kopf nach `[05B2h]` geschrieben.
-
-**Gesicherter Befund:** `0E35h:05B2h` ist der Kopfzeiger einer verketteten Liste; der Link des Knotens liegt bei Offset `+4`. Der genaue semantische Typ der Knoten ist noch offen.
-
-### 13.2 Sentinel-/Ankerstruktur bei `05AEh`
-
-Die Routine `1228h` setzt SI auf `05AEh` und untersucht wiederholt das Wort `[SI+4]`, bis es dem gesuchten BX entspricht. Danach kopiert sie den Nachfolger `[BX+4]` in `[SI+4]`. Da `05AEh+4=05B2h`, ist dies die passende Entfernung eines Knotens aus der Liste mit Kopfzeiger `05B2h`.
-
-**Gesicherter Befund:** `0E35h:05AEh` ist ein Listenanker bzw. Sentinel; sein Linkfeld bei `+4` ist zugleich die globale Kopfzeigerzelle `05B2h`. `05B2h` ist damit nicht nur irgendein einzelner Pointer, sondern das Linkfeld des Ankerknotens.
-
-### 13.3 Statusbyte `05ABh` und Initialisierungsflag `05B1h`
-
-- `05ABh` wird in `10B5Fh` als Byte in BL geladen und in `110Eh` mit `03h` verglichen. Die genaue Codierung ist nicht geklärt.
-- `05B1h` wird bei `10B13h` auf `FFh` gesetzt. `10B58h` prüft, ob es null ist; bei ungleich null wird ein alternativer Pfad nach `10B90h` genommen.
-- Der Initialisierungs-/Auswahlblock verwendet `05B1h` daher als Zustandsschalter; eine präzisere Bedeutung (z. B. „nicht initialisiert“, „Treiber aktiv“ o. ä.) ist aus diesen Zugriffen allein nicht belegbar.
-
-### 13.4 Separates Far-Zeigerpaar `05B4h/05B6h`
-
-Die Routine `1849h` lädt nach `DS=0E35h`:
-- `[05B6h]` in AX und speichert es als Segmentwort nach `SS:[0010h]`;
-- `[05B4h]` in AX und speichert es als Offsetwort nach `SS:[000Eh]`.
-
-Danach führt sie mit Interruptsperre `lcall SS:[000Eh]` aus und prüft anschließend den Wert bei `SS:[0010h]`. Das belegt ein zweites Offset-/Segment-Paar, getrennt von `05B8h/05BAh`. In der untersuchten Kerneldatei sind keine direkten Schreibzugriffe auf `05B4h` oder `05B6h` sichtbar; die Initialisierung kann daher außerhalb dieses Kernel-Codepfades erfolgen.
-
-**Wichtig:** `05B4h/05B6h` darf nicht mit dem Callback-Paar `05B8h/05BAh` gleichgesetzt werden. Beide sind getrennte Wortpaare mit unterschiedlichen Aufrufpfaden.
-
-### 13.5 `0609h` – gespeicherter Index
-
-`10BA5h` speichert BX nach `0609h`. Die Routine `25A5h` liest diesen Wert später nach DX. In `10B89h` wird BX unmittelbar zuvor verdoppelt und als Index in `CS:[121Ah+BX]` verwendet. Der gespeicherte Wert ist damit der ausgewählte, bereits skalierte Tabellenindex. Eine höhere semantische Bedeutung ist noch nicht nachgewiesen.
-
-### 13.6 Ergebnis Untersuchung 2252
-
-1. `05B2h` ist der Kopf-Link einer verketteten Liste; `05AEh` ist ihr Sentinel/Anker.
-2. Das Linkfeld jedes Knotens liegt bei `+4`; Einfügen und Entfernen sind im Code sichtbar.
-3. `05ABh` ist ein Zustandsbyte mit mindestens zwei beobachteten Verwendungsweisen; genaue Codierung offen.
-4. `05B1h` ist ein Schalter, der im untersuchten Initialisierungspfad zwischen zwei Kontrollflusswegen unterscheidet.
-5. `05B4h/05B6h` bilden ein separates Far-Zeigerpaar, das `1849h` über einen Stack-basierten Aufruf verwendet.
-6. `0609h` speichert den skalierten Tabellenindex des Blocks `10B53h–10BD6h`.
-
-**Nächster Schritt 2253:** Den Knotenaufbau ab `11CBh` vollständig als Byte-Layout darstellen und die Verbraucher der Felder `+0`, `+1`, `+2`, `+3`, `+4`, `+6`, `+0Ch`, `+0Eh` verfolgen. Parallel die Herkunft der extern initialisierten Far-Zeiger `05B4h/05B6h` und `05B8h/05BAh` weiter eingrenzen.
-
 ## 6. Änderungs- und Belegregel
 
 Jeder weitere Untersuchungsabschnitt erhält eine fortlaufende Nummer, Datum, Quellenidentität/Hashes, konkrete Instruktionsbereiche, Register- und Stacktabellen, Befunde, offene Fragen und eine klare Aussage, ob Dateien verändert oder Builds/Laufzeittests tatsächlich ausgeführt wurden. Keine Kernel- oder Treiberdatei wird ohne ausdrückliche Freigabe gepatcht.
@@ -420,3 +284,139 @@ Mehrere Instruktionen rufen `05B8h` mit `lcall` indirekt auf. Die Instruktion `l
 4. Die Default-Initialisierung bei `FAD1h` erklärt, warum `05BAh` zunächst auf CS gesetzt werden kann, während spätere Setup-Pfade das Zeigerpaar durch einen aus einem Objekt gelesenen Zeiger ersetzen.
 
 **Nächster Schritt 2250:** Den Initialisierungspfad ab `FAC7h` und die Auswahl-/Ersetzungssequenz `10B53h–10BB8h` als zusammenhängenden Lebenszyklus modellieren. Anschließend für jeden DI-Selektor die konkreten Parameter und Rückgabeflags aus den Aufrufern tabellarisch rekonstruieren.
+
+## 11. Untersuchung 2250 – DI-Selektoren und Rückgabekanäle der Callback-Aufrufe
+
+**Methode:** Die direkten Aufrufstellen von `lcall DS:[05B8h]` und `lcall ES:[05B8h]` wurden jeweils mit den unmittelbar davor- und danachliegenden Instruktionen geprüft. Die Tabelle beschreibt nur Register und Flags, die aus dem lokalen Maschinencode sicher ablesbar sind; sie weist keine nicht belegten semantischen Namen zu.
+
+### 11.1 Aufrufvertrag je Fundstelle
+
+| Aufrufstelle | Segmentbasis | DI beim Aufruf | Vorher erkennbare Parameter | Direkt danach ausgewerteter Rückgabekanal |
+|---|---|---:|---|---|
+| `0E7Dh` | DS | `18h` | `CX=[01A0h]`, `DX=0`; zuvor `CB3h`, `9630h` | kein unmittelbarer Test; danach `CBAh` |
+| `0F20h` | ES | `12h` | `9636h`, danach `172Fh` und `15EBh`; DI wird explizit gesetzt | danach `1628h`, `1736h`; kein unmittelbarer Carry-Test |
+| `0F3Bh` | DS | `06h` | `BL=[BX]`, `BH=0`; Flags werden vor dem Callback gesichert | Flags werden unmittelbar danach mit `popf` wiederhergestellt; Ergebnisflags des Callbacks werden damit absichtlich verworfen |
+| `0F4Eh` | DS | `08h` | DI wird auf `08h` gesetzt; `9630h` liefert BX-Kontext | Flags werden mit `pushf`/`popf` über den Callback hinweg bewahrt; Ergebnisflags werden nicht ausgewertet |
+| `0F76h` | ES | `16h` | `9636h`; BX, DI und ES werden gesichert | Rückkehr ohne unmittelbaren Flag-Test; Register werden wiederhergestellt |
+| `1189h` | DS | nicht lokal gesetzt | AL wird aus dem Byte bei DS:BX geladen; DI stammt aus dem Aufruferkontext | kein unmittelbarer Rückgabewerttest; DS wird wiederhergestellt |
+| `129Bh` | DS | `0Ah` | AL=`[BX]`, CL=`[SI]` | unmittelbar `SAHF` aus AH; danach `JE`. Der Callback liefert hier erkennbar einen AH-Statuscode, dessen gesetzte Statusbits in FLAGS übertragen werden |
+| `1321h` | ES | `04h` | AX wird vor dem Aufruf gesichert | unmittelbar `POP CX` (ändert FLAGS nicht), danach `JB`: Carry-Flag des Callback-Aufrufs wird ausgewertet; bei Carry Sprung, sonst Aufruf `11CBh` |
+| `13A8h` | DS | `0Ch` | AL wird aus `[BX]` geladen; DS und weitere Register sind gesichert | AL wird direkt danach mit `FFh` überschrieben; später werden Strukturbytes bei BX+2/BX+3 ausgewertet. Kein direkter AL-Rückgabewertbeleg |
+| `10BCFh` | DS | `14h` | BX wird aus `ES:[0040h]` geladen, das Byte `[BX]` wird nach BL übernommen | danach wird DI aus Stack restauriert und BL nach DS:DI geschrieben; Carry/AH werden hier nicht explizit ausgewertet |
+
+### 11.2 Präzisierung der Rückgabeflags
+
+Die Aufrufstellen zeigen unterschiedliche Konventionen und dürfen nicht zu einem einzigen Rückgabeprotokoll zusammengezogen werden:
+
+- Bei `0F3Bh` und `0F4Eh` werden die Prozessorflags über den Callback mit `PUSHF`/`POPF` gesichert. Ein Ergebnis in CF oder anderen FLAGS-Bits wird an diesen Stellen bewusst nicht übernommen.
+- Bei `129Bh` wird nach dem Callback `SAHF` ausgeführt. Damit werden Statusbits aus AH in FLAGS übertragen; danach prüft `JE` das Zero-Flag. Der unmittelbar sichtbare Rückgabekanal ist hier also AH, nicht einfach das durch den Far-Aufruf hinterlassene FLAGS-Register.
+- Bei `1321h` wird nach dem Callback lediglich `POP CX` ausgeführt. `POP` verändert die Statusflags nicht; `JB` wertet deshalb das vom Callback hinterlassene Carry-Flag aus.
+- Bei `10BCFh` wird das von der Callback-Funktion möglicherweise veränderte BL anschließend in eine Speicherstelle geschrieben. Das ist ein sichtbarer Datenrückkanal; eine allgemeine Bedeutung von BL ist noch nicht bekannt.
+- Die übrigen Aufrufstellen belegen im unmittelbaren Nachlauf keinen spezifischen Rückgabekanal. Daraus folgt nicht, dass sie keine Rückgabe liefern, sondern nur, dass der lokale Code sie nicht direkt auswertet.
+
+### 11.3 Wichtige Korrektur zur Schnittstellenhypothese
+
+Die wiederholte Verwendung desselben Far-Zeigers und der DI-Werte belegt eine gemeinsame indirekte Aufrufstelle bzw. Dispatch-Mechanik. Sie beweist jedoch **keine einheitliche Callback-Signatur**. Segmentbasis, DI, Eingaberegister, Registererhaltung und Rückgabekanal variieren. Für eine belastbare API-Rekonstruktion muss jeder DI-Selektor separat behandelt werden.
+
+### 11.4 Initialisierungsbefunde – engere Formulierung
+
+- `FAD1h` schreibt CS nach `DS:[05BAh]`, nachdem DS in `FAC8h–FACBh` explizit auf `0E35h` gesetzt wurde. Das setzt nur das Segmentwort; ein dazugehöriger Schreibzugriff auf `05B8h` ist an dieser Stelle nicht vorhanden.
+- `0F0Ah` schreibt null nach `DS:[05BAh]`, nachdem `9630h` den DS-Kontext vorbereitet hat; DS wird danach wiederhergestellt.
+- `10BB5h–10BB8h` schreibt beide Wörter nach `DS:[05B8h]` und `DS:[05BAh]`. Das Datenpaar stammt aus dem Objektkontext, den der Aufruf `0000:2588h` in DS:SI zurückgibt.
+- Die lineare Disassemblierung enthält keinen direkten Near-CALL auf `FAC7h` oder `FAD1h`. Deshalb ist `FAC7h` zwar ein sichtbarer Codeblock, aber der genaue externe Einstieg/Aufrufer ist mit dieser einfachen direkten Referenzsuche nicht bestimmt.
+
+### 11.5 Ergebnis Untersuchung 2250
+
+1. Der gemeinsame Operand `05B8h` ist ein Callback-/Dispatch-Zeiger, aber die Aufrufkonvention ist selektorabhängig.
+2. DI-Werte `04h`, `06h`, `08h`, `0Ah`, `0Ch`, `12h`, `14h`, `16h`, `18h` sind belegt; `1189h` verwendet DI aus dem Aufruferkontext.
+3. `129Bh` verwendet AH als Statuswort für `SAHF`/`JE`; `1321h` wertet CF direkt aus; `10BCFh` verwendet BL als Datenrückkanal.
+4. Bei `0F3Bh` und `0F4Eh` werden FLAGS über den Aufruf hinweg wiederhergestellt; die Callback-Flags sind dort nicht das Ergebnis.
+5. Die bisherige Sammelbezeichnung „gemeinsame Callback-Schnittstelle“ ist auf „gemeinsame Dispatch-Mechanik mit mehreren selektorspezifischen Verträgen“ zu präzisieren.
+
+**Nächster Schritt 2251:** Die Aufrufstellen nach DI-Selektor gruppieren und ihre übergeordneten öffentlichen Wrapper bzw. Entry-Points bestimmen. Danach die Datenstrukturen hinter BX/SI und die Hilfsfunktionen `9630h`/`9636h` untersuchen, um die Bedeutung der übergebenen Objektkontexte zu identifizieren.
+
+
+## 12. Untersuchung 2251 – Segmentladehelfer `9630h` und `9636h`
+
+### 12.1 Überlappende Eintrittspunkte
+
+Der lineare Disassembler zeigt bei `962Eh` zunächst Bytes `35 0E 2E` als Teil einer vermeintlichen `xor`-Instruktion. Die zahlreichen relativen CALL-Ziele `9630h` und `9636h` springen jedoch absichtlich in diese Bytefolge hinein:
+
+- Ab `9630h` werden die Bytes `2E 8E 1E 2E 96 C3` als `mov DS, CS:[962Eh] ; ret` ausgeführt.
+- Ab `9636h` werden die Bytes `2E 8E 06 2E 96 C3` als `mov ES, CS:[962Eh] ; ret` ausgeführt.
+- Die zwei Bytes an `CS:962Eh` sind `35 0E`, also der Wortwert `0E35h` in Little-Endian-Reihenfolge.
+
+**Befund:** `9630h` lädt `DS=0E35h`; `9636h` lädt `ES=0E35h`. Es handelt sich um zwei absichtlich überlappende Einstiegspunkte, nicht um normale unabhängige Funktionen im linearen Disassembly. Die Bytes `35 0E` sind zugleich Daten (Segmentkonstante) und werden bei linearer Disassemblierung fälschlich als Beginn einer arithmetischen Instruktion gelesen.
+
+### 12.2 Auswirkungen auf die bisherigen Callback-Aufrufstellen
+
+- Bei Aufrufstellen, die unmittelbar zuvor `9630h` ausführen und DS danach nicht ändern, ist `DS=0E35h` vor dem Callback konkret belegt. Das betrifft u. a. `0E7Dh`, `0F3Bh`, `0F4Eh`, `1189h`, `129Bh` und `13A8h`.
+- Bei Aufrufstellen, die unmittelbar zuvor `9636h` ausführen und ES danach nicht ändern, ist `ES=0E35h` belegt. Das betrifft `0F20h`, `0F76h` und `1321h`.
+- Die Callback-Aufrufe verwenden somit in diesen Pfaden nicht irgendeinen beliebigen aktuellen Segmentwert, sondern gezielt den Segmentwert `0E35h` aus `CS:[962Eh]`.
+- Der Block `10B53h–10BD6h` setzt DS zunächst aus BX (`10B53h`), führt später `DS=CS` aus (`10B94h–10B95h`) und ruft `101CBh` auf. Diese Setup-Routine setzt am Ende DS erneut auf `0E35h`. Der anschließende Zugriff `DS:[05B8h]` liegt daher ebenfalls im Segment `0E35h`.
+
+### 12.3 Präzisierung der Zeigerinitialisierung
+
+Die zuvor dokumentierte Schreibstelle `FAD1h` setzt in DS=`0E35h` das Wort `DS:[05BAh]` auf den aktuellen CS-Wert. Damit ist die Initialisierung des Segmentwortes im zentralen Segment `0E35h` bestätigt. `0F0Ah` löscht ebenfalls `DS:[05BAh]`, wobei `9630h` DS ausdrücklich auf `0E35h` setzt. Die Schreibsequenz `10BB5h–10BB8h` erfolgt nach `101CBh`, das DS auf `0E35h` setzt; sie überschreibt beide Wörter im selben zentralen Segment.
+
+**Wichtige Korrektur:** Die frühere Formulierung, die Segmentbasis der Callback-Aufrufe sei jeweils allgemein vom gerade aktuellen DS/ES abhängig, war zu weit gefasst. Die Instruktion nutzt technisch DS bzw. ES, aber die untersuchten Wrapper laden diese Register unmittelbar davor gezielt mit `0E35h`. In diesen Fällen ist die konkrete Zeigeradresse `0E35h:05B8h`.
+
+### 12.4 Konsequenz
+
+Der Callback-/Dispatch-Zeiger ist für die untersuchten Kernelpfade zentral im Segment `0E35h` gespeichert. Der indirekte Aufruf über ES ist kein Hinweis auf einen zweiten, eigenständigen Callback-Speicherbereich, wenn ES zuvor durch `9636h` geladen wurde; er adressiert dann denselben Zeiger `0E35h:05B8h`.
+
+**Nächster Schritt 2252:** Die Datensegmentkonstante `0E35h` und den Inhalt des Segmentes rund um `05A0h–0620h` anhand der Kernel-Initialisierung und aller Schreibzugriffe strukturieren. Insbesondere die benachbarten Werte `05ABh`, `05B1h`, `05B2h`, `05B4h`, `05B6h`, `05B8h`, `05BAh`, `05AEh` und `0609h` auf ihre Beziehungen untersuchen.
+
+
+## 13. Untersuchung 2252 – Datenstrukturen im Segment `0E35h`
+
+**Grundlage:** Quellidentität des Kernels unverändert; Analyse der absoluten Datenzugriffe im Disassembly. Die Segmentladehelfer aus Untersuchung 2251 belegen für die betreffenden Kernelpfade `DS=0E35h` bzw. `ES=0E35h`. Die Datei `KERNEL.OLD` enthält jedoch nicht den zur Laufzeit vollständig initialisierten Inhalt dieses Datensegments. Deshalb werden hier Strukturbeziehungen aus den Instruktionen abgeleitet, nicht vermeintliche Anfangswerte aus gleichnamigen Offsets im Kernel-Code-Image.
+
+### 13.1 Verkettete Liste mit Kopfzeiger `05B2h`
+
+Die Routine `11CBh` erzeugt einen Listenknoten:
+
+1. `9630h` lädt DS auf `0E35h`.
+2. Über `6DACh` wird Speicher angefordert; BX zeigt anschließend auf den neuen Knoten.
+3. Der Code schreibt mehrere Felder relativ zu BX, u. a. Byte bei `BX+0`, Statusbyte bei `BX+1`, Bytes bei `BX+2`/`BX+3`, Wortfelder bei `BX+6`, `BX+0Ch` und `BX+0Eh`.
+4. Bei `11F5h` wird der bisherige Kopf `[05B2h]` nach SI geladen und bei `[BX+4]` als Nachfolger gespeichert.
+5. Bei `11FCh` wird BX als neuer Kopf nach `[05B2h]` geschrieben.
+
+**Gesicherter Befund:** `0E35h:05B2h` ist der Kopfzeiger einer verketteten Liste; der Link des Knotens liegt bei Offset `+4`. Der genaue semantische Typ der Knoten ist noch offen.
+
+### 13.2 Sentinel-/Ankerstruktur bei `05AEh`
+
+Die Routine `1228h` setzt SI auf `05AEh` und untersucht wiederholt das Wort `[SI+4]`, bis es dem gesuchten BX entspricht. Danach kopiert sie den Nachfolger `[BX+4]` in `[SI+4]`. Da `05AEh+4=05B2h`, ist dies die passende Entfernung eines Knotens aus der Liste mit Kopfzeiger `05B2h`.
+
+**Gesicherter Befund:** `0E35h:05AEh` ist ein Listenanker bzw. Sentinel; sein Linkfeld bei `+4` ist zugleich die globale Kopfzeigerzelle `05B2h`. `05B2h` ist damit nicht nur irgendein einzelner Pointer, sondern das Linkfeld des Ankerknotens.
+
+### 13.3 Statusbyte `05ABh` und Initialisierungsflag `05B1h`
+
+- `05ABh` wird in `10B5Fh` als Byte in BL geladen und in `110Eh` mit `03h` verglichen. Die genaue Codierung ist nicht geklärt.
+- `05B1h` wird bei `10B13h` auf `FFh` gesetzt. `10B58h` prüft, ob es null ist; bei ungleich null wird ein alternativer Pfad nach `10B90h` genommen.
+- Der Initialisierungs-/Auswahlblock verwendet `05B1h` daher als Zustandsschalter; eine präzisere Bedeutung (z. B. „nicht initialisiert“, „Treiber aktiv“ o. ä.) ist aus diesen Zugriffen allein nicht belegbar.
+
+### 13.4 Separates Far-Zeigerpaar `05B4h/05B6h`
+
+Die Routine `1849h` lädt nach `DS=0E35h`:
+- `[05B6h]` in AX und speichert es als Segmentwort nach `SS:[0010h]`;
+- `[05B4h]` in AX und speichert es als Offsetwort nach `SS:[000Eh]`.
+
+Danach führt sie mit Interruptsperre `lcall SS:[000Eh]` aus und prüft anschließend den Wert bei `SS:[0010h]`. Das belegt ein zweites Offset-/Segment-Paar, getrennt von `05B8h/05BAh`. In der untersuchten Kerneldatei sind keine direkten Schreibzugriffe auf `05B4h` oder `05B6h` sichtbar; die Initialisierung kann daher außerhalb dieses Kernel-Codepfades erfolgen.
+
+**Wichtig:** `05B4h/05B6h` darf nicht mit dem Callback-Paar `05B8h/05BAh` gleichgesetzt werden. Beide sind getrennte Wortpaare mit unterschiedlichen Aufrufpfaden.
+
+### 13.5 `0609h` – gespeicherter Index
+
+`10BA5h` speichert BX nach `0609h`. Die Routine `25A5h` liest diesen Wert später nach DX. In `10B89h` wird BX unmittelbar zuvor verdoppelt und als Index in `CS:[121Ah+BX]` verwendet. Der gespeicherte Wert ist damit der ausgewählte, bereits skalierte Tabellenindex. Eine höhere semantische Bedeutung ist noch nicht nachgewiesen.
+
+### 13.6 Ergebnis Untersuchung 2252
+
+1. `05B2h` ist der Kopf-Link einer verketteten Liste; `05AEh` ist ihr Sentinel/Anker.
+2. Das Linkfeld jedes Knotens liegt bei `+4`; Einfügen und Entfernen sind im Code sichtbar.
+3. `05ABh` ist ein Zustandsbyte mit mindestens zwei beobachteten Verwendungsweisen; genaue Codierung offen.
+4. `05B1h` ist ein Schalter, der im untersuchten Initialisierungspfad zwischen zwei Kontrollflusswegen unterscheidet.
+5. `05B4h/05B6h` bilden ein separates Far-Zeigerpaar, das `1849h` über einen Stack-basierten Aufruf verwendet.
+6. `0609h` speichert den skalierten Tabellenindex des Blocks `10B53h–10BD6h`.
+
+**Nächster Schritt 2253:** Den Knotenaufbau ab `11CBh` vollständig als Byte-Layout darstellen und die Verbraucher der Felder `+0`, `+1`, `+2`, `+3`, `+4`, `+6`, `+0Ch`, `+0Eh` verfolgen. Parallel die Herkunft der extern initialisierten Far-Zeiger `05B4h/05B6h` und `05B8h/05BAh` weiter eingrenzen.
