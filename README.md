@@ -19,6 +19,10 @@ This SDK grew out of reverse engineering and reproducible builds against a GeoWo
 
 The first SDK test application, `examples/geotest/`, was successfully launched by the project user in GeoWorks 1.2 on 2026-11-09. The screenshot confirms the native main window and Help dialog with the expected text. See [the runtime test record](docs/GEOTEST_RUNTIME_TEST.md) and [the full development log](docs/GEOTEST_DEVELOPMENT_LOG.md). The target-derived `.GEO` binary is intentionally not distributed in this repository; users must build against their own legally obtained GeoWorks 1.x target files.
 
+## GEOTEST program icon
+
+The user-provided 48×30, 16-color PCX icon is prepared for the GeoWorks 1.x token `GTS1` (manufacturer ID 0). See [GEOTEST icon integration](docs/GEOTEST_ICON.md). The icon is supplied through the 1.x token database mechanism, not by appending a PCX file to the `.GEO` executable. The ICONMAKE conversion and runtime display test are still pending.
+
 ## Important limits
 
 - The supported target for 0.1 is the exact GeoWorks Pro 1.2 build identified in `docs/TARGET_COMPATIBILITY.md` (kernel 622.3, UI 693.0).
