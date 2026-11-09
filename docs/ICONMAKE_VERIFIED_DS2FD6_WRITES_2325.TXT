@@ -1,0 +1,97 @@
+ICONMAKE DS:2FD6 — VERIFIED WRITE REFERENCES
+Investigation 2325
+Date: 2026-11-09
+Scope: Original GeoWorks 1.x ICONMAKE.EXE extracted from GEOWORKS.zip.
+
+Method
+------
+The original 19,477-byte MZ executable was extracted again from the
+archive. Candidate references were located by scanning the load module
+for the little-endian displacement bytes D6 2F, then checking each
+instruction's opcode and ModR/M bytes. Offsets below are load-module
+offsets; corresponding file offsets add 0x0200.
+
+Verified references
+-------------------
+The five occurrences of D6 2F in the MZ load module are:
+
+Load offset  File offset  Instruction bytes              Decoded operation
+0x18F9       0x1AF9       88 87 D6 2F                    MOV [BX+2FD6],AL
+0x1914       0x1B14       88 9F D6 2F                    MOV [BX+2FD6],BL
+0x1BA5       0x1DA5       8A 87 D6 2F                    MOV AL,[BX+2FD6]
+0x1CE6       0x1EE6       8A 87 D6 2F                    MOV AL,[BX+2FD6]
+0x1CF2       0x1EF2       8A 87 D6 2F                    MOV AL,[BX+2FD6]
+
+This establishes two genuine store instructions and three genuine load
+instructions using the DS-relative base displacement 0x2FD6.
+
+Store loop context at 0x18D0–0x191F
+-----------------------------------
+First store:
+  18F0  mov al,[bp-10]
+  18F3  mov bx,[bp-0E]
+  18F6  mov [bx+2FD6],al
+  18FA  add bx,3
+  18FD  inc word [bp-0E]
+  1901  cmp word [bp-0E],10h
+  1906  jge/branch out of loop
+
+Second store:
+  1910  sub bx,bx
+  1912  mov [bx+2FD6],bx?  ; raw bytes 88 9F D6 2F decode MOV [BX+2FD6],BL
+  1916  inc bx
+  1917  cmp bx,10h
+  191B  jl 1913
+
+The second instruction is byte-sized: opcode 88 /r with ModR/M 9F,
+so the source is BL and the destination is byte [BX+2FD6]. It does not
+store a word. The loop initializes a contiguous 16-byte range to zero
+(one byte per index), subject to the exact loop entry and control-flow
+path. The first loop writes AL at offsets separated by three bytes
+(BX += 3) and its index/limit is controlled by a stack local.
+
+Important control-flow caution
+------------------------------
+The first loop's exact purpose and the meaning of the stride-three
+records are not yet established. It is unsafe to label those bytes as
+palette entries without tracing the caller and the values stored in
+[B P-10] and [BP-0E].
+
+The second loop's zero-fill behavior is directly visible from:
+- BX initialized to zero by SUB BX,BX;
+- MOV [BX+2FD6],BL with BL therefore zero;
+- INC BX;
+- compare against 0x10 and loop.
+The exact branch target and entry path must be retained when interpreting
+whether all 16 entries are always cleared.
+
+Read paths
+----------
+The conversion code at 0x1CE6 and 0x1CF2 reads the low and high nibble
+indices from the DS:2FD6 table and packs the translated values.
+A further read at 0x1BA5 is used by a separate conversion path.
+
+Correction status
+-----------------
+This report supersedes the earlier mistaken store offsets 0x1CF7 and
+0x1D12. The verified stores are at 0x18F9 and 0x1914 (load-module
+offsets). At 0x1CF7 the instruction is MOV CX,AX; at 0x1D12 the bytes
+begin a different instruction sequence.
+
+Next steps
+----------
+1. Trace the caller that prepares [BP-10] and [BP-0E] for the stride-3
+   store loop.
+2. Identify what the 3-byte records represent and why their first byte
+   is copied into DS:2FD6.
+3. Trace the zero-fill loop entry and its callers.
+4. Determine whether the table is subsequently populated by the first
+   loop or another routine.
+5. Correlate the runtime table values with EGA PCX palette indices and
+   the native R6 resource.
+
+Integrity
+---------
+Read-only inspection of the original ICONMAKE.EXE. No files were changed.
+No GEO was built and TOKEN.DB was not touched. No PC/GEOS 2.x or
+FreeGEOS assumptions were used.
