@@ -100,3 +100,26 @@ The original German `KERNEL.OLD` reads 24 bytes at file offset `00C8h`. Static d
 | byte `00C9h`, bit 7 | Adds `18h` bytes to the loader's internal metadata allocation |
 
 The internal allocation request is `46h + 8*R + 4*E + 2*I`, plus `18h` when bit 7 of `00C9h` is set. This is a kernel-side management allocation, not the file size or the serialized GEODE header length. The exact symbolic names of the type, protocol fields, attribute bits, and the optional 18h-byte extension remain unconfirmed. See the 2141–2150 section in the reassessment dossier. No parser changes were made.
+
+
+## Process-class method far pointers (audited GeoWorks 1.x examples, 2026-11-09)
+
+The Class_rel1 method table in the supplied GeoWorks 1.x BOUNCE.GEO and SPINTEXT.GEO samples provides a concrete byte-level check for process method pointers.
+
+- The method count is stored at DGROUP offset 0x46.
+- Message IDs begin at 0x52; the handler pointer table follows the message-ID words.
+- In both audited files, each handler pointer is stored as resource WORD followed by offset WORD.
+- The relocation record targets the first WORD (the resource/segment word), not the second WORD.
+
+Evidence from the German installation archive:
+
+| File | DGROUP method count | First handler bytes | Relocation target |
+|---|---:|---|---:|
+| BOUNCE.GEO | 7 | 02 00 38 00 | 0x62 |
+| PROGRAMM.E/SPINTEXT.GEO | 8 | 02 00 38 00 | 0x62 |
+
+The first WORD is resource ID 2; the second WORD is code offset 0x0038. The relocation stream contains a resource relocation (info=0x22) at offset 0x62. Subsequent handler records advance by four bytes and their relocation targets likewise point to the first WORD.
+
+Packer invariant: when a process method points into code resource 2, write (resource_id=2, code_offset) and emit the relocation at the pointer's first WORD. Do not write (code_offset, resource_id) or relocate the second WORD. The regression test is tests/test_process_method_table.py.
+
+This statement is limited to the observed GeoWorks 1.x process-class layout and the two named reference files. It does not claim that every class or every GEODE pointer representation uses the same layout.
