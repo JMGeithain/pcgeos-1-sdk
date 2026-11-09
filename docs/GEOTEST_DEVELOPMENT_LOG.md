@@ -3,7 +3,7 @@
 **Projekt:** erste ausführbare Testanwendung für GeoWorks 1.2 / PC/GEOS 1.x  
 **SDK:** `JMGeithain/pcgeos-1-sdk`, Zweig `main`, SDK 0.1  
 **Protokollstand:** 2026-11-09  
-**Status:** Erster experimenteller Host-Build von `GEOTEST.GEO` erzeugt und strukturell geprüft (Untersuchung 2264); Reproduzierbarkeit aus GitHub-HEAD noch nicht bestätigt (Untersuchung 2266); echter Laufzeittest in GeoWorks 1.2 steht aus.
+**Status:** Korrigierter experimenteller Host-Build von `GEOTEST.GEO` erzeugt und strukturell geprüft (Untersuchung 2274; SHA-256 `3f72580d...`); vollständige Quellbyteidentität mit GitHub-HEAD noch nicht bestätigt; echter Laufzeittest in GeoWorks 1.2 steht aus. Der frühere Build `9ace19da...` ist wegen vertauschter Prozessmethoden-Farzeiger verworfen.
 
 ## 1. Verbindliche Projektgrenzen
 
@@ -1859,8 +1859,9 @@ Dieser Hash unterscheidet sich vom fehlerhaften Vorab-Build. Das Ergebnis ist we
 
 ### 35.5 Teststatus und Grenzen
 
-- Die zwei neuen Methodentabellentests bestanden lokal.
-- Die bereits vorhandenen neun Profiltests und die GEODE-Absatzregression müssen nach dem neuen Packer-Commit erneut in GitHub Actions laufen.
+- Die zwei neuen Methodentabellentests bestanden lokal und in GitHub Actions.
+- Die neun Profiltests und die GEODE-Absatzregression bestehen ebenfalls im selben CI-Lauf.
+- GitHub Actions Run `42607667310`, Commit `219f95b4a5de3d210e2564a3f6ae27d3d15f9e6f`: `completed / success`; alle drei Testschritte erfolgreich.
 - Der korrigierte Build wurde aus der vorhandenen rekonstruierten lokalen Buildkopie erzeugt. Die vollständige Byteidentität aller SDK-Quelldateien mit GitHub-HEAD ist weiterhin nicht bestätigt.
 - Das Original-BOUNCE.GEO wurde nur lesend analysiert. Es wurde nicht in das öffentliche Repository hochgeladen.
 - Ein Laufzeittest in GeoWorks 1.2 steht weiterhin aus.
