@@ -1,0 +1,101 @@
+ICONMAKE.EXE – Herkunft des DS:2FD4h-Schalterwerts
+Untersuchung 2337
+Stand: 2026-11-09
+
+Quelle
+Original ICONMAKE.EXE aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+MZ-Header: 0x200 Bytes. Moduloffsets beziehen sich auf /tmp/mod.bin.
+Die folgenden Bytes wurden direkt mit einer 8086-Disassemblierung
+und Gegenprüfung der Rohbytes ausgewertet.
+
+1. Aufruf 0x017B: Descriptorbyte +0Ch
+Der Aufrufer lädt BX aus [BP-02] und liest:
+  0x0157 MOV BX,[BP-02]
+  0x015A MOV AL,[BX+0Dh]
+  ...
+  0x0176 MOV AL,[BX+0Ch]
+  0x0179 CBW
+  0x017A PUSH AX
+  0x017B CALL 17F0h
+
+Vor diesem letzten PUSH werden drei weitere Argumente gestapelt:
+  0x0156 PUSH 0000h
+  0x0169 PUSH AX       ; berechneter Wert aus Descriptorbyte +0Dh
+  0x0175 PUSH AX       ; 1 oder 0, aus Bit 0 von +0Dh
+Danach wird das vorzeichen-erweiterte Byte [BX+0Ch] gepusht.
+
+Wegen der 8086-Stackargumentreihenfolge gilt in 0x17F0:
+  [BP+04] = sign-erweitertes Byte [BX+0Ch]
+  [BP+06] = aus [BX+0Dh] abgeleiteter Wert
+  [BP+08] = 1 oder 0, aus Bit 0 von [BX+0Dh]
+  [BP+0A] = 0
+
+2. Exakte Wirkung in 0x17F0
+  0x181F MOV AX,[BP+04]
+  0x1822 MOV [2FD4h],AX
+
+Der Inhalt des Descriptorbytes +0Ch wird somit als vorzeichen-
+erweiterter 16-Bit-Wert in DS:2FD4h übernommen. Die Ausgabe-
+Routine 0x1694 behandelt jeden Wert ungleich null als Aktivierung
+des besonderen RLE-artigen Pfads. Für den konkreten Descriptor-
+wert selbst ist noch keine semantische Bezeichnung belegt.
+
+3. Weitere Aufrufkontexte
+Aufruf 0x0252:
+  PUSH DX
+  PUSH DI
+  PUSH AX       ; 1 oder FFFFh
+  PUSH 1
+  CALL 17F0h
+Damit gilt:
+  [BP+04]=1, [BP+06]=AX, [BP+08]=DI, [BP+0A]=DX.
+Der Schalter DS:2FD4h wird hier explizit auf 1 gesetzt.
+
+Aufruf 0x049C:
+  PUSH 1D58h
+  PUSH 000Eh
+  PUSH AX       ; 1 oder FFFFh
+  PUSH 1
+  CALL 17F0h
+Damit gilt:
+  [BP+04]=1, [BP+06]=AX, [BP+08]=000Eh, [BP+0A]=1D58h.
+Auch hier wird DS:2FD4h explizit auf 1 gesetzt.
+
+4. Zusammenhang mit dem Descriptorbyte +0Dh
+Der Aufrufer bei 0x015A verwendet [BX+0Dh] mehrfach:
+- Bit 4 wird mit AND 10h geprüft und beeinflusst einen
+  berechneten Parameter (Wert 0 oder 0Eh).
+- Bit 0 wird separat extrahiert und beeinflusst einen zweiten
+  Parameter (Wert 0 oder 1).
+- Die vollständigen acht Bits werden später in einem weiteren
+  Zweig mit OR in ein Byte bei [SI+0Dh] kombiniert (siehe Code
+  ab 0x0200).
+
+Damit ist belegt, dass die Descriptorbytes +0Ch und +0Dh als
+Steuerinformationen interpretiert werden. Die genaue Struktur-
+bezeichnung und Bedeutung der einzelnen Bits sind noch offen.
+
+5. Konsequenz
+Die Wahl des Ausgabemodus ist im allgemeinen Pfad nicht aus
+einem globalen Zufallszustand abgeleitet: Sie wird aus dem
+Descriptorbyte +0Ch geladen. Andere Aufrufpfade setzen den
+Schalter ausdrücklich auf 1. Somit kann derselbe Writer 0x1694
+je nach Aufrufer in direkter oder RLE-artiger Betriebsart arbeiten.
+
+6. Grenzen und nächste Schritte
+Nicht bewiesen ist, ob das Descriptorbyte +0Ch eine Ressourcen-
+eigenschaft, ein Kompressionsflag oder ein numerischer Moduscode
+ist. Ein negativer Wert würde zwar ebenfalls ungleich null sein,
+aber sein Sinn lässt sich erst aus realen Descriptorwerten und
+dem Aufbau der Descriptorstruktur ableiten.
+Als nächstes sind die Speicherstelle [BP-02] und die Struktur,
+auf die sie zeigt, bis zu ihrer Erzeugung zurückzuverfolgen.
+Die realen Bytes +0Ch und +0Dh mehrerer Icon-Descriptoren sollten
+dann mit den jeweiligen Ausgabepfaden verglichen werden.
+
+Ergebnisstatus
+Die Herkunft des Schalters DS:2FD4h ist bis zum Descriptorbyte
+[BX+0Ch] bzw. zu den expliziten Konstanten 1 zurückverfolgt.
+Die Vorzeichenerweiterung und die Stackargumente sind bytegenau
+bestätigt. Die fachliche Bedeutung des Bytes +0Ch bleibt offen.
