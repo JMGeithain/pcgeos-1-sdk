@@ -26,12 +26,13 @@ Moduloffset   Bytes             Dekodierung
 0x18F7        88 87 D6 2F       MOV [BX+2FD6],AL
 0x18FE        FF 46 F2          INC word [BP-0E]
 0x1901        83 7E F2 10       CMP word [BP-0E],0010
-0x1907        E9 4E FF          JMP near 0x185A (wenn Bedingung erfüllt)
+0x1907        E9 4E FF          JMP near 0x1858 (Schleifenrücksprung)
 
-Die relative Sprungzielberechnung: Instruktionsende 0x190A plus
-vorzeichenbehafteter Relativwert -0x00B2 ergibt 0x1858? Achtung:
-Der Sprung beginnt bei 0x1907, die drei Bytes enden bei 0x190A;
-0x190A - 0x00B2 = 0x1858. Das Ziel ist somit 0x1858, nicht 0x1857.
+Sprungzielberechnung: Die drei Bytes ab 0x1907 enden bei 0x190A.
+Der Relativwert 0xFF4E ist vorzeichenbehaftet -0x00B2.
+0x190A - 0x00B2 = 0x1858. Das Ziel ist 0x1858.
+Der Sprung wird nur erreicht, wenn der vorherige JGE bei 0x1905
+nicht genommen wird; dann wird die Schleife fortgesetzt.
 
 3. Herkunft des gespeicherten Wertes
 [BP-10] wird bei 0x18D3/0x18D6 aus [BP-02] übernommen.
@@ -45,10 +46,10 @@ Er stammt an dieser Stelle nicht als direktes Byte aus dem PCX-Eingabepuffer.
 - Die semantische Bedeutung von [BP-02] (z.B. Farb-/Eintragsindex) ist
   durch diese Datenbewegung allein noch nicht abschließend bewiesen.
 - Ebenso ist die vollständige Bedeutung der Tabelle DS:2FD6 noch offen.
-- Die Vergleiche und Berechnungen im Bereich 0x1867–0x18E8 entscheiden,
+- Die Vergleiche und Berechnungen im Bereich 0x18C7–0x18E8 entscheiden,
   wann der aktuelle [BP-02]-Wert in den Tabellenslot [BP-0E] gelangt.
-- Der Schleifenpfad ist noch vollständig mit seinen Sprungzielen und
-  Randbedingungen zu rekonstruieren.
+- Der Schleifenpfad und seine Randbedingungen sind noch nicht vollständig
+  semantisch erklärt.
 
 5. Wichtige Korrektur zur früheren Lesart
 Die frühere Formulierung, [BP-10] enthalte einen aus dem Eingabepuffer
