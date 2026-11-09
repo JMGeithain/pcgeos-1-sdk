@@ -1,0 +1,75 @@
+R6 NATIVE IMAGE DESCRIPTOR COMPARISON — PAPR.000 / GDOC.000
+Investigation 2319
+Date: 2026-11-09
+Scope: Original GeoWorks 1.x icon-provider files only.
+
+Sources
+-------
+Original archive: GEOWORKS.zip
+Members:
+- GEOWORKS/ICONS/PAPR.000
+- GEOWORKS/ICONS/GDOC.000
+
+Both files were parsed with the repository's bounds-checked GEOS 1.x GEODE reader. Resource R6 was extracted directly from each original file. No binary was modified.
+
+R6 resource metadata
+--------------------
+PAPR.000:
+- resource id: 6
+- file offset: 0x05AC
+- resource size: 752 bytes (0x02F0)
+- resource flags: 0x1C7A
+
+GDOC.000:
+- resource id: 6
+- file offset: 0x059C
+- resource size: 816 bytes (0x0330)
+- resource flags: 0x1C7A
+
+LMem/chunk prefix (resource-relative)
+-------------------------------------
+Both resources begin their chunk-offset table at resource offset 0x20:
+- first chunk offset: 0x0026
+- second chunk offset: 0x002A
+- words at 0x24: 0x0004
+- words at 0x26: 0x0200
+- word at 0x28 differs: PAPR 0x02C8; GDOC 0x0306
+
+Second chunk descriptor
+-----------------------
+At resource-relative offset 0x2A, both resources contain a 16-byte descriptor:
+
+PAPR R6:
+46 30 00 1E 00 1A BD 02 30 00 1E 00 01 11 00 7F
+
+GDOC R6:
+46 30 00 1E 00 1A FB 02 30 00 1E 00 01 11 00 01
+
+Observed identical fields:
+- bytes 0..1: 46 30
+- bytes 2..3: 00 1E
+- bytes 4..5: 00 1A
+- bytes 8..9: 30 00
+- bytes 10..11: 1E 00
+- bytes 12..13: 01 11
+
+Observed differing fields:
+- bytes 6..7: PAPR BD 02; GDOC FB 02
+- bytes 14..15: PAPR 00 7F; GDOC 00 01
+
+The extracted ICONMAKE EGA PCX files independently confirm 48x30 pixels and 4-bit, single-plane PCX storage. This is consistent with the repeated dimension fields in R6. It does not prove the semantic meaning of descriptor bytes 12..13 (01 11), nor does it establish a direct PCX-to-native-payload encoding.
+
+Resource sizes differ (752 vs 816 bytes), and the descriptor's bytes 6..7 differ (0x02BD vs 0x02FB). These values must not yet be labeled as uncompressed byte counts, offsets, palette identifiers, or compression lengths. The exact payload codec and descriptor field meanings remain open pending disassembly of ICONMAKE or a pixel-level decoder validated against multiple providers.
+
+Conclusions
+-----------
+1. The R6 descriptor structure is repeated across PAPR and GDOC.
+2. The dimensions are consistent with the 48x30 EGA PCX outputs.
+3. The bytes 01 11 are a stable descriptor field across both providers, but their meaning is not established.
+4. The provider-specific payloads differ; do not copy one provider's R6 payload into another token.
+5. No pixel-level native decode is claimed.
+
+Integrity and scope
+-------------------
+Read-only examination. No GEO, TOKEN.DB, or original provider file was changed.
+No PC/GEOS 2.x or FreeGEOS assumptions were used.
