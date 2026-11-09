@@ -113,6 +113,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2268 | Zielprofil-Integrität geprüft: `allow_unknown_target` umgeht den Hashschutz vollständig; abgesicherter Profilvertrag erforderlich |
 | Untersuchung 2269 | Rückwärtskompatibles Zielprofil-Design festgelegt; Hashprüfung wird pro benanntem Profil statt per globalem Bypass ausgewählt |
 | Untersuchung 2270 | Explizite Hash-gepinnte Zielprofile im Buildsystem implementiert; Unit-Tests für Profilgrenzen ergänzt; Laufzeittest noch ausstehend |
+| Untersuchung 2271 | Neun Profil-/Bypass-Unit-Tests, Parser-Absatzregression und realer deutscher Profil-Parse erfolgreich ausgeführt |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1632,3 +1633,66 @@ Die vier Dateien werden vor dem Start des Compilers geprüft. Das deutsche Vorbe
 Die acht Profiltests wurden in einer isolierten Testumgebung mit der exakt aus GitHub abgerufenen `target.py`- und Testdatei ausgeführt; alle acht Tests bestanden. Für diesen Unit-Testlauf wurde der GEODE-Parser bewusst gemockt, sodass er die Profilauflösung, Hash-/Member-Gates und Fehlerreaktionen isoliert prüft. Zusätzlich wurde die exakte GitHub-Fassung von `geode.py` in derselben Umgebung eingesetzt: Der reale normalisierte deutsche Archivsatz wurde mit dem echten Parser erfolgreich als GEOS-Format 1 mit Kernel 622.3 und genau einem UI-Import 693.0 je Datei durch das Profil `geoworks-1.2.8-de` geladen. Ein vollständiger Build aus einem byteidentischen Checkout des gesamten Repository-HEAD steht noch aus. Wegen der in Untersuchung 2266 festgestellten Abweichungen der vorhandenen lokalen Buildkopie wird kein bestandener Lauf behauptet.
 
 **Nächster Schritt 2271:** Die neue Profilimplementierung aus dem GitHub-HEAD in eine saubere Arbeitskopie übernehmen und `tests/test_target_profiles.py`, `tests/test_geode_alignment.py`, `pcgeos1 doctor` sowie die deutsche Profilvorbereitung ausführen. Erst nach bestandenen Tests den GEOTEST-Build aus dem aktuellen Repository-Stand starten.
+
+
+## 32. Untersuchung 2271 – Profiltests, Parserregression und reales deutsches Zielarchiv
+
+Nach der Profilimplementierung wurden die neuen Prüfungen gezielt ausgeführt. Die Tests liefen mit den aus GitHub abgerufenen aktuellen Fassungen von `target.py`, `buildsys.py`, `geode.py` und `tests/test_target_profiles.py) in einer isolierten Arbeitsumgebung. Nicht benötigte Buildabhängigkeiten wurden für den Test des frühen Abbruchpfads durch Stubs ersetzt; es wurde damit kein vollständiger C-/GEO-Build ausgeführt.
+
+### 32.1 Profil-Unit-Tests
+
+**Ergebnis: 9 von 9 Tests bestanden.**
+
+| Test | Ergebnis |
+|---|---|
+| Gültiges benanntes Profil | PASS |
+| Falscher Template-Hash | PASS – wird abgelehnt |
+| Fehlender Archivmember | PASS – wird abgelehnt |
+| Doppelter Archivmember | PASS – wird abgelehnt |
+| Unbekannte Profil-ID | PASS – wird abgelehnt |
+| Falsches Kernelprotokoll | PASS – wird abgelehnt |
+| Falsches UI-Protokoll | PASS – wird abgelehnt |
+| Legacy-Bypass `allow_unknown_target=true` | PASS – Abbruch vor Archivzugriff und ohne Build-Ausgabeverzeichnis |
+| Unveränderte Standardhashliste | PASS |
+
+Der Test zum Legacy-Bypass importierte die aktuelle GitHub-Fassung von `buildsys.py`. Die Compiler-/Linkerabhängigkeiten wurden dabei absichtlich so gestubbt, dass jeder Aufruf dieser Komponenten den Test fehlschlagen lässt. Der Test beweist somit, dass die Legacy-Konfiguration vor Toolchain-Aufruf, Archivzugriff und Ausgabeerzeugung abgewiesen wird.
+
+### 32.2 Parser-Absatz-/Relokationsregression
+
+Der unveränderte Test `tests/test_geode_alignment.py` wurde mit der aus GitHub abgerufenen aktuellen `geode.py` ausgeführt:
+
+`PASS: GEOS 1.x relocation stream starts after paragraph padding`
+
+Damit ist der Regressionstest für die Absatzauffüllung im aktuellen Parser bestanden.
+
+### 32.3 Reales deutsches Profil mit dem aktuellen Parser
+
+Die aus GitHub gelesene aktuelle `target.py` wurde zusammen mit der aktuellen `geode.py` auf `/tmp/geotest-build/GWP2-normalized-script.zip` angewendet. Alle vier Dateien wurden gehasht und tatsächlich geparst:
+
+| Datei | GEOS-Format | Kernel | UI-Import | Hashprüfung |
+|---|---:|---:|---:|---|
+| SPINTEXT.GEO | 1 | 622.3 | 693.0 | PASS |
+| NOTEPAD.GEO | 1 | 622.3 | 693.0 | PASS |
+| VIEWER.GEO | 1 | 622.3 | 693.0 | PASS |
+| TERM.GEO | 1 | 622.3 | 693.0 | PASS |
+
+Alle vier erwarteten SHA-256-Werte stimmten exakt mit dem registrierten Profil `geoworks-1.2.8-de` überein. Für jede Datei wurde genau ein UI-Import mit Protokoll 693.0 gefunden.
+
+### 32.4 Grenzen dieses Testlaufs
+
+- Die neun Unit-Tests decken Profilauflösung, Hash-/Memberfehler, Protokollprüfungen und den frühen Legacy-Abbruch ab.
+- Der echte GEODE-Parser wurde zusätzlich auf alle vier Dateien des deutschen Zielarchivs angewendet.
+- Der Parser-Absatzregressionstest ist bestanden.
+- **Noch nicht ausgeführt** wurde der vollständige SDK-Build mit allen Buildmodulen aus dem aktuellen GitHub-HEAD. Die Abweichungen der früheren lokalen Buildkopie aus Untersuchung 2266 sind noch nicht vollständig beseitigt.
+- Ein Start in GeoWorks 1.2 ist weiterhin offen.
+
+### 32.5 Ergebnis Untersuchung 2271
+
+1. Die neuen neun Profil-/Bypass-Unit-Tests bestehen.
+2. Die Absatz-/Relokationsregression des aktuellen Parsers besteht.
+3. Der aktuelle Parser akzeptiert alle vier echten deutschen Template-Dateien als GEOS-Format 1, Kernel 622.3 und UI 693.0.
+4. Die Hashprüfung des deutschen Zielprofils stimmt für alle vier Mitglieder.
+5. Der frühe Profil-/Legacy-Gate-Pfad ist getestet; die komplette Buildkette aus GitHub-HEAD ist noch nicht reproduziert.
+6. Das Profil `geoworks-1.2.8-de` ist damit auf Ebene der vier geprüften Template-Dateien und des Parser-/Hash-Gates verifiziert, nicht aber als vollständige ABI- oder Laufzeitkompatibilität.
+
+**Nächster Schritt 2272:** Den vollständigen GitHub-HEAD-Quellbestand in einer sauberen Arbeitskopie bereitstellen. Danach die echten Buildmodule ohne Stubs einbinden, `doctor` ausführen und einen Build mit `examples/geotest/project.json` plus dem frisch erzeugten Profilarchiv starten. Der resultierende GEO-Hash muss im Buildbericht und im Dossier festgehalten werden.
