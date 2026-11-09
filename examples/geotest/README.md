@@ -18,6 +18,6 @@ The script verifies the exact source members and SHA-256 hashes, writes a new te
 ./bin/pcgeos1 build examples/geotest/project.json --gwp /tmp/GWP2-geoworks-1.2.8-de.zip --toolchain gnu
 ```
 
-`allow_unknown_target` is intentionally enabled only for this explicitly pinned experimental profile because the complete GEODE file hashes differ from the SDK 0.1 reference set. Do not use arbitrary target files with this project. The preparation script is the required gate.
+The project selects the explicit `geoworks-1.2.8-de` target profile. The build engine independently checks all four normalized template SHA-256 values against the profile registry before compiling. Do not use arbitrary target files with this project; the preparation script also verifies the original archive paths and hashes.
 
 The generated `.GEO` is derived from the user's GeoWorks templates. Do not redistribute it without checking the original software license. A successful host build does not prove that GeoWorks 1.2 will load or run the application; runtime testing in a disposable installation is still required.
