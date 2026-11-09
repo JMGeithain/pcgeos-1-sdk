@@ -55,12 +55,13 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 ## 4. Nächste Arbeitsschritte
 
 ### Untersuchung 2246 – Quellenidentität und Reproduzierbarkeit
-1. Original-`KERNEL_DIS.TXT` und passenden Kernel-Body beschaffen.
-2. Dateigrößen und SHA-256 erfassen.
-3. Prüfen, ob die Offsets in der Disassemblierung zum bekannten Kernel-Body passen.
-4. Erst danach `0B20h), `0BD0h`, `0CACh` und `0CC5h` mit vollständigem Instruktionskontext untersuchen.
-5. Registerein-/ausgänge, Stackdelta, Segmentannahmen, Speicherzugriffe und alle Rücksprungpfade dokumentieren.
-6. Beobachtung, Ableitung und offene Hypothese getrennt kennzeichnen.
+1. Original-`KERNEL.OLD` und den extrahierten Kernel-Body aus dem bereitgestellten Archiv sichern.
+2. Dateigrößen und SHA-256 erfassen; Extraktion und Disassemblierung reproduzieren.
+3. Offsets im vollständigen Disassembly gegen Instruktionsgrenzen und Kontrollfluss prüfen.
+4. Datenbereich `10B1Ah–10B52h` von anschließendem Codekandidaten `10B53h` trennen.
+5. Registerein-/ausgänge, Stackdelta, Segmentannahmen, Speicherzugriffe und Rücksprungpfade des Blocks `10B53h–10BD6h` dokumentieren.
+6. Die verkürzte Adressnotation aus der Arbeitsnotiz 2245 nicht weiterverwenden, solange ihr Bezugssegment bzw. ihre Basis ungeklärt ist.
+7. Beobachtung, Ableitung und offene Hypothese getrennt kennzeichnen.
 
 ### GEOTEST-Projekt – minimaler Buildpfad
 1. SDK-Quellstand und Beispielprojekt `examples/hello` vollständig prüfen.
@@ -79,13 +80,71 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 | Repository und Schreibberechtigung | bestätigt |
 | SDK 0.1 Buildarchitektur | aus Repository-Dokumentation bestätigt |
 | GeoWorks-1.2 Zielprotokolle | dokumentiert: Kernel 622.3, UI 693.0 |
-| Untersuchungsnotiz 2245 | übernommen; Adressnotation wird gegen das wiederhergestellte Disassembly geprüft |
+| Untersuchungsnotiz 2245 | teilweise korrigiert durch Untersuchung 2246; `10B20h` als Codeeinstieg verworfen |
 | Originalkernel-Body | aus `GEOWORKS/KERNEL.OLD` extrahiert; SHA-256 exakt bestätigt |
 | Originaldisassemblierung | mit objdump neu erzeugt; SHA-256 exakt bestätigt; 53/53 Anker vorhanden |
+| Untersuchung 2246 | Daten-/Codegrenze und Codekandidat `10B53h–10BD6h` statisch untersucht; Funktionsvertrag offen |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
 | Start in GeoWorks 1.2 | ausstehend |
+
+
+## 7. Untersuchung 2246 – Daten-/Codegrenze und Block 10B53h–10BD6h
+
+**Quelle:** derselbe reproduzierte Disassembly-Stand aus `GEOWORKS/KERNEL.OLD`; Kernel-Body SHA-256 `948324ccd5fac49172548209c8137530dbdee6e3a64c81e2c52c503f5d85552d`; Disassembly SHA-256 `9356bbc05b83106f1e72f47ec6cb75163b1d1e5ed73152507203ead542d71461`. Die Untersuchung ist statisch; kein Kernel wurde verändert oder ausgeführt.
+
+### 7.1 Datenbereich `10B1Ah–10B52h`
+
+Nach `10B18h` (`jmp 10B11h`) folgt kein plausibler linearer Instruktionsfluss. Der Bereich enthält:
+- vier 16-Bit-Werte bei `10B1Ah`, `10B1Ch`, `10B1Eh` und `10B20h`: `1222h`, `122Bh`, `1234h`, `123Dh` (Little Endian);
+- ab `10B23h` die nullterminierten Zeichenketten `dos2.geo`, `dos3.geo`, `dos4.geo`, `dos5.geo` und `drdos.geo`;
+- die Zeichenketten enden bei `10B52h`; der nächste disassemblierte Block beginnt bei `10B53h`.
+
+**Befund:** `10B20h` liegt innerhalb der vier-Wort-Tabelle und ist kein belegter Codeeinstieg. Die ab `10B20h` angezeigten x86-Instruktionen sind eine Fehlinterpretation der Tabellen-/Stringbytes durch lineare Disassemblierung. Die Werte `1222h` bis `123Dh` sehen wie Offsets aus, aber ihre genaue Referenzbasis und Funktion sind noch nicht nachgewiesen.
+
+### 7.2 Codekandidat `10B53h–10BD6h`
+
+Der Bereich ab `10B53h` ist syntaktisch plausibler 16-Bit-Code. Er besitzt in der linearen Disassemblierung keinen direkten eingehenden relativen Sprung aus dem unmittelbar vorhergehenden Bereich; ein indirekter Einstieg oder eine externe Referenz ist damit nicht ausgeschlossen. Eine vollständige Funktionszuordnung ist noch offen.
+
+| Offset | Beobachteter Befehl / Effekt | Register- und Speicherbefund |
+|---|---|---|
+| `10B53h` | `mov %bx,%ds` | DS wird aus BX geladen; BX muss zu diesem Zeitpunkt bereits einen gültigen Segmentwert enthalten. |
+| `10B55h` | `mov $1246h,%si` | SI erhält einen konstanten Offset. |
+| `10B58h` | `cmpb $0,05B1h` | prüft ein Byte im Datensegment; bei ungleich null Sprung nach `10B90h`. |
+| `10B5Fh` | `mov 05ABh,%bl`; `xor %bh,%bh` | BL wird aus Speicher geladen, BH auf null gesetzt; BX ist danach nullerweitertes Byte. |
+| `10B65h–10B6Ah` | setzt `[0046h]=4`; `sub $2,%bx` | Bytezustand wird vorübergehend auf 4 gesetzt; BX wird um 2 vermindert. |
+| `10B6Dh` | `jae 10B77h` | bei BX >= 2 wird der erste Fehler-/Fallback-Aufruf übersprungen. |
+| `10B6Fh` | `lcall 0000h:0399h`; danach `AX=0019h` | fünf Byte langer Far-Aufruf, gefolgt von AX-Ladebefehl; kein elf Byte langer Kopiervorgang. |
+| `10B77h` | setzt `[0046h]=0` | setzt den zuvor auf 4 gesetzten Status zurück. |
+| `10B7Ch–10B86h` | vergleicht BX mit 4; ggf. Far-Aufruf `0000h:0399h`, danach `AX=0019h` | zweiter Fehler-/Fallback-Pfad. |
+| `10B89h–10B8Bh` | `shl $1,%bx`; lädt `CS:[121Ah+BX]` nach SI | BX wird als Worttabellenindex (Byteoffset nach Verdopplung) verwendet; SI erhält den ausgewählten Tabellenwert. |
+| `10B90h–10B96h` | DI aus `[0044h]`; DS=CS; near call `101CBh` | Aufruf mit SI/DI und Code-Segment als DS; genaue Parameterbedeutung von `101CBh` separat zu untersuchen. |
+| `10B99h–10BA0h` | bei Carry Far-Aufruf `0000h:0399h`, danach `AX=000Fh` | Fehler-/Fallback-Pfad; anschließend ES=AX. |
+| `10BA5h` | speichert BX nach `[0609h]` | sichert den ausgewählten Indexwert. |
+| `10BA9h–10BAFh` | DS sichern; Far-Aufruf `0000h:2588h`; liest zwei Worte von DS:SI; DS wiederherstellen | AX/BX werden aus `[SI]` und `[SI+2]` geladen. |
+| `10BB5h–10BB8h` | speichert AX/BX nach `[05B8h]`/`[05BAh]` | legt offenbar einen später verwendeten Far-Zeiger in zwei benachbarten Worten ab; Interpretation als Funktionszeiger ist durch den späteren indirekten Aufruf gestützt. |
+| `10BBCh–10BC2h` | testet Bit `10h` in `ES:[0003h]`; ggf. Rücksprung | bedingter Zusatzpfad. |
+| `10BC4h–10BD6h` | liest ES:[0040h], sichert BX, liest Byte über DS:BX, setzt DI=14h, führt `lcall *[05B8h]` aus, stellt DI wieder her und schreibt BL nach DS:DI | `10BCFh` ist Beginn der vier Byte langen indirekten Far-Aufrufinstruktion. `10BD0h` liegt mitten in ihr und ist kein Instruktionsanfang. |
+
+**Wichtige Einschränkung:** Die Tabellenbasis `CS:121Ah`, die Bedeutung von `[05ABh]`, `[05B1h]`, `[0044h]`, `[0046h]` und die Verträge der Far-Aufrufe `0000h:0399h` / `0000h:2588h` sind noch nicht geklärt. Deshalb ist `10B53h` vorerst ein *Codekandidat*, kein abschließend bewiesener öffentlicher Routineeinstieg. Auch die Registerwerte beim Eintritt sind unbekannt.
+
+### 7.3 Nachbarstellen
+
+- `10BD7h` enthält `call 10BDBh`; `10BDBh` beginnt mit `cli`, sichert SI und ES, bearbeitet anschließend 16 IVT-Einträge ab physischer Adresse `0000:0200h` und endet mit `sti; ret` bei `10C05h`. Diese Routine ist separat zu analysieren, insbesondere wegen der Interruptsperre und der gespeicherten Vektoren.
+- `10CACh` ist zwar eine Instruktionsgrenze (`pop es`), steht aber direkt nach zwei `push ds` bei `10CAAh`/`10CABh`; das allein beweist keinen Routinenanfang.
+- `10CC5h` ist eine Instruktionsgrenze (`push cs`), aber Teil einer fortlaufenden Sequenz ab `10CC4h` (`push ds`) und `10CC6h` (`pop ds`); auch das ist kein Beleg für einen eigenständigen Einstieg.
+- `10BD0h` ist definitiv keine Instruktionsgrenze im vorliegenden linearen Disassembly.
+
+### 7.4 Ergebnis von Untersuchung 2246
+
+1. Die vier Werte bei `10B1Ah–10B20h` und die DOS-Dateinamen bei `10B23h–10B52h` sind als Datenbereich zu behandeln.
+2. `10B20h` ist als Codeeinstieg verworfen.
+3. `10B53h–10BD6h` ist ein plausibler Codeblock mit einem indirekten Far-Aufruf über den zuvor gespeicherten Zeiger `0000:[05B8h]`; die Eintrittsbedingungen und Gesamtfunktion bleiben offen.
+4. Die alte Notiz „elf Bytes kopiert bei `0B6Fh–0B75h`“ wird nicht übernommen: der sichtbare Code an `10B6Fh` ist ein Far-Aufruf und die inklusive Spanne `10B6Fh–10B75h` umfasst sieben Bytes.
+5. `10BD0h` ist als Instruktionsanfang ausgeschlossen; `10CACh` und `10CC5h` sind zwar Instruktionsanfänge, aber keine belegten Routineeinstiege.
+
+**Nächster Schritt 2247:** Querverweise auf Datenoffsets `121Ah`, `1246h`, `05ABh`, `05B1h`, `05B8h`, `05BAh`, `0044h`, `0046h`, `0609h` systematisch sammeln; danach die aufgerufenen Kernelziele `0399h`, `2588h` und Near-Routine `101CBh` mit vollständigem Aufrufer-/Aufrufkontext untersuchen.
 
 ## 6. Änderungs- und Belegregel
 
