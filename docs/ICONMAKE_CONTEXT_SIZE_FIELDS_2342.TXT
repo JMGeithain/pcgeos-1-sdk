@@ -1,0 +1,48 @@
+ICONMAKE – Herkunft der Kontextgrößen a, b und c
+Untersuchungsschritt 2342
+Stand: 10. November 2026
+
+Ziel
+Die in Schritt 2341 verwendeten Größen a, b und c werden auf die beiden unmittelbar zuvor eingelesenen lokalen Datenpuffer zurückgeführt.
+
+1. Zwei getrennte Lesevorgänge in 144Ch
+Der erste Lesevorgang:
+  1471 MOV CX,00C0h
+  1475 LEA DX,[BP-0126h]
+  147A CALL 1EF8h
+
+Er schreibt 00C0h Bytes in den lokalen Bereich ab BP-0126h bis BP-0067h.
+
+Der zweite Lesevorgang:
+  1487 MOV CX,0060h
+  148B LEA DX,[BP-0066h]
+  148F CALL 1EF8h
+
+Er schreibt 0060h Bytes in den lokalen Bereich ab BP-0066h bis BP-0007h.
+
+Die beiden Puffer grenzen unmittelbar aneinander, überlappen sich nicht und ergeben zusammen 0120h Bytes. Der Stackframe reserviert 0126h Bytes; die übrigen sechs Bytes dienen nicht als Teil dieser beiden Leseziele.
+
+2. Lage der drei Größen im zweiten Puffer
+Die in 1495h–14BCh und 1507h–1547h verwendeten lokalen Wörter liegen im zweiten 0060h-Byte-Puffer:
+
+  a = WORD PTR [BP-0014h] = Wortoffset 0052h ab Pufferanfang BP-0066h
+  b = WORD PTR [BP-0012h] = Wortoffset 0054h ab Pufferanfang BP-0066h
+  c = WORD PTR [BP-000Eh] = Wortoffset 0058h ab Pufferanfang BP-0066h
+
+Damit stammen alle drei Werte unmittelbar aus dem zweiten eingelesenen 0060h-Byte-Bereich. Sie sind keine nachträglich aus dem ersten 00C0h-Byte-Bereich berechneten Werte.
+
+3. Verwendung
+Die Werte werden zur Berechnung der Abschnittsgrenzen im dynamischen Kontextblock verwendet:
+  +04h = P + 4*a
+  +06h = P + 4*a + 6*b
+  +08h = P + 4*a + 6*b + 2*c
+  +0Ah = P + 4*a + 6*b + 4*c
+  +0Ch = P + 4*a + 6*b + 6*c
+
+Dabei ist P der Beginn des in 144Ch eingelesenen Datenbereichs ab Blockoffset +012Eh.
+
+4. Belastbare Aussage
+Die Größen a, b und c werden aus festen Wortpositionen im zweiten lokalen 0060h-Byte-Puffer gelesen. Die konkrete Bedeutung dieser Wörter ist noch nicht belegt. Sie bestimmen aber rechnerisch die Längen der aufeinanderfolgenden Bereiche im dynamischen Block.
+
+5. Nächster Schritt
+Die Nutzung des zweiten 0060h-Byte-Puffers weiter untersuchen: Welche weiteren Wort-/Bytefelder aus diesem Puffer werden außerhalb von 144Ch verwendet, und lassen sich daraus Namen oder Typen der Teilbereiche ableiten? Parallel ist der erste 00C0h-Byte-Puffer auf Signaturen, Tabellenköpfe und strukturierte Felder zu untersuchen. Erst eine Zuordnung über mehrere Verbraucher rechtfertigt eine semantische Benennung.
