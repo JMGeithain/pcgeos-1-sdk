@@ -1,0 +1,106 @@
+ICONMAKE – Dateikontext-Erzeugung und Pfadzerlegung
+Untersuchungsschritt 2340
+Stand: 10. November 2026
+
+Ziel
+Untersuchung der Erzeugungsroutine 144Ch und des im Aufrufer danach ausgeführten Aufrufs 25D6h. Dabei wird getrennt zwischen dem Aufbau des Dateikontexts und der Verarbeitung des Pfadnamens.
+
+Untersuchungsbasis
+ICONMAKE.EXE aus GEOWORKS.zip; MZ-Ladebereich ab Dateioffset 0200h. Alle Adressen in diesem Bericht sind Offsets im Ladebereich. Disassemblierung als 8086-Code.
+
+1. Routine 144Ch: Aufbau eines Dateikontextes
+Der Einstieg:
+  144C PUSH BP
+  144D MOV BP,SP
+  144F SUB SP,0126h
+  ...
+  1455 MOV AX,0216h
+  1458 PUSH AX
+  1459 PUSH WORD PTR [BP+04]
+  145C CALL 1EE4h
+
+Der Parameter [BP+04] wird an 1EE4h zusammen mit der konstanten Größe 0216h übergeben. Bei Rückgabe Null bricht 144Ch ab (1465h–1469h). Andernfalls wird der Rückgabewert als Handle-/Kontextparameter für die folgenden Leseoperationen benutzt.
+
+Die Routine liest anschließend 0C0h Bytes in einen lokalen Puffer (1471h–147Dh) und weitere 060h Bytes in einen zweiten lokalen Puffer (1480h–1492h). Aus Werten in diesen Puffern werden mehrere Größen-/Offsetwerte berechnet (1495h–14BCh). Anschließend beschafft 212Ch einen größeren Speicherblock:
+  14BF ADD AX,012Eh
+  14C2 PUSH AX
+  14C3 CALL 212Ch
+  14C9 MOV [BP-02],AX
+
+In diesen Block werden die zuvor eingelesenen Daten kopiert:
+  14CE LEA DI,[BX+00CEh]
+  14D2 LEA SI,[BP-66]
+  14D9 MOV CX,0030h
+  14DC REP MOVSW
+  14DE LEA DI,[BX+0Eh]
+  14E1 LEA SI,[BP-126]
+  14E5 MOV CX,0060h
+  14E8 REP MOVSW
+
+Ein weiterer Bereich wird über 1EF8h in den Block ab +012Eh gelesen (14EAh–14FEh).
+
+Danach setzt 144Ch mehrere Wortfelder im neu beschafften Block:
+  1501 MOV BX,[BP-02]
+  1504 MOV [BX+02h],SI
+  ...
+  1510 MOV [BX+04h],SI
+  ...
+  1524 MOV [BX+06h],AX
+  152F MOV [BX+08h],AX
+  153C MOV [BX+0Ah],AX
+  1547 MOV [BX+0Ch],AX
+  154A MOV AX,[BP-04]
+  154D MOV [BX],AX
+  154F MOV AX,BX
+  1556 RET
+
+Damit liefert 144Ch einen dynamisch aufgebauten Kontextblock zurück. Dieser enthält:
+- bei +00h den von 1EE4h gelieferten Wert;
+- bei +02h bis +0Ch mehrere berechnete Zeiger-/Offsetwerte in den Kontext-/Datenbereich;
+- kopierte Header-/Tabellendaten in den Bereichen ab +0Eh und +0CEh;
+- einen weiteren eingelesenen Bereich ab +012Eh.
+
+Die konkreten Bedeutungen der einzelnen Felder sind noch nicht abschließend festgelegt. Insbesondere sollte +08h nicht allein aufgrund seiner Verwendung in 1558h als „Tabellenzeiger“ bezeichnet werden: 144Ch berechnet und speichert dort einen Wert, dessen genaue Adressbasis und semantische Rolle erst durch vollständige Verfolgung der Datenstrukturen sicher bestimmt werden kann.
+
+2. Bedeutung des Feldes +08h für 1558h
+1558h führt aus:
+  1560 MOV SI,[BP+04]
+  1563 MOV BX,[SI+08]
+  1566 MOV DI,[BP+06]
+  1569 SHL DI,1
+  156B SHL DI,1
+  156D MOV AX,[BX+DI]
+  156F MOV DX,[BX+DI+2]
+
+Der von 144Ch gelieferte Kontext wird also direkt als Eingabe verwendet. Das Feld +08h wird als Basisadresse einer Tabelle interpretiert, deren Einträge vier Bytes breit sind. Die tatsächliche Herkunft dieser Tabelle liegt im zuvor von 144Ch eingelesenen und kopierten Datenmaterial; die exakte Beziehung zwischen dem berechneten Wert +08h und den Speicherbereichen des Kontextblocks bleibt noch zu verifizieren.
+
+3. Routine 25D6h: Pfadzerlegung, keine Kontextinitialisierung
+Die Untersuchung des Aufrufs bei 0B68h–0B81h zeigt, dass 25D6h nicht den Dateikontext erzeugt. Sie verarbeitet einen Pfad-/Dateinamen und kann mehrere Teilstrings in Zielpuffer kopieren.
+
+Belegte Operationen:
+- prüft, ob das zweite Zeichen des Eingabestrings ein Doppelpunkt ist (25E9h);
+- überspringt bei einem Laufwerkspräfix die ersten zwei Zeichen;
+- sucht nach Trennzeichen '/' und '\\' (2620h–2640h);
+- merkt sich die Position des letzten Punktes (Dateierweiterung);
+- kopiert begrenzte Teilstrings mit 2134h in optionale Zielpuffer und terminiert sie mit Nullbytes;
+- begrenzt die kopierte Länge jeweils auf maximal 0FFh Bytes.
+
+Im Aufruf bei 0B68h werden die Puffer 2FE8h, 40ECh, 1C48h und 0742h sowie der Dateiname aus [BX+04h] übergeben. Die vier Zielpuffer stehen damit für verschiedene Pfad-/Dateinamensbestandteile; ihre genaue fachliche Beschriftung wird erst nach Untersuchung ihrer jeweiligen späteren Verwendung festgelegt.
+
+4. Korrektur der bisherigen Arbeitsannahme
+Der Aufruf 25D6h unmittelbar nach 144Ch wurde zuvor als möglicher Teil der Dateikontextinitialisierung beschrieben. Das ist zu ungenau. Der Disassembly-Befund zeigt eine Pfadzerlegungsroutine. Der Dateikontext selbst wird von 144Ch aufgebaut und unter DS:40E8h gespeichert; 25D6h verarbeitet anschließend den Eingabepfad für weitere Programmteile.
+
+5. Belastbare Ergebnisse
+- 144Ch liest mehrere Datenbereiche aus einer über 1EE4h geöffneten/initialisierten Quelle und baut daraus einen dynamischen Kontextblock auf.
+- Der zurückgegebene Kontextzeiger wird im Aufrufer bei 0B57h in DS:40E8h gespeichert.
+- 1558h nutzt diesen Kontext, insbesondere das Feld +08h als Basis für einen Zugriff auf 4-Byte-Tabelleneinträge.
+- 25D6h ist anhand der Zeichenprüfungen und Trennzeichensuche als Pfad-/Dateinamenzerlegung identifiziert; sie ist nicht die Erzeugungsroutine des Dateikontexts.
+
+6. Offene Fragen
+- Welche Felder des eingelesenen 0C0h-/060h-Headerbereichs definieren die berechneten Werte +02h bis +0Ch?
+- Welche Datenstruktur liegt genau ab Kontext +0Eh beziehungsweise +0CEh?
+- Wie wird der Inhalt der Tabelle, die 1558h über Kontext +08h adressiert, konkret aus der Quelldatei abgebildet?
+- Welche der vier durch 25D6h gefüllten Puffer werden für die anschließende Ressourcenauswahl verwendet?
+
+Nächster Schritt
+Die Berechnung der Kontextfelder +02h bis +0Ch aus den lokalen Headerwerten zurückverfolgen und die späteren Verbraucher der vier von 25D6h befüllten Zielpuffer untersuchen. Erst danach die PAPR.000-/GDOC.000-Datenblöcke bytegenau zuordnen.
