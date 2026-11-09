@@ -1,0 +1,70 @@
+ICONMAKE.EXE — FIRST 16-BIT CODE DISASSEMBLY FINDINGS
+Investigation 2320
+Date: 2026-11-09
+Scope: GeoWorks 1.x icon conversion utility only.
+
+Input
+-----
+Original executable:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Extracted from the user's original GEOWORKS.zip.
+File size: 19,477 bytes.
+Format: MZ DOS executable.
+
+Documented utility interface
+----------------------------
+The adjacent original ICONMAKE.DOC and ICONMAKE.ENG document:
+- ICONMAKE x <geos_file> extracts icon definitions to PCX files.
+- ICONMAKE m[<transp_color>] [<path>]<tokn>[,<num>] {<PCX_file(s)>...}
+  creates a token dummy from PCX input.
+- Default transparent color is 14; m0 disables transparency.
+- Expected standard inputs:
+  CGA 48x14 monochrome
+  HGC 48x30 monochrome
+  EGA 48x30, 16 colors.
+
+Static code observations
+------------------------
+A 16-bit x86 disassembly was produced from the MZ executable image.
+
+At code offset 0x1E6C a routine contains the following operations:
+- reads a byte from a pixel/data buffer;
+- masks a value with 0x0F;
+- shifts another value right by 4 bits;
+- indexes a lookup table at image address 0x2FD6;
+- shifts a translated value left by 4 bits;
+- combines the two translated values with OR;
+- passes the combined word to a common output routine at 0x1894.
+
+The instruction sequence at offsets 0x1ED5–0x1F02 is consistent with translating two 4-bit pixel indices through a lookup table and packing the results into a byte/word-oriented output stream. The routine also adjusts a buffer pointer/length after processing.
+
+A neighboring path at 0x1E85–0x1EA1 processes bytes through bitwise NOT and sends them to the same output routine. This is consistent with a separate monochrome/bitplane path, but the exact calling context and format contract have not yet been established.
+
+What this establishes
+---------------------
+1. ICONMAKE contains explicit nibble-level handling consistent with 4-bit indexed image data.
+2. It uses a translation table rather than simply copying each 4-bit index unchanged.
+3. It has at least one separate byte/bit-oriented path that may handle monochrome data.
+4. The code is relevant to the EGA/16-color conversion question.
+
+What it does NOT establish
+--------------------------
+- The semantic meaning of R6 descriptor bytes 12..13 (01 11).
+- That routine 0x1E6C directly writes native resource R6.
+- The exact transparency encoding in the native resource.
+- A complete PCX-to-native-resource byte mapping.
+- Whether the lookup table is a palette remap, device mapping, or another conversion table; that requires tracing its initialization and all callers.
+
+Next static-analysis targets
+----------------------------
+1. Trace all callers of 0x1E6C and 0x1E6C's caller.
+2. Identify where the lookup table at 0x2FD6 is initialized.
+3. Trace common output routine 0x1894 to the output file/resource writer.
+4. Correlate the writer's emitted bytes with the R6 chunk payloads in PAPR.000 and GDOC.000.
+5. Separately trace the documented transparency option and compare m0 with default m behavior.
+
+Integrity
+---------
+The executable was read-only. No input files, provider files, GEO files, or TOKEN.DB were modified.
+The observations are from the original DOS executable and original accompanying documentation.
+No PC/GEOS 2.x or FreeGEOS assumptions were used.
