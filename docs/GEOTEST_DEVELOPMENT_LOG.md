@@ -111,6 +111,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2266 | Byteidentitätsprüfung deckt Abweichungen zwischen lokalem Build-Unterbau und GitHub-HEAD auf; Reproduzierbarkeit ausdrücklich nicht bestätigt |
 | Untersuchung 2267 | Test-Gates und Selftest-Annahmen gegen das deutsche Zielprofil geprüft; Standard-Selftest scheitert erwartungsgemäß an strikten Referenzhashes |
 | Untersuchung 2268 | Zielprofil-Integrität geprüft: `allow_unknown_target` umgeht den Hashschutz vollständig; abgesicherter Profilvertrag erforderlich |
+| Untersuchung 2269 | Rückwärtskompatibles Zielprofil-Design festgelegt; Hashprüfung wird pro benanntem Profil statt per globalem Bypass ausgewählt |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1512,3 +1513,95 @@ Ein Manifest kann als Sidecar-Datei oder als zusätzlicher Eintrag in der normal
 6. Die vorhandene GEOTEST-Datei bleibt ein experimenteller Vorab-Build; eine abgesicherte Profilprüfung ist noch nicht erfolgt.
 
 **Nächster Schritt 2269:** Ein kleines, rückwärtskompatibles Design für `target_profile` erarbeiten: Standardprofil `geoworks-pro-1.2` bleibt unverändert; `geoworks-1.2.8-de` erhält eine eigene Hash-/Pfadmanifestdatei. Danach Unit-Tests für gültiges Profil, falschen Hash, fehlenden Member, doppelten Member und unbekannte Profil-ID ergänzen. Erst nach diesen Tests den deutschen GEOTEST-Build neu ausführen.
+
+
+## 30. Untersuchung 2269 – Rückwärtskompatibles Design für explizite Zielprofile
+
+**Ziel:** Aus der in Untersuchung 2268 festgestellten Integritätslücke einen konkreten, rückwärtskompatiblen Entwurf ableiten. Der Standardpfad für die bisherige GeoWorks-Pro-1.2-Referenz darf sich nicht ändern; das deutsche Zielarchiv erhält einen eigenen, expliziten Hashvertrag.
+
+### 30.1 Projektkonfiguration
+
+Das Projekt soll künftig ein benanntes Feld `target_profile` verwenden:
+
+```json
+{
+  "sdk": "pcgeos1-sdk-0.1",
+  "long_name": "GeoWorks 1.x Test",
+  "permanent_name": "geotest",
+  "token": "GTS1",
+  "output": "GEOTEST.GEO",
+  "target_profile": "geoworks-1.2.8-de"
+}
+```
+
+Die bisherige Konfiguration ohne `target_profile` bleibt kompatibel und verwendet weiterhin das bisherige strikte Standardprofil. Das bisherige Feld `allow_unknown_target` darf künftig nicht mehr als Freischaltung für einen Build dienen. Für eine Übergangsphase muss es bei `true` mit einer eindeutigen Fehlermeldung abgelehnt werden, statt unbemerkt den Hashschutz zu umgehen.
+
+### 30.2 Profilregister im SDK
+
+Das SDK erhält ein zentrales, unveränderliches Profilregister:
+
+| Profil-ID | Verwendungszweck | Hashprüfung |
+|---|---|---|
+| `geoworks-pro-1.2` | bisheriges SDK-0.1-Referenzset | vier bisherige `KNOWN`-Hashes |
+| `geoworks-1.2.8-de` | deutsche GeoWorks-1.2.8-Installation | vier in Untersuchung 2262 verifizierte Hashes |
+
+Beide Profile verwenden die vier vom Builder erwarteten normalisierten Memberpfade. Das Vorbereitungsskript für das deutsche Profil bleibt verantwortlich für die Auswahl der richtigen Originalpfade; der Builder kontrolliert danach die normalisierten Member anhand des Profilregisters erneut.
+
+### 30.3 Prüfreihenfolge
+
+Die Zielprofilprüfung muss vor Compilerstart und vor dem Erzeugen von Build-Artefakten erfolgen:
+
+1. Projektdatei lesen und Profil-ID auflösen.
+2. Unbekannte Profil-ID ablehnen.
+3. Für jeden der vier erwarteten Member genau einen Archivtreffer verlangen.
+4. SHA-256 jedes Members gegen den Hash des ausgewählten Profils prüfen.
+5. GEODE-Datei parsen und GEOS-Format sowie Kernelprotokoll prüfen.
+6. UI-Protokoll/Importe der tatsächlich verwendeten Ressourcen prüfen.
+7. Erst nach erfolgreichem Abschluss die C-Kompilierung starten.
+
+Damit kann ein falscher Hash nicht erst nach einem längeren Compilerlauf auffallen.
+
+### 30.4 Keine frei editierbare Vertrauensliste im Projekt
+
+Die Projektdatei darf keine beliebigen erwarteten Hashes definieren. Sonst könnte ein versehentlich oder absichtlich verändertes Projekt ein unbekanntes Template selbst als gültig erklären. Sie wählt nur eine Profil-ID; die zugehörigen Hashes liegen versioniert im SDK.
+
+Das Vorbereitungsskript kann zusätzlich ein JSON-Protokoll ausgeben. Dieses dient der Nachvollziehbarkeit, ist aber nicht selbst die Vertrauensquelle. Die Build-Engine prüft die tatsächlichen ZIP-Mitglieder erneut gegen die im SDK hinterlegten Profilwerte.
+
+### 30.5 Fehlerfälle und erwartete Reaktion
+
+| Fehlerfall | Erwartetes Verhalten |
+|---|---|
+| Profil-ID fehlt | bisheriges striktes Standardprofil wählen |
+| Profil-ID unbekannt | Build vor Compilerstart abbrechen |
+| Member fehlt | Build vor Compilerstart abbrechen |
+| doppelter Member-Endungstreffer | Build vor Compilerstart abbrechen |
+| SHA-256 stimmt nicht | Build vor Compilerstart abbrechen |
+| GEODE-Parserfehler | Build vor Compilerstart abbrechen |
+| Kernelprotokoll ungleich 622.3 | Build vor Compilerstart abbrechen |
+| altes `allow_unknown_target=true` | mit Migrationshinweis ablehnen |
+| Standardprofil ausgewählt | bisherige Hashliste unverändert verwenden |
+
+### 30.6 Testplan
+
+Die Implementierung erhält profilbezogene Tests für:
+- gültiges Standardprofil;
+- gültiges deutsches Profil;
+- falscher Hash im deutschen Profil;
+- fehlendes Archivmitglied;
+- doppeltes Mitglied;
+- unbekannte Profil-ID;
+- abweichendes Kernelprotokoll;
+- Verbot des alten globalen Bypass-Feldes.
+
+Zusätzlich bleiben die profilunabhängigen Parser-/Relokationsregressionen und die bestehenden Standard-Selftests erhalten.
+
+### 30.7 Ergebnis Untersuchung 2269
+
+1. Das bestehende Standardprofil bleibt der Default und wird nicht gelockert.
+2. Das deutsche Zielset wird über die feste Profil-ID `geoworks-1.2.8-de` ausgewählt.
+3. Hashwerte werden im SDK verwaltet, nicht in der Projektdatei.
+4. Die Builder-Prüfung erfolgt vor Compilerstart und unabhängig davon, ob das Vorbereitungsskript zuvor ausgeführt wurde.
+5. `allow_unknown_target` wird als globaler Hash-Bypass abgelöst und bei `true` künftig abgelehnt.
+6. Die vier deutschen Hashes aus Untersuchung 2262 sind die vorläufigen Profilwerte; sie werden vor Implementierung noch einmal gegen das Nutzerarchiv und die normalisierte ZIP-Kopie geprüft.
+
+**Nächster Schritt 2270:** Das Profilregister und die Prüfungen in `pcgeos1/target.py` implementieren, `buildsys.py` auf `target_profile` umstellen und `examples/geotest/project.json` aktualisieren. Dazu Unit-Tests für alle oben genannten Fehlerfälle ergänzen. Vor dem Commit muss der Testlauf mit dem echten deutschen Archiv bestanden sein; die unveränderte Standardhashliste ist als Regression zu sichern.
