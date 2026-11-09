@@ -1,0 +1,102 @@
+GEOWORKS 1.x ICON PROVIDER — LMem PAYLOAD ANALYSIS
+Investigation 2312
+Date: 2026-11-09
+
+Scope
+-----
+Static analysis of resources R4, R5 and R6 in:
+- GEOWORKS/ICONS/PAPR.000
+- GEOWORKS/ICONS/GDOC.000
+- GEOWORKS/ICONS/NBAT.000
+
+The resources were extracted from the user's GEOWORKS.zip and parsed with
+pcgeos1/geode.py. LMem parsing below is a structural interpretation of the
+resource bytes. No runtime test, resource patch, GEO build, or TOKEN.DB
+modification was performed.
+
+LMem layout verified
+--------------------
+For each of R4, R5 and R6 in all three files:
+- LMem header begins at resource offset 0.
+- The handle count field at offset 0x0A is 2.
+- Handle table begins at offset 0x20.
+- Handle 0x20 points to chunk data at offset 0x26.
+- Handle 0x22 points to chunk data at offset 0x2A.
+- The chunk length word is stored immediately before each chunk's data.
+- Chunk at handle 0x20 has length word 0x0004 and two payload bytes 00 02.
+- Chunk at handle 0x22 contains the large provider-specific payload.
+
+Thus these resources are not flat icon byte arrays: they are minimal LMem
+heaps with a two-entry handle table and two chunks.
+
+Measured chunk data
+-------------------
+The second chunk (handle 0x22) has these measured lengths and leading bytes:
+
+PAPR.000:
+ R4: 110 payload bytes; prefix
+     61 30 00 0E 00 1A 65 00 30 00 0E 00 01 00 00 7F ...
+ R5: 223 payload bytes; prefix
+     41 30 00 1E 00 1A D6 00 30 00 1E 00 01 00 00 7F ...
+ R6: 710 payload bytes; prefix
+     46 30 00 1E 00 1A BD 02 30 00 1E 00 01 11 00 7F ...
+
+GDOC.000:
+ R4: 106 payload bytes; prefix
+     61 30 00 0E 00 1A 61 00 30 00 0E 00 01 00 00 03 ...
+ R5: 200 payload bytes; prefix
+     41 30 00 1E 00 1A BF 00 30 00 1E 00 01 00 00 01 ...
+ R6: 772 payload bytes; prefix
+     46 30 00 1E 00 1A FB 02 30 00 1E 00 01 11 00 01 ...
+
+NBAT.000:
+ R4: 91 payload bytes; prefix
+     61 30 00 0E 00 1A 52 00 30 00 0E 00 01 00 FB 00 ...
+ R5: 157 payload bytes; prefix
+     41 30 00 1E 00 1A 94 00 30 00 1E 00 01 00 FB 00 ...
+ R6: 463 payload bytes; prefix
+     46 30 00 1E 00 1A C6 01 30 00 1E 00 01 11 FB 00 ...
+
+The length values above are the actual chunk payload lengths (the chunk
+length word itself is excluded).
+
+Repeated patterns and cautious interpretation
+----------------------------------------------
+1. R4 payloads begin with bytes 61 30 followed by 00 0E 00 1A.
+2. R5 and R6 payloads begin with 41 30 or 46 30 followed by 00 1E 00 1A.
+3. In little-endian interpretation, the pairs 00 0E and 00 1A correspond
+   to 14 and 26; 00 1E and 00 1A correspond to 30 and 26.
+4. These values are consistent with possible width/height fields, but this
+   is not proven by the current evidence. The leading words 61 30, 41 30
+   and 46 30 are also not assigned semantic names here.
+5. Payloads differ among providers, including substantial differences in
+   the data after the common prefixes.
+
+No claim is made yet that R4 is a monochrome icon, R5 is a color icon, or
+R6 is a document icon. The bytes may represent encoded bitmap/moniker data,
+but a definitive VisMoniker decode requires a matching GeoWorks 1.x
+structure definition or a controlled comparison with known 1.x moniker
+resources.
+
+Consequences for GEOTEST
+------------------------
+- The native provider pattern includes LMem resources, not only a raw PCX.
+- A provider's payload resources can each be minimal two-handle LMem heaps.
+- The 00 02 chunk at handle 0x20 is common to all nine inspected resources.
+- The large chunk at handle 0x22 is the provider-specific payload.
+- We should not copy resource R4/R5/R6 blindly into GEOTEST. First identify
+  their moniker format and determine which resource is selected for which
+  display context.
+
+Next verification step
+----------------------
+Compare these payloads against independently known GeoWorks 1.x VisMoniker
+and bitmap resources, ideally from the same installation. Decode the
+resource's leading fields and any packed pixel data. Only after that should
+we create native color and monochrome test-document icon resources.
+
+Integrity / safety
+------------------
+Original PAPR.000, GDOC.000, NBAT.000 and GEOWORKS.zip were not modified.
+No new GEO was built. TOKEN.DB was not touched.
+No PC/GEOS 2.x or FreeGEOS definitions were used.
