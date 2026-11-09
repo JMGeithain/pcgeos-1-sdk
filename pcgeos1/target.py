@@ -32,6 +32,7 @@ PROFILES={
   },
   'format_version':1,
   'kernel_protocol':[622,3],
+  'ui_protocol':[693,0],
  },
 }
 
