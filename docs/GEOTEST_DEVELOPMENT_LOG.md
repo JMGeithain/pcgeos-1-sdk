@@ -106,6 +106,9 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2261 | MZ-Header und Relokation `CS:962Eh` ausgewertet; Segmentnotation präzisiert |
 | Untersuchung 2262 | GEOWORKS.zip auf SDK-Pfade, Hashes, Formate und Protokolle geprüft; direkt nicht kompatibel, Profilpfad möglich |
 | Untersuchung 2263 | Tatsächlich verwendete UI-Template-Ressourcen und Handles strukturell verglichen; Referenzmerkmale reproduziert |
+| Untersuchung 2264 | Erster experimenteller Host-Build von GEOTEST.GEO erzeugt und strukturell geprüft |
+| Untersuchung 2265 | GEOTEST-Quellprojekt und Zielarchiv-Vorbereitung veröffentlicht |
+| Untersuchung 2266 | Byteidentitätsprüfung deckt Abweichungen zwischen lokalem Build-Unterbau und GitHub-HEAD auf; Reproduzierbarkeit ausdrücklich nicht bestätigt |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1308,3 +1311,81 @@ Die erzeugte `GEOTEST.GEO`, die temporäre Zielarchivkopie und die Build-Evidenc
 Die vier Projekt-/Vorbereitungsdateien sind byteidentisch bestätigt. Die übrigen lokal rekonstruierten Buildmodule (Parser, UI-Generator, Packer, Buildsystem und Runtime) wurden noch nicht als vollständiger byteidentischer Repository-Checkout nachgewiesen. Deshalb bleibt die Wiederholung des Builds mit einem unveränderten Checkout des GitHub-Repositorys der nächste zwingende Prüfschritt.
 
 **Nächster Schritt 2266:** Die übrigen Buildmodule aus dem aktuellen GitHub-Stand byteidentisch in einer sauberen Arbeitskopie bereitstellen, ihre Git-Blob-SHAs gegen GitHub prüfen und den GEOTEST-Build erneut ausführen. Nur wenn der neue Build dieselbe strukturelle Prüfung besteht, wird der Host-Build als repository-reproduzierbar eingestuft. Danach folgt der Starttest in GeoWorks 1.2.
+
+
+## 27. Untersuchung 2266 – Abgleich des ersten Host-Builds mit dem tatsächlichen GitHub-Quellstand
+
+**Prüfziel:** Den in Untersuchung 2264 erzeugten Host-Build gegen den aktuellen Repository-Stand prüfen. Maßgeblicher Repository-Stand ist `main`, Commit `b57926472adc61f00d37091b192f0cb4080f3778`. Die GitHub-Blob-SHAs stammen aus dem rekursiven Git-Tree dieses Commits; lokale SHA-Werte wurden mit `git hash-object` aus den tatsächlich vorhandenen Dateien berechnet.
+
+### 27.1 Projekt- und Hilfsdateien
+
+Die folgenden Dateien sind byteidentisch mit dem veröffentlichten Repository:
+
+| Datei | GitHub-Blob-SHA | Lokaler Git-Blob-SHA | Ergebnis |
+|---|---|---|---|
+| `examples/geotest/project.json` | `c3429f35346d472f149438ffac3b763bdfaf6d45` | `c3429f35346d472f149438ffac3b763bdfaf6d45` | identisch |
+| `examples/geotest/src/app.c` | `c9d00f6447b2236007f660331be50e8d05a5cb2e` | `c9d00f6447b2236007f660331be50e8d05a5cb2e` | identisch |
+| `examples/geotest/src/help.txt` | `77f4c315d6e7d7a4501b6804439f43e6e632a101` | `77f4c315d6e7d7a4501b6804439f43e6e632a101` | identisch |
+| `tools/prepare_geoworks_1_2_8_de.py` | `2f1f4e68ba3b33534a830860c9ad5f6adedff91a` | `2f1f4e68ba3b33534a830860c9ad5f6adedff91a` | identisch |
+
+Das belegt die Identität des veröffentlichten Projektbeispiels und des Zielarchiv-Vorbereitungsskripts. Es belegt noch nicht die Identität der Engine, die den ersten Build erzeugt hat.
+
+### 27.2 Lokale Build-Engine gegenüber GitHub-HEAD
+
+Die lokale Build-Arbeitskopie unter `/tmp/geotest-build` enthält mehrere Module, deren Git-Blob-SHAs von den Dateien im Repository abweichen:
+
+| Datei | lokale Bytes | lokale SHA-1 | GitHub-Bytes | GitHub-Blob-SHA |
+|---|---:|---|---:|---|
+| `include/pcgeos1.h` | 937 | `36681d18efc8e7baea32d4a1bf14333a8228e968` | 1.259 | `517e32add9729a9dc3e3bc77a2b74a3acae3d611` |
+| `pcgeos1/buildsys.py` | 3.853 | `432bd16526cdf441ab30c1e6514c4c724b0b4a97` | 4.285 | `583deef8ecc0d6adced661166671e8513d96eb01` |
+| `pcgeos1/geode.py` | 3.966 | `0ee055adc9090b38f4b5dccb5c4c0397968c273b` | 5.535 | `dfbc196c8fa1a72115ffb1f920f6e3bc55276b95` |
+| `pcgeos1/instrument.py` | 1.366 | `08514cc790575a2eb0a26523f759deb1b481675a` | 1.759 | `20ed6958a9c9fff84a5f81bc03a6feff847d2bf7` |
+| `pcgeos1/packer.py` | 3.143 | `cd1ad6a86b27b7ca955f7e9ddca26563c2f03108` | 3.303 | `8f48c4f15c2ba86f8bf7ac3506445fe3e788d9b0` |
+| `pcgeos1/target.py` | 1.728 | `eea4dee111f42b0bc8ed58699921324679d0ae44` | 1.986 | `f3b6a91470960dafbb7036832b32b7726daeef66` |
+| `pcgeos1/toolchain.py` | 2.902 | `5dcb65c155eac6f338a5073748d3ffa3e1e9d65d` | 3.719 | `e1ec5ac88502107e5d75cac9489f9b4bc376b30b` |
+| `pcgeos1/ui.py` | 3.238 | `ce1e8d8c7f695c91910b5d0651a3798373e47e1d` | 3.743 | `4a50f5e58cfc729c7eda993ab47461966862b51f` |
+| `runtime/native.S` | 4.679 | `bdf6d851e2525661516d512257f27cf3057c2546` | 4.974 | `a561ab6b272ed1cd4f6674af5285a22030cbfc74` |
+| `runtime/sdk_runtime.c` | 1.306 | `d0e4520817b6ad131b1b9a8c385327935bc08e29` | 1.342 | `0b8326d14ec284ea69d469f53f0189363896b297` |
+
+Zwei weitere Dateien stimmen überein:
+- `pcgeos1/__init__.py`: leer, Git-Blob-SHA `e69de29bb2d1d6434b8b29ae775ad8c2e48c5391`.
+- `runtime/native.ld`: Git-Blob-SHA `26ed8ec12b705064eb8351647f4747ffe61bb4d8`.
+
+### 27.3 Fehlende Bestandteile der lokalen Arbeitskopie
+
+Im lokalen Arbeitsverzeichnis fehlen:
+- `bin/sdkcli.py`, das vom veröffentlichten Starter `bin/pcgeos1` aufgerufen wird;
+- `templates/basic_view/project.json`;
+- `templates/basic_view/src/app.c`;
+- `templates/basic_view/src/help.txt`.
+
+Die veröffentlichten Dateien existieren im GitHub-Tree. Ihr Fehlen zeigt, dass `/tmp/geotest-build` kein vollständiger Checkout des Repositorys ist.
+
+### 27.4 Abweichende tatsächlich kompilierte Anwendung
+
+Die im Buildverzeichnis verwendete Datei `project/src/app.c` hat 498 Bytes und den Git-Blob-SHA `8dfc227e6b61888b568693c3e47dddf213a0c3d3`. Das veröffentlichte `examples/geotest/src/app.c` hat 519 Bytes und SHA `c9d00f6447b2236007f660331be50e8d05a5cb2e`.
+
+Damit wurde beim ersten Host-Build nicht exakt die jetzt veröffentlichte Anwendungsquelldatei verwendet. Die veröffentlichte Projektdatei und Help-Datei sind zwar identisch, die C-Quelle ist es nicht.
+
+### 27.5 Korrigierte Aussage zum ersten GEOTEST-Build
+
+Der erste Build bleibt ein tatsächlich vorhandenes, 70.794 Bytes großes GEO-Artefakt mit dem in Untersuchung 2264 dokumentierten SHA-256. Seine strukturelle Prüfung bleibt ein gültiger Befund für genau diese Datei.
+
+**Nicht belegt und ausdrücklich zurückgenommen ist die Aussage, der Build sei bereits aus dem aktuellen GitHub-Repository reproduzierbar.** Die lokale Engine, mehrere Runtime-Dateien, der Header, der UI-Generator und die tatsächlich kompilierte C-Datei weichen vom Repository-HEAD ab. Die Build-Arbeitskopie ist unvollständig.
+
+Daher ist der erste Build als **experimenteller Vorab-Build mit einer lokalen SDK-Arbeitsfassung** zu kennzeichnen. Er darf nicht als Referenz-Build des veröffentlichten SDK gelten.
+
+### 27.6 Keine Änderung an Originalen oder Binärartefakten
+
+Bei dieser Untersuchung wurden weder `GEOWORKS.zip` noch `KERNEL.OLD`, die erzeugte `GEOTEST.GEO` oder die Dateien im GitHub-Repository verändert. Es wurden nur die Quellidentitäten und Dateigrößen geprüft. Die bereits veröffentlichten Quell-/Projektdateien bleiben unverändert.
+
+### 27.7 Ergebnis Untersuchung 2266
+
+1. Der veröffentlichte GEOTEST-Projektbaum und das Zielarchiv-Vorbereitungsskript sind byteidentisch mit den lokalen Projektfassungen.
+2. Zehn zentrale Build-/Runtime-Dateien weichen vom GitHub-HEAD ab; zwei weitere stimmen überein.
+3. Der lokale Build-Unterbau enthält nicht alle im Repository vorhandenen Dateien.
+4. Die beim ersten Build verwendete C-Datei ist nicht identisch mit der veröffentlichten `examples/geotest/src/app.c`.
+5. Der erste `GEOTEST.GEO`-Build ist real und strukturell geprüft, aber nicht als Build aus dem veröffentlichten Repository reproduzierbar.
+6. Es ist erforderlich, eine saubere, vollständige Quellarbeitskopie aus Commit `b57926472adc61f00d37091b192f0cb4080f3778` aufzubauen und genau diese Buildkette erneut zu testen.
+
+**Nächster Schritt 2267:** Die aktuelle Repository-Engine einschließlich `bin/sdkcli.py`, sämtlicher `pcgeos1/`-Module, `include/`, `runtime/` und `templates/basic_view/` als sauberen Quellstand bereitstellen. Danach `doctor`, Zielarchivvorbereitung, Parser-/Selftests und erst dann den GEOTEST-Build mit der veröffentlichten Projektdatei ausführen. Den alten GEO-Build getrennt als Vorab-Artefakt aufbewahren.
