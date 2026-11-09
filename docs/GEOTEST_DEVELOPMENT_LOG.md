@@ -88,6 +88,7 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 | Untersuchung 2248 | Wiederholte `05B8h`-Far-Aufrufe verglichen; gemeinsame Dispatch-Schnittstelle als Hypothese markiert |
 | Untersuchung 2249 | Schreibzugriffe auf `05B8h/05BAh` vollständig verglichen; Offset-/Segment-Paar nachgewiesen |
 | Untersuchung 2250 | DI-Aufrufvarianten und unterschiedliche Rückgabekanäle verglichen; keine einheitliche Callback-Signatur unterstellt |
+| Untersuchung 2251 | Überlappende Segmentladehelfer analysiert; DS/ES in den untersuchten Callback-Pfaden auf `0E35h` zurückgeführt |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
@@ -145,6 +146,38 @@ Die wiederholte Verwendung desselben Far-Zeigers und der DI-Werte belegt eine ge
 5. Die bisherige Sammelbezeichnung „gemeinsame Callback-Schnittstelle“ ist auf „gemeinsame Dispatch-Mechanik mit mehreren selektorspezifischen Verträgen“ zu präzisieren.
 
 **Nächster Schritt 2251:** Die Aufrufstellen nach DI-Selektor gruppieren und ihre übergeordneten öffentlichen Wrapper bzw. Entry-Points bestimmen. Danach die Datenstrukturen hinter BX/SI und die Hilfsfunktionen `9630h`/`9636h` untersuchen, um die Bedeutung der übergebenen Objektkontexte zu identifizieren.
+
+
+## 12. Untersuchung 2251 – Segmentladehelfer `9630h` und `9636h`
+
+### 12.1 Überlappende Eintrittspunkte
+
+Der lineare Disassembler zeigt bei `962Eh` zunächst Bytes `35 0E 2E` als Teil einer vermeintlichen `xor`-Instruktion. Die zahlreichen relativen CALL-Ziele `9630h` und `9636h` springen jedoch absichtlich in diese Bytefolge hinein:
+
+- Ab `9630h` werden die Bytes `2E 8E 1E 2E 96 C3` als `mov DS, CS:[962Eh] ; ret` ausgeführt.
+- Ab `9636h` werden die Bytes `2E 8E 06 2E 96 C3` als `mov ES, CS:[962Eh] ; ret` ausgeführt.
+- Die zwei Bytes an `CS:962Eh` sind `35 0E`, also der Wortwert `0E35h` in Little-Endian-Reihenfolge.
+
+**Befund:** `9630h` lädt `DS=0E35h`; `9636h` lädt `ES=0E35h`. Es handelt sich um zwei absichtlich überlappende Einstiegspunkte, nicht um normale unabhängige Funktionen im linearen Disassembly. Die Bytes `35 0E` sind zugleich Daten (Segmentkonstante) und werden bei linearer Disassemblierung fälschlich als Beginn einer arithmetischen Instruktion gelesen.
+
+### 12.2 Auswirkungen auf die bisherigen Callback-Aufrufstellen
+
+- Bei Aufrufstellen, die unmittelbar zuvor `9630h` ausführen und DS danach nicht ändern, ist `DS=0E35h` vor dem Callback konkret belegt. Das betrifft u. a. `0E7Dh`, `0F3Bh`, `0F4Eh`, `1189h`, `129Bh` und `13A8h`.
+- Bei Aufrufstellen, die unmittelbar zuvor `9636h` ausführen und ES danach nicht ändern, ist `ES=0E35h` belegt. Das betrifft `0F20h`, `0F76h` und `1321h`.
+- Die Callback-Aufrufe verwenden somit in diesen Pfaden nicht irgendeinen beliebigen aktuellen Segmentwert, sondern gezielt den Segmentwert `0E35h` aus `CS:[962Eh]`.
+- Der Block `10B53h–10BD6h` setzt DS zunächst aus BX (`10B53h`), führt später `DS=CS` aus (`10B94h–10B95h`) und ruft `101CBh` auf. Diese Setup-Routine setzt am Ende DS erneut auf `0E35h`. Der anschließende Zugriff `DS:[05B8h]` liegt daher ebenfalls im Segment `0E35h`.
+
+### 12.3 Präzisierung der Zeigerinitialisierung
+
+Die zuvor dokumentierte Schreibstelle `FAD1h` setzt in DS=`0E35h` das Wort `DS:[05BAh]` auf den aktuellen CS-Wert. Damit ist die Initialisierung des Segmentwortes im zentralen Segment `0E35h` bestätigt. `0F0Ah` löscht ebenfalls `DS:[05BAh]`, wobei `9630h` DS ausdrücklich auf `0E35h` setzt. Die Schreibsequenz `10BB5h–10BB8h` erfolgt nach `101CBh`, das DS auf `0E35h` setzt; sie überschreibt beide Wörter im selben zentralen Segment.
+
+**Wichtige Korrektur:** Die frühere Formulierung, die Segmentbasis der Callback-Aufrufe sei jeweils allgemein vom gerade aktuellen DS/ES abhängig, war zu weit gefasst. Die Instruktion nutzt technisch DS bzw. ES, aber die untersuchten Wrapper laden diese Register unmittelbar davor gezielt mit `0E35h`. In diesen Fällen ist die konkrete Zeigeradresse `0E35h:05B8h`.
+
+### 12.4 Konsequenz
+
+Der Callback-/Dispatch-Zeiger ist für die untersuchten Kernelpfade zentral im Segment `0E35h` gespeichert. Der indirekte Aufruf über ES ist kein Hinweis auf einen zweiten, eigenständigen Callback-Speicherbereich, wenn ES zuvor durch `9636h` geladen wurde; er adressiert dann denselben Zeiger `0E35h:05B8h`.
+
+**Nächster Schritt 2252:** Die Datensegmentkonstante `0E35h` und den Inhalt des Segmentes rund um `05A0h–0620h` anhand der Kernel-Initialisierung und aller Schreibzugriffe strukturieren. Insbesondere die benachbarten Werte `05ABh`, `05B1h`, `05B2h`, `05B4h`, `05B6h`, `05B8h`, `05BAh`, `05AEh` und `0609h` auf ihre Beziehungen untersuchen.
 
 ## 6. Änderungs- und Belegregel
 
