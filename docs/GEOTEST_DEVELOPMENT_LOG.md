@@ -1786,6 +1786,7 @@ Die lokalen Dateien wurden aus den über GitHub abgerufenen Quelltexten rekonstr
 Der GitHub-Actions-Lauf auf dem aktuellen Repository-Checkout bleibt erfolgreich:
 - Run `42605448481`: success, Commit `51ced54eb2b8e206aee07c706cc10861e6930491`.
 - Run `42605505346`: success, Commit `4a7cf1a71313847bf9fb27ca645b850dbb34342b`.
+- Run `42605807758`: success, Commit `8f312bfe027a5a32a955207d0393d6b5592e7cf7` (aktuellster Dossierstand).
 
 Die CI führt Python-Compile, die neun Profiltests und die GEODE-Absatzregression aus. Sie führt keinen Build gegen die private GeoWorks-Installation aus.
 
