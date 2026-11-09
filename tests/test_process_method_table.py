@@ -33,9 +33,9 @@ class ProcessMethodTableTests(unittest.TestCase):
             [struct.unpack_from("<H", dgroup, 0x52 + 2 * i)[0] for i in range(3)],
             [0x0A01, 0x0A03, 0x0004],
         )
-        expected_offsets = [0x62, 0x66, 0x6A]
         expected_handlers = [0x002F, 0x0071, 0x0068]
-        for i, (offset, handler) in enumerate(zip(expected_offsets, expected_handlers)):
+        for i, handler in enumerate(expected_handlers):
+            offset = 0x52 + 2 * len(methods) + 4 * i
             self.assertEqual(struct.unpack_from("<HH", dgroup, offset), (2, handler))
             self.assertEqual(relocations[i], (0x22, 0, offset))
 
