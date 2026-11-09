@@ -1,0 +1,111 @@
+GEOWORKS 1.x ICON PROVIDER AUDIT — CORRECTION / ADDENDUM
+Investigation 2311
+Date: 2026-11-09
+
+This addendum corrects specific errors in ICON_PROVIDER_RESOURCE_AUDIT_2309.TXT
+and ICON_PROVIDER_RESOURCE_CONTENT_AUDIT_2310.TXT. The earlier reports must
+not be used for resource flags or for the claim that R1-R3 are identical.
+
+Inputs
+------
+GEOWORKS.zip:
+  GEOWORKS/ICONS/PAPR.000
+  GEOWORKS/ICONS/GDOC.000
+  GEOWORKS/ICONS/NBAT.000
+
+Parser:
+  pcgeos1/geode.py from pcgeos-1-sdk
+
+Verified resource table
+-----------------------
+Resource table fields were read using the parser's decoded size, file offset,
+relocation byte count and flags fields.
+
+PAPR.000:
+  R0 size 0    flags 0x0880 reloc 0
+  R1 size 96   flags 0x0080 reloc 8
+  R2 size 208  flags 0x145A reloc 4
+  R3 size 320  flags 0x145A reloc 4
+  R4 size 160  flags 0x1C7A reloc 4
+  R5 size 272  flags 0x1C7A reloc 4
+  R6 size 752  flags 0x1C7A reloc 4
+
+GDOC.000:
+  R0 size 0    flags 0x0880 reloc 0
+  R1 size 96   flags 0x0080 reloc 8
+  R2 size 208  flags 0x145A reloc 4
+  R3 size 320  flags 0x145A reloc 4
+  R4 size 160  flags 0x1C7A reloc 4
+  R5 size 256  flags 0x1C7A reloc 4
+  R6 size 816  flags 0x1C7A reloc 4
+
+NBAT.000:
+  R0 size 0    flags 0x0880 reloc 0
+  R1 size 96   flags 0x0080 reloc 8
+  R2 size 208  flags 0x145A reloc 4
+  R3 size 320  flags 0x145A reloc 4
+  R4 size 144  flags 0x1C7A reloc 4
+  R5 size 208  flags 0x1C7A reloc 4
+  R6 size 512  flags 0x1C7A reloc 4
+
+Important corrections
+---------------------
+1. R1-R3 are NOT all identical. R1 and R2 have matching sizes and
+   structure; R2 includes "Exit". R3 has the provider-specific token string
+   (PAPR, gDOC, nBAT) and "Icon Maker".
+2. The earlier statement that all resources R1-R3 have flags 0x80 or
+   0x145A was incomplete. The exact flags are listed above.
+3. Resource R2 and R3 have flags 0x145A, not 0x1C7A.
+4. The three relocation records for R2-R6 are five distinct resource
+   relocation entries, one at offset 0 in each resource R2 through R6.
+   R1 contains two import relocation entries at offsets 0x40 and 0x42.
+5. The file header and R3 both contain the provider token.
+
+Resource payload observations
+-----------------------------
+Each resource starts with a repeated small binary structure. For example,
+R3 begins:
+  03 00 20 00 00 E0 02 00 38 01 06 00 ...
+R4 begins:
+  04 00 20 00 00 C0 02 00 ...
+
+This strongly resembles a sequence of compiled resource/chunk descriptors,
+but this report does not assign field meanings without corroborating
+GeoWorks 1.x format documentation or source declarations.
+
+ASCII string scan:
+- R2 contains "Exit" in all three files.
+- R3 contains the provider token and "Icon Maker" in all three files.
+- R5 in PAPR includes incidental printable byte sequences "MUQR" and
+  "]UUV"; these are not treated as meaningful strings.
+- R6 in GDOC has repeated printable sequences that may be binary data;
+  no semantic interpretation is made.
+
+Relocations
+-----------
+The parser reports the same topology in all three files:
+- R1 offset 0x40: info 0x11, source 1, type 1, extra/import index 0.
+- R1 offset 0x42: info 0x12, source 1, type 2, extra/import index 0.
+- R2-R6 offset 0: info 0x23, source 2, type 3, extra/resource ID equals
+  the resource's own ID.
+
+Caution: these are parser-decoded fields. The names/semantics of relocation
+types are not asserted by this addendum.
+
+Conclusions
+-----------
+The stable resource topology is:
+- R0 empty
+- R1 common small resource with two imports
+- R2 common resource containing "Exit"
+- R3 common-sized resource containing provider token + "Icon Maker"
+- R4-R6 provider-specific resources
+
+R4-R6 remain the likely location of the provider-specific icon/UI payload,
+but no color/monochrome/document-icon assignment is proven yet. Next work
+must decode the chunk/resource structures using GeoWorks 1.x definitions
+and compare their contents with the original icon-provider source if
+available.
+
+No original file was changed. No GEO was built. No TOKEN.DB was changed.
+No PC/GEOS 2.x or FreeGEOS definitions were used.
