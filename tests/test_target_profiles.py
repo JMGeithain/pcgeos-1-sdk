@@ -19,7 +19,7 @@ class TargetProfileTests(unittest.TestCase):
             'TERM.GEO':b'term-template',
         }
         hashes={k:hashlib.sha256(v).hexdigest() for k,v in self.payloads.items()}
-        self.profile={'hashes':hashes,'format_version':1,'kernel_protocol':[622,3]}
+        self.profile={'hashes':hashes,'format_version':1,'kernel_protocol':[622,3],'ui_protocol':[693,0]}
         self.profile_patch=patch.dict(target.PROFILES,{'test-profile':self.profile})
         self.profile_patch.start()
         self.parse_patch=patch.object(target,'parse',side_effect=self.fake_parse)
@@ -34,7 +34,7 @@ class TargetProfileTests(unittest.TestCase):
 
     @staticmethod
     def fake_parse(data,label):
-        return {'format_version':1,'kernel_protocol':[622,3]}
+        return {'format_version':1,'kernel_protocol':[622,3],'imports':[{'name':'ui','protocol':[693,0]}]}
 
     def write_archive(self, omit=None, duplicate=None, overrides=None):
         omit=set(omit or [])
@@ -81,6 +81,12 @@ class TargetProfileTests(unittest.TestCase):
         self.write_archive()
         with patch.object(target,'parse',return_value={'format_version':1,'kernel_protocol':[622,2]}):
             with self.assertRaisesRegex(ValueError,'kernel protocol'):
+                target.load_templates(self.archive,profile='test-profile')
+
+    def test_wrong_ui_protocol_is_rejected(self):
+        self.write_archive()
+        with patch.object(target,'parse',return_value={'format_version':1,'kernel_protocol':[622,3],'imports':[{'name':'ui','protocol':[692,0]}]}):
+            with self.assertRaisesRegex(ValueError,'UI import protocol'):
                 target.load_templates(self.archive,profile='test-profile')
 
     def test_default_profile_keeps_original_hashes(self):
