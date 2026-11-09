@@ -2909,3 +2909,63 @@ Das Audit belegt den Zugriff auf die WORD-Felder bei Deskriptoroffset `+0` und `
 **Quellenbasis:** `SVGA16_RESOURCE_DESCRIPTOR_DISPATCH_AUDIT.txt` (50 Assertions; Prüfsummenangabe des verwendeten `KERNEL.OLD`-Disassemblys siehe Audit), bisherige GEODE-Loader-Analyse im Dossier, insbesondere `0x1D9C`, `0x701B`, `0x20FE` und die Tabellenberechnung in `0x1C76`. Das Prüfprotokoll ist ein unabhängiger statischer Auditbeleg, ersetzt aber nicht die erneute bytegenaue Gegenprüfung der Originaldatei in dieser Sitzung.
 
 **Status:** Die Aussagen 2228.1–2228.4 zur direkten Größentabelle sind ausdrücklich superseded. Die Befunde zur 16-Byte-Ausrichtung der Hilfsroutine bleiben isoliert bestehen. Originalarchiv, Kernel, GEO-Dateien und SDK-Quelltexte unverändert; kein `geoTest.geo` erstellt.
+
+
+## Untersuchung 2230 – Dynamischer Wechsel der ersten Ressourcentabelle
+
+### 2230.1 – Bytegenaue Gegenprüfung am deutschen Originalkernel
+
+Die erneute Disassemblierung des aus dem Originalarchiv extrahierten `GEOWORKS/KERNEL.OLD` (Dateigröße 72.688 Bytes; SHA-256 `bd4d680b15f8dd66b2b09b506de96672972f716a11e0a38220477bf07b6c1e9b`) zeigt, dass die Tabelle ab `DS:003A` während des Ladevorgangs ihren Inhalt und damit ihre Funktion ändert.
+
+In `0x1CF7–0x1D09` wird zunächst Index 0 verarbeitet: Der aktuelle `DS`-Wert wird in den Tabellenslot 0 geschrieben. Danach liest die Schleife ab `0x1D0B` für die folgenden Indizes den jeweiligen ursprünglichen WORD-Wert aus `[table + SI]` und übergibt ihn zusammen mit dem Flag-WORD an `0x1D51`.
+
+`0x1D51` behandelt den Sonderfall `SI=2` durch Addition des lokalen Werts `[BP-0x18]` und setzt dabei `CH`-Bit `0x80`. Anschließend wird bei AX=0 AX auf 1 gesetzt und `0x6E87` aufgerufen. Nach erfolgreicher Allokation schreibt `0x1D8A–0x1D98` den zurückgegebenen Blockverweis in den aktuellen Tabellenslot `[table + SI]`.
+
+Damit ist der Zustandswechsel belegt:
+
+- vor der Schleife: die Slots enthalten WORD-Eingaben, die an den Allokationspfad übergeben werden;
+- Slot 0 wird durch den aktuellen DS-Wert ersetzt;
+- Slots ab Index 1 werden nach erfolgreicher Allokation durch die zurückgegebenen Blockverweise ersetzt.
+
+Die erste Tabelle ist daher keine statische Zeigertabelle. Die Interpretation aus 2229, die ursprünglichen Werte seien bloß Deskriptorzeiger, wird ausdrücklich korrigiert. Die Werte `0`, `0x0010`, `0x0020` und `0x0370` sind in den geprüften Beispielen tatsächliche Eingabewerte des Allokationspfads. Für den Nullwert ist der Mindestwert AX=1 vor dem Aufruf von `0x6E87` direkt belegt.
+
+### 2230.2 – Was die Abschlussroutine 1D9C tatsächlich liest
+
+Nach Abschluss der Allokationsschleife ruft `0x1D45` die Routine `0x1D9C` auf. Deren erste Instruktionen lauten:
+
+```asm
+1D9C  mov bx,WORD PTR ds:003A
+1DA0  mov bx,WORD PTR [bx+2]
+1DA3  mov ax,WORD PTR es:[bx]
+1DA6  mov cx,WORD PTR es:[bx+2]
+1DAA  shl cx,1
+1DAC  shl cx,1
+1DAE  shl cx,1
+1DB0  shl cx,1
+1DB2  sub cx,WORD PTR [bp-18]
+1DB5  and cx,0FFF0
+1DB8  mov si,0002
+1DBB  call 701B
+1DBE  call 20FE
+1DC1  call 7014
+```
+
+Wichtig ist die Adressierung: `mov bx,[bx+2]` greift auf Tabellenslot 1 zu, nicht auf Slot 0. Da die Allokationsschleife diesen Slot zuvor mit dem zurückgegebenen Blockverweis überschrieben hat, liest `ES:[BX]` und `ES:[BX+2]` aus dem über diesen Verweis erreichbaren Blockkontext. Der zweite WORD wird mit 16 multipliziert; nach Abzug von `[BP-0x18]` wird das Ergebnis auf eine 16-Byte-Grenze abgerundet. Danach wird `0x20FE` mit `SI=2` aufgerufen.
+
+Die beiden WORD-Felder bei `ES:[BX]` und `ES:[BX+2]` dürfen daher nicht als zwei Felder eines Dateideskriptors bezeichnet werden, solange der genaue Blocktyp und seine Struktur nicht unabhängig bewiesen sind. Sicher ist nur: Es sind WORDs aus dem über Tabellenslot 1 referenzierten Laufzeitblock, und der zweite Wert fließt in die Berechnung der an `0x20FE` übergebenen Leselänge ein.
+
+### 2230.3 – Bedeutung für die weitere Analyse
+
+Der separate Auditvermerk `SVGA16_RESOURCE_DESCRIPTOR_DISPATCH_AUDIT.txt` hatte die Zugriffe bei `0x1D9C` als Deskriptorzugriffe beschrieben. Die erneute Prüfung des Originalcodes präzisiert das: Der Code liest aus dem Laufzeitblock, auf den Slot 1 zeigt. Die Audit-Kurzform „first pointer“ ist zudem ungenau, da die Instruktion `[BX+2]` Slot 1 adressiert.
+
+Die Analyse muss künftig drei Dinge getrennt verfolgen:
+
+1. ursprüngliche WORD-Eingabe in jedem Slot der Tabelle `DS:003A`;
+2. nach Allokation gespeicherter Laufzeit-Blockverweis in demselben Slot;
+3. Felder innerhalb des referenzierten Laufzeitblocks, die spätere Ladepfade wie `0x1D9C` und `0x209C` auslesen.
+
+Die genaue interne Struktur des referenzierten Blocks sowie die symbolischen Namen seiner Felder bleiben offen. Auch die genaue Bedeutung der lokalen Größe `[BP-0x18]` wird nicht vorweggenommen.
+
+**Quellenbasis:** Bytegenaue statische Disassemblierung des aus `GEOWORKS.zip` extrahierten deutschen Originalkernels `GEOWORKS/KERNEL.OLD`; Load-Image-Offsets `0x1CF7–0x1D98`, `0x1D9C–0x1DC1`, `0x209C–0x20C8` und `0x6E87`. Die Bytes wurden mit `objdump -D -b binary -mi8086 -M intel` ab Load-Image-Beginn disassembliert. Keine Laufzeitbestätigung.
+
+**Korrekturstatus:** 2228 wird hinsichtlich der anfänglichen Allokationswerte teilweise wiederhergestellt; 2229 wird hinsichtlich der pauschalen Deskriptorzeiger-Deutung zurückgenommen. Unverändert bleiben die getrennte DWORD-Dateioffsettabelle ab `DS:003C` und die Relokationszähltabelle ab `DS:003E`. Originaldateien und SDK-Quelltexte unverändert; kein `geoTest.geo` erstellt.
