@@ -85,10 +85,16 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 | Originaldisassemblierung | mit objdump neu erzeugt; SHA-256 exakt bestätigt; 53/53 Anker vorhanden |
 | Untersuchung 2246 | Daten-/Codegrenze und Codekandidat `10B53h–10BD6h` statisch untersucht; Funktionsvertrag offen |
 | Untersuchung 2247 | Querverweise und Aufrufziele `0399h`, `2588h`, `101CBh` untersucht; DS-Segmentkorrektur dokumentiert |
+| Untersuchung 2248 | Wiederholte `05B8h`-Far-Aufrufe verglichen; gemeinsame Dispatch-Schnittstelle als Hypothese markiert |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
 | Start in GeoWorks 1.2 | ausstehend |
+
+
+## 6. Änderungs- und Belegregel
+
+Jeder weitere Untersuchungsabschnitt erhält eine fortlaufende Nummer, Datum, Quellenidentität/Hashes, konkrete Instruktionsbereiche, Register- und Stacktabellen, Befunde, offene Fragen und eine klare Aussage, ob Dateien verändert oder Builds/Laufzeittests tatsächlich ausgeführt wurden. Keine Kernel- oder Treiberdatei wird ohne ausdrückliche Freigabe gepatcht.
 
 
 ## 7. Untersuchung 2246 – Daten-/Codegrenze und Block 10B53h–10BD6h
@@ -198,6 +204,41 @@ Der Block `101CBh–101EFh` ruft nacheinander `1531h`, setzt AX auf `3`, ruft `1
 
 **Nächster Schritt 2248:** Den Ablauf um `05B8h` in den weiteren Aufrufern (insbesondere `0E7Dh–0F76h`, `1189h`, `129Bh`, `1321h`, `13A8h`) vergleichen, um die Struktur und Segmentbasis des gespeicherten Far-Zeigers zu bestimmen. Parallel die Routine `2588h`-Aufrufer und das Objektformat mit konkreten DS-/BX-Werten aus den statischen Datenbereichen rekonstruieren.
 
-## 6. Änderungs- und Belegregel
 
-Jeder weitere Untersuchungsabschnitt erhält eine fortlaufende Nummer, Datum, Quellenidentität/Hashes, konkrete Instruktionsbereiche, Register- und Stacktabellen, Befunde, offene Fragen und eine klare Aussage, ob Dateien verändert oder Builds/Laufzeittests tatsächlich ausgeführt wurden. Keine Kernel- oder Treiberdatei wird ohne ausdrückliche Freigabe gepatcht.
+## 9. Untersuchung 2248 – Vergleich der Far-Aufrufe über `05B8h`
+
+**Ziel:** Prüfen, ob `05B8h` nur im Block `10B53h–10BD6h` verwendet wird oder eine gemeinsame indirekte Schnittstelle darstellt.
+
+### 9.1 Vergleichte Aufrufstellen
+
+Im Disassembly gibt es neben `10BCFh` weitere Aufrufe über denselben Offset:
+
+| Offset | Operand / DI | Kontext vor dem Aufruf | Beobachtung |
+|---|---|---|---|
+| `0E7Dh` | `DS:[05B8h]`, DI=`18h` | CX aus `[01A0h]`, DX=0; Register werden gesichert | Aufruf einer indirekten Far-Funktion mit Selektor `18h`. |
+| `0F06h–0F0Ah` | setzt `[05BAh]=0` | DS wird über `9630h` vorbereitet | löscht das zweite Wort des Zeigerpaares; möglicherweise Deaktivierung/Invalidierung, genaue Semantik offen. |
+| `0F12h–0F2Dh` | `ES:[05B8h]`, DI=`12h` | ES/DI gesichert; Hilfsroutinen `172Fh`, `15EBh` davor und `1628h`, `1736h` danach | explizit ES-basierter Aufruf; Segmentbasis unterscheidet sich vom DS-Fall. |
+| `0F2Eh–0F42h` | `DS:[05B8h]`, DI=`06h` | BL aus `(BX)` geladen; Flags gesichert | Aufruf mit Byteparameter und DI-Selektor `06h`. |
+| `0F43h–0F55h` | `DS:[05B8h]`, DI=`08h` | Flags gesichert; DS gesichert | weiterer Selektor-Aufruf, Flags werden über den Aufruf hinweg erhalten. |
+| `0F6Dh–0F7Eh` | `ES:[05B8h]`, DI=`16h` | ES/DI/BX gesichert; `9636h` davor | ES-basierter Aufruf mit Selektor `16h`. |
+| `1189h` | `DS:[05B8h]` | liegt im Umfeld eines I/O-/Dateioperationen-Blocks | bestätigt weitere Verwendung des DS-basierten Zeigers. |
+| `129Bh` | `DS:[05B8h]`, DI=`0Ah` | AL und CL aus zwei verketteten Strukturen geladen; Flags danach mit `sahf` ausgewertet | Rückgabestatus/Flags des indirekten Aufrufs beeinflussen die Verzweigung. |
+| `1321h` | `ES:[05B8h]`, DI=`04h` | ES-Zeiger über `9636h`; AX wird zuvor gesichert | ES-basierter Aufruf mit Selektor `04h`. |
+| `13A8h` | `DS:[05B8h]`, DI=`0Ch` | AL aus `(BX)` geladen; anschließend weitere Strukturfelder gelesen | DS-basierter Aufruf mit Selektor `0Ch`. |
+
+### 9.2 Gesicherte Schlüsse
+
+1. `05B8h` ist ein wiederholt verwendeter indirekter Far-Aufrufoperand. Die Aufrufer wählen unterschiedliche DI-Werte (`04h`, `06h`, `08h`, `0Ah`, `0Ch`, `12h`, `16h`, `18h`) und reichen teils weitere Registerparameter weiter.
+2. Sowohl `DS:[05B8h]` als auch `ES:[05B8h]` kommen vor. Das ist keine einheitliche absolute Adresse; die jeweilige Segmentbasis ist Teil des Aufrufvertrags.
+3. Die Sicherung und Wiederherstellung von Flags an mehreren Stellen zeigt, dass der aufgerufene Code Statusflags als Rückgabekanal verwenden kann. Bei `129Bh` wird dies durch `sahf` explizit ausgewertet.
+4. Das Löschen von `[05BAh]` bei `0F0Ah` betrifft nur das zweite Wort. Ob damit der Far-Zeiger deaktiviert wird, hängt von der konkreten Strukturkonvention ab und bleibt zunächst eine Hypothese.
+5. Der Befund spricht für eine gemeinsame Callback-/Dispatch-Schnittstelle, beweist aber noch nicht, ob es sich um eine bestimmte Geräteklasse, einen Treibervertrag oder einen allgemeinen Kernel-Service handelt.
+
+### 9.3 Offene Fragen und nächster Schritt
+
+- Welche Routine initialisiert `05B8h`/`05BAh` in jedem Segmentkontext?
+- Warum greifen manche Aufrufer über DS und andere über ES zu?
+- Welche Bedeutung haben die DI-Selektoren und welche Register sind je Selektor Eingabe bzw. Ausgabe?
+- Was liefert der Aufruf zurück (Carry, Zero, AL, andere Register)?
+
+**Nächster Schritt 2249:** Die Aufrufpfade zu `0F06h`, `0F12h`, `0F2Eh`, `0F43h`, `0F6Dh`, `129Bh`, `1321h` und `13A8h` rückwärts verfolgen. Für jeden Pfad DS/ES vor dem Aufruf, DI, Registerparameter, Flag-Sicherung und unmittelbare Auswertung erfassen. Danach die Initialisierer der Zeigerworte `05B8h`/`05BAh` lokalisieren.
