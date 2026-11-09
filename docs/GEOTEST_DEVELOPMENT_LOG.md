@@ -115,6 +115,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2270 | Explizite Hash-gepinnte Zielprofile im Buildsystem implementiert; Unit-Tests für Profilgrenzen ergänzt; Laufzeittest noch ausstehend |
 | Untersuchung 2271 | Neun Profil-/Bypass-Unit-Tests, Parser-Absatzregression und realer deutscher Profil-Parse erfolgreich ausgeführt |
 | Untersuchung 2272 | GitHub Actions testet den aktuellen Repository-Checkout erfolgreich: Python-Compile, Profiltests und GEODE-Absatzregression PASS |
+| Untersuchung 2273 | Build mit rekonstruierter GitHub-Quellfassung wiederholt; identischer GEO-Hash, Quellbyteidentität weiterhin offen |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1736,8 +1737,65 @@ Er baut noch keine `GEOTEST.GEO`-Datei. Das Workflow-Setup enthält absichtlich 
 
 1. Die Testpipeline läuft auf dem tatsächlichen GitHub-Checkout.
 2. Der anfängliche Importpfadfehler wurde behoben.
-3. Der zweite CI-Lauf ist vollständig erfolgreich.
+3. Der zweite CI-Lauf ist vollständig erfolgreich. Ein weiterer Lauf nach der Dossieraktualisierung war ebenfalls erfolgreich: Run-ID `42605505346`, Commit `4a7cf1a71313847bf9fb27ca645b850dbb34342b`.
 4. Python-Compile, neun Zielprofiltests und GEODE-Absatzregression sind bestätigt.
 5. Der vollständige Build der Anwendung mit dem gesamten aktuellen Repository-Stand und anschließend der Start in GeoWorks 1.2 bleiben die nächsten großen Meilensteine.
 
 **Nächster Schritt 2273:** Den Build mit dem aktuellen GitHub-HEAD und dem frisch erzeugten Archiv `GWP2-profile-verified.zip` durchführen. Dafür muss der vollständige Quellbestand des Repositorys in der Buildumgebung liegen; die alte lokale SDK-Arbeitsfassung aus Untersuchung 2266 darf nicht wiederverwendet werden. Danach den resultierenden GEO-Hash, Ressourcen-/Relokationszahlen und alle Parserprüfungen protokollieren.
+
+
+## 34. Untersuchung 2273 – Wiederholungsbuild mit rekonstruierter GitHub-Quellfassung
+
+**Ziel:** Nach der Profil- und CI-Absicherung den ersten GEOTEST-Build erneut mit einer lokalen Arbeitsfassung aus den aktuell über GitHub gelesenen SDK-Quellen ausführen. Das deutsche Profilarchiv wurde zuvor frisch mit dem veröffentlichten Vorbereitungsskript erzeugt.
+
+### 34.1 Verwendete Eingaben
+
+- Projekt: `examples/geotest/project.json` aus GitHub, Profil `geoworks-1.2.8-de`.
+- C-Quelle: veröffentlichte `examples/geotest/src/app.c`, 519 Bytes.
+- Help-Datei: veröffentlichte `examples/geotest/src/help.txt`.
+- Profilarchiv: frisch erzeugte `GWP2-profile-verified.zip`, vier Mitglieder mit den registrierten Hashes.
+- Compiler: GCC 14.2.0 / GNU binutils.
+- Build-Engine: aus den aktuellen GitHub-Dateiinhalten rekonstruierte lokale Arbeitsfassung.
+
+### 34.2 Ergebnis des Wiederholungsbuilds
+
+Der Build lief vollständig durch. Der Geode-Packer und der nachfolgende Parserlauf meldeten:
+
+| Eigenschaft | Ergebnis |
+|---|---|
+| GEO-Dateigröße | 70.794 Bytes |
+| SHA-256 | `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
+| GEOS-Format | 1 |
+| Kernelprotokoll | 622.3 |
+| UI-Import | `ui` 693.0 |
+| Ressourcen | 12 |
+| Relokationen | 41 |
+| Code-Ressource | 1.397 Bytes |
+| Engine-Nutzung | 7.692 Bytes |
+
+Der SHA-256-Wert ist exakt identisch mit dem ersten Host-Build aus Untersuchung 2264. Die aktualisierten Buildnachweise wurden in `/mnt/data/GEOTEST_BUILD_REPORT.json`, `GEOTEST_APP.map`, `GEOTEST_SYMBOLS.txt` und `GEOTEST_BUILD_EVIDENCE.zip` abgelegt. Der Bericht enthält nun ausdrücklich `target_profile=geoworks-1.2.8-de`.
+
+### 34.3 Quellidentität – wichtige Einschränkung
+
+Die lokalen Dateien wurden aus den über GitHub abgerufenen Quelltexten rekonstruiert. Beim abschließenden Git-Blob-Abgleich stimmten jedoch mehrere manuell übertragene Dateien nicht bytegenau mit ihren GitHub-Blob-SHAs überein. Das betrifft insbesondere die Engine-/Runtime- und Python-Moduldateien, bei denen Formatierung und Kommentare beim Übertragen verändert wurden. Die Projektdefinition, die C-Quelle, die Help-Datei und `runtime/native.ld` stimmten bytegenau überein.
+
+**Folgerung:** Der identische GEO-Hash ist ein starker Reproduktionsbefund für die verwendete Buildlogik und die veröffentlichten GEOTEST-Eingaben. Er ist aber kein Beweis für einen Build aus einem byteidentischen GitHub-Checkout. Die Quellbyteidentität bleibt offen; der Build wird deshalb weiterhin als rekonstruierter experimenteller Host-Build gekennzeichnet.
+
+### 34.4 CI-Stand
+
+Der GitHub-Actions-Lauf auf dem aktuellen Repository-Checkout bleibt erfolgreich:
+- Run `42605448481`: success, Commit `51ced54eb2b8e206aee07c706cc10861e6930491`.
+- Run `42605505346`: success, Commit `4a7cf1a71313847bf9fb27ca645b850dbb34342b`.
+
+Die CI führt Python-Compile, die neun Profiltests und die GEODE-Absatzregression aus. Sie führt keinen Build gegen die private GeoWorks-Installation aus.
+
+### 34.5 Ergebnis Untersuchung 2273
+
+1. Die frisch erzeugte Profilarchivkopie besteht die registrierte Hashprüfung.
+2. Die veröffentlichte GEOTEST-Projektdefinition und die veröffentlichte C-/Help-Quelle wurden für den Wiederholungsbuild verwendet.
+3. Der erzeugte GEO-Hash ist identisch mit dem ersten Build: `9ace19da...`.
+4. Die strukturelle Prüfung bestätigt weiterhin 12 Ressourcen, 41 Relokationen, Kernel 622.3 und UI 693.0.
+5. Die lokale Build-Engine ist noch nicht byteidentisch zum GitHub-HEAD; der Build gilt daher nicht als vollständig repository-reproduzierbar.
+6. Ein Laufzeittest in GeoWorks 1.2 wurde weiterhin nicht ausgeführt.
+
+**Nächster Schritt 2274:** Für die endgültige Quellreproduzierbarkeit muss eine echte, byteidentische Repository-Arbeitskopie bereitgestellt werden (z. B. durch einen vom Nutzer heruntergeladenen GitHub-Quellarchiv-Download). Danach alle Git-Blob-SHAs vor dem Build prüfen, den Build erneut ausführen und den resultierenden Hash mit `9ace19da...` vergleichen. Erst anschließend wird die GEOTEST-Datei in einer gesicherten GeoWorks-1.2-Installation gestartet.
