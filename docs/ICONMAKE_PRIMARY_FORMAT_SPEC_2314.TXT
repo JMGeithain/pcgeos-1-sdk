@@ -1,0 +1,82 @@
+GEOWORKS 1.x ICON FORMAT — PRIMARY DOCUMENTATION CHECK
+Investigation 2314
+Date: 2026-11-09
+
+Purpose
+-------
+This report checks the previous interpretation of the R4/R5/R6 payload
+prefixes against the original ICONMAKE documentation included in the
+user's GeoWorks installation.
+
+Primary source files from GEOWORKS.zip
+--------------------------------------
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.DOC
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.ENG
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONINST.TXT
+
+The German and English ICONMAKE manuals agree on the icon inputs expected
+for a token:
+- CGA: 48 x 14 pixels, monochrome
+- HGC/MCGA: 48 x 30 pixels, monochrome
+- EGA/VGA: 48 x 30 pixels, 16 colors
+
+The manuals say ICONMAKE uses a code fragment from the original GeoWorks
+icon collection and inserts the supplied images into a dummy application.
+The documented extraction command is:
+  ICONMAKE x <filename>
+The documented PCX creation command is:
+  ICONMAKE m <token> <list of PCX files>
+
+Important correction to the preceding payload reports
+------------------------------------------------------
+The earlier reports described byte pairs 000E/001A and 001E/001A as
+"14 x 26" and "30 x 26" and suggested these might be icon dimensions.
+That interpretation is NOT established and must not be used as a measured
+image size.
+
+The original ICONMAKE documentation specifies 48-pixel image width for all
+three standard forms. Therefore the observed values 14, 26 and 30 cannot
+simply be accepted as the complete width/height pair of those standard
+images. The bytes may be fields in a wrapper, offsets, row/stride data, or
+another format-specific quantity; their meaning remains unresolved.
+
+What is established
+-------------------
+1. ICONMAKE 1.0's documented source image dimensions and color modes are
+   48x14 monochrome (CGA), 48x30 monochrome (HGC/MCGA), and 48x30 16-color
+   (EGA/VGA).
+2. ICONMAKE creates a dummy token application from those image files.
+3. ICONMAKE can extract icon definitions from existing GEOS applications
+   or dummy files to PCX via its documented "x" operation.
+4. The provider instructions in ICONINST.TXT separately describe the
+   token/manufacturer mapping and the dummy-app installation mechanism.
+
+What is not established
+-----------------------
+- Which of R4, R5 or R6 corresponds to CGA, HGC/MCGA or EGA/VGA.
+- Whether the repeated bytes in the payload prefix are image dimensions,
+  encoding parameters, or another header.
+- Whether the three resource classes correspond one-to-one with the three
+  documented PCX inputs.
+- The exact VisMoniker/bitmap structure and pixel packing.
+
+Next decisive test
+------------------
+Use the original ICONMAKE.EXE's documented extraction operation on
+PAPR.000 (or another known provider) in a controlled DOS/GeoWorks-compatible
+environment, then inspect the generated PCX files:
+- record exact output dimensions,
+- inspect palette/bit depth,
+- compare the extracted PCX data with R4/R5/R6 payloads.
+
+This is a much stronger validation path than assigning meanings from
+resource IDs or isolated prefix bytes. Until that controlled extraction is
+performed, do not label R4/R5/R6 as CGA, monochrome or color.
+
+Integrity
+---------
+This report only reads the original manuals and files from GEOWORKS.zip.
+No original archive member was modified. ICONMAKE.EXE was not executed in
+this audit. No GEO was built and TOKEN.DB was not changed.
+No PC/GEOS 2.x or FreeGEOS definitions were used.
