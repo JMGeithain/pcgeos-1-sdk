@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 import hashlib
+import json
 import tempfile
 import unittest
 import warnings
@@ -8,7 +9,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from pcgeos1 import target
+from pcgeos1 import target, buildsys
 
 class TargetProfileTests(unittest.TestCase):
     def setUp(self):
@@ -88,6 +89,22 @@ class TargetProfileTests(unittest.TestCase):
         with patch.object(target,'parse',return_value={'format_version':1,'kernel_protocol':[622,3],'imports':[{'name':'ui','protocol':[692,0]}]}):
             with self.assertRaisesRegex(ValueError,'UI import protocol'):
                 target.load_templates(self.archive,profile='test-profile')
+
+    def test_legacy_bypass_is_rejected_before_archive_access(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            project=root/'project.json'
+            project.write_text(json.dumps({
+                'long_name':'Reject bypass',
+                'permanent_name':'reject',
+                'token':'RJCT',
+                'output':'REJECT.GEO',
+                'allow_unknown_target':True,
+            }),encoding='utf-8')
+            output=root/'build-output'
+            with self.assertRaisesRegex(ValueError,'allow_unknown_target is no longer supported'):
+                buildsys.build(project,root/'missing-target.zip',output,'gnu')
+            self.assertFalse(output.exists())
 
     def test_default_profile_keeps_original_hashes(self):
         self.assertEqual(target.PROFILES['geoworks-pro-1.2']['hashes'],target.KNOWN)
