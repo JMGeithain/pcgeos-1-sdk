@@ -3699,3 +3699,17 @@ Der Pfad wird im untersuchten Code nicht durch einen direkten CALL 0x856C erreic
 **Noch offen:** Die semantischen Namen der Kennwerte und Sentinel-Werte, die symbolische Bedeutung des Attributbits, die Rolle der globalen Variable DS:060B sowie der indirekte Eintritt in 0x856C.
 
 **Arbeitsregel unverändert:** Keine Änderung an Originaldateien, kein Patch und keine Erstellung von geoTest.geo.
+
+
+### Nachtrag zu Untersuchung 2240: Indirekter Aufruf des Abbaupfads
+
+Die zuvor offene Frage nach dem Eintritt in 0x856C lässt sich weiter eingrenzen:
+
+- Bei 0x9162 wird DI ausdrücklich mit 0x856C geladen.
+- Im gemeinsamen Fortgang prüft 0x9198 den Marker [SI+1] gegen FCh.
+- Ist der Marker ungleich FCh, erreicht der Ablauf 0x91BB und führt dort CALL DI aus.
+- Damit ist ein indirekter Aufruf von 0x856C über den Dispatcher 0x9162 / 0x91BB im Binärcode nachgewiesen.
+
+Vor diesem Aufruf dekrementiert der Pfad bei 0x916F den WORD-Wert DS:4. Nur wenn dessen neuer Wert nach AND 0007h gleich null ist, geht der Ablauf in den tieferen Abbaupfad bei 0x9192. Andernfalls kehrt er bereits bei 0x9191 zurück. Der konkrete Zweck dieses Zählers ist noch nicht identifiziert.
+
+Korrektur zur offenen Frage im vorherigen Abschnitt: 0x856C hat damit einen sichtbaren indirekten Aufrufpfad; nicht geklärt ist weiterhin, welche übergeordnete Operation den Dispatcher 0x9162 auswählt und welche Bedeutung der Zähler DS:4 besitzt.
