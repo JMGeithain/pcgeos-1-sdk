@@ -1,0 +1,62 @@
+ICONMAKE TABLE TRACE — OFFSET VERIFICATION CORRECTION
+Investigation 2324
+Date: 2026-11-09
+Scope: original GeoWorks 1.x ICONMAKE.EXE.
+
+Reason for correction
+---------------------
+The claimed DS:2FD6 write sites at load-image offsets 0x1CF7 and
+0x1D12 in investigation 2323 were rechecked against the original
+MZ executable using an independent 16-bit x86 disassembler.
+
+Verified result:
+- At load-image offset 0x1CF7 the instruction is:
+    mov cx, ax
+  It is NOT a write to [BX+2FD6].
+- The previously claimed store at 0x1D12 was not independently
+  reproduced as a DS:2FD6 store.
+Therefore investigation 2323's claim that these two offsets are
+runtime writes to the table is withdrawn.
+
+Verified facts retained
+-----------------------
+- The executable is 19,477 bytes.
+- MZ header length is 0x0200 bytes.
+- The nibble conversion sequence is present in the code area and
+  performs two lookups using the DS-relative displacement 0x2FD6,
+  followed by nibble packing.
+- A DS-relative reference [BX+2FD6] does not by itself identify
+  a file offset or prove where/how the data is initialized.
+- The runtime table's exact contents and initialization path remain
+  unresolved.
+
+Methodological note
+-------------------
+Disassembly offsets must be reported in one explicitly stated
+address space:
+1. file offset,
+2. MZ load-module offset,
+3. runtime segment:offset.
+
+The earlier reports did not consistently preserve this distinction.
+For the next pass, every candidate read/write reference must be
+checked against the exact instruction bytes and the MZ load-module
+base (file offset 0x0200). No table-store claim will be accepted
+without showing the decoded instruction and its exact bytes.
+
+Next work
+---------
+- Rebuild a complete instruction listing from the load module.
+- Locate every memory operand whose effective displacement is 0x2FD6.
+- Classify each as read, write, or read-modify-write from its opcode.
+- Trace any actual writes to DS:2FD6 and identify their callers.
+- If no writes exist in the static load module, investigate whether
+  the region is initialized by startup/overlay/runtime library code
+  or is supplied through another segment mechanism.
+- Only then reconstruct table contents.
+
+Integrity
+---------
+Read-only inspection of the original ICONMAKE.EXE. No archive member,
+provider, GEO, or TOKEN.DB was modified.
+No PC/GEOS 2.x or FreeGEOS assumptions were used.
