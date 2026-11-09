@@ -102,6 +102,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2257 | Semaphore- und kontextabhängige Synchronisationswrapper identifiziert |
 | Untersuchung 2258 | Warte-/Aufweckpfade und Scheduler-Wartelisten statisch untersucht |
 | Untersuchung 2259 | Objektliste, Speicherfreiliste und Scheduler-Warteliste strukturell getrennt; unterschiedliche Linkfelder belegt |
+| Untersuchung 2260 | Synchronisationsobjekte anhand konkreter Aufruferprofile zugeordnet; Startwerte weiterhin offen |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
@@ -948,3 +949,74 @@ Die untersuchten Codeverweise setzen BX auf die drei Konstanten und rufen die ge
 5. Die initialen Laufzeitwerte sind noch nicht aus dem statischen Codebestand belegt.
 
 **Nächster Schritt 2261:** Den Erzeugungs-/Initialisierungspfad des Datensegments `0E35h) und seine Datenbereiche vor `021Ch) verfolgen. Ziel ist, die Startwerte der Synchronisationsobjekte und des Kontextzeigers `0FB8h) aus einem konkreten Initialisierungspfad nachzuweisen, nicht aus vermuteten Segmentdefaults abzuleiten.
+
+
+## 22. Untersuchung 2261 – MZ-Relokation des Kernel-Datensegments
+
+**Quelle:** unveränderte Datei `GEOWORKS/KERNEL.OLD` aus dem bereitgestellten Archiv. Geprüft wurden MZ-Header, Relokationstabelle und die Bytes im Load-Modul an den Offsets `962Eh), `9630h), `9636h) und `9AD6h–9AE6h).
+
+### 22.1 MZ-Headerwerte
+
+Die 13 ersten MZ-Wortfelder ergeben unter anderem:
+
+| MZ-Feld | Wert | Bedeutung |
+|---|---:|---|
+| `e_crlc` | `0111h` = 273 | Anzahl Relokationseinträge |
+| `e_cparhdr` | `0060h` = 96 | Headerlänge in Paragraphen = 1.536 Bytes |
+| `e_ss` | `0E35h` | initialer SS-Absatzoffset relativ zum Ladeabsatz |
+| `e_sp` | `15B0h` | initialer Stackpointer |
+| `e_ip` | `02B1h` | initialer Instruction Pointer |
+| `e_cs` | `0000h` | initialer CS-Absatzoffset relativ zum Ladeabsatz |
+| `e_lfarlc` | `003Ch` | Beginn der Relokationstabelle |
+
+Der MZ-Header ist 96 Paragraphen lang. Die Dateigröße beträgt 72.688 Bytes; die oben verwendete Disassemblierung beginnt deshalb bei Dateioffset 1.536 und bildet das Load-Modul ab.
+
+### 22.2 Relokationseintrag für den Segmentladehelfer
+
+Die Relokationstabelle enthält einen Eintrag:
+- Offset `962Eh`
+- Segment `0000h`
+- Load-Modul-Adresse `0000:962Eh`
+
+Im unveränderten Load-Modul stehen an diesem Offset die Bytes `35 0E`, also das Wort `0E35h`. Der MZ-Loader addiert bei diesem Relokationseintrag den tatsächlichen Ladeabsatz zum Wort. Der zur Laufzeit verwendete Wert ist daher nicht notwendigerweise das rohe Wort `0E35h), sondern der relocierte Segmentwert `Ladeabsatz + 0E35h`.
+
+### 22.3 Verbindung mit `9630h) und `9636h)
+
+Die beiden überlappenden Ladehelfer lauten im Load-Modul:
+
+- `9630h`: Segmentpräfix `CS:`, dann `mov DS, CS:[962Eh]), anschließend `ret`.
+- `9636h`: Segmentpräfix `CS:`, dann `mov ES, CS:[962Eh]), anschließend `ret`.
+
+Damit laden beide Helfer zur Laufzeit den relocierbaren Segmentwert aus dem MZ-relokierten Wort. Dieser Wert entspricht dem initialen SS-Segmentwert des MZ-Headers, da `e_ss` ebenfalls `0E35h` beträgt.
+
+**Gesichert:** In den durch `9630h)/`9636h) erreichten Pfaden werden DS bzw. ES auf das zur Laufzeit relocierte Segment gesetzt, das der MZ-Header als initiales SS-Segment beschreibt. Die frühere Kurzform „DS=0E35h“ bzw. „ES=0E35h“ beschreibt nur den rohen, vor Relokation im Load-Modul sichtbaren Wert.
+
+### 22.4 Abgrenzung zum direkten Immediate-Wert bei `9AD6h)
+
+Der Scheduler-Initialisierungspfad enthält:
+- `9AD6h): `mov SS, CS:[962Eh]` – nutzt den relocierbaren Wert;
+- `9ADBh): `mov SP,15B0h`;
+- `9ADFh–9AE4h): `mov AX,0E35h`, danach `mov DS,AX` und `mov ES,AX`.
+
+Für das Immediate-Wort `0E35h` bei `9AE0h) wurde kein MZ-Relokationseintrag gefunden. Es ist daher im Load-Modul ein nicht relocierter Literalwert. Ohne einen Beleg für die tatsächliche Ladeabsatz-/Ladeadresskonvention des GeoWorks-Kernel-Loaders darf dieser Pfad nicht mit dem relocierbaren Segmentwert des Helfers gleichgesetzt werden.
+
+**Offen:** Ob der Kernel in der vorgesehenen Laufzeitumgebung stets an einem Ladeabsatz ausgeführt wird, bei dem der Literalwert `0E35h` mit dem relocierbaren SS-Segment zusammenfällt, ist durch die Kerneldatei allein nicht nachgewiesen. Das muss über den tatsächlichen GeoWorks-Loader bzw. einen Laufzeitdump geprüft werden.
+
+### 22.5 Korrekturregel für frühere Untersuchungen
+
+Für die bisherigen Abschnitte zu `05AEh), `05B2h), `05B8h/05BAh), `0E48h), `0FB8h) und den Synchronisationsobjekten gilt:
+
+- Bei Zugriffen nach einem Aufruf von `9630h) oder `9636h) sind die Offsets als Offsets im relocierbaren Kernel-Datensegment zu lesen. Die Segmentbasis ist der zur Laufzeit aus `CS:[962Eh]` geladene Wert.
+- Die Schreibweise `0E35h:Offset` in den vorherigen Untersuchungen ist als verkürzte Bezeichnung des im MZ-Header hinterlegten Segmentdisplacements zu verstehen, nicht als bewiesene absolute Laufzeitadresse.
+- Direkte Segment-Immediate-Werte wie bei `9ADFH) sind getrennt zu behandeln und nur dann als identisch zu interpretieren, wenn die Loader-Ladeadresse verifiziert ist.
+
+### 22.6 Ergebnis Untersuchung 2261
+
+1. `KERNEL.OLD` hat MZ `e_ss=0E35h` und `e_sp=15B0h`.
+2. Die MZ-Relokationstabelle enthält einen Eintrag für Load-Modul-Offset `962Eh`.
+3. Der dortige rohe Wert `0E35h` wird zur Laufzeit vom MZ-Loader um den Ladeabsatz relocierbar angepasst.
+4. Die Helfer `9630h) und `9636h) laden DS/ES aus genau diesem relocierbaren Wort.
+5. Der direkte Immediate-Wert `0E35h` bei `9ADFH) ist nicht relociert und darf ohne Loaderbeleg nicht mit dem relocierbaren Wert gleichgesetzt werden.
+6. Frühere Segmentangaben in diesem Dossier werden durch diese Präzisierung als Offset-/Displacement-Bezeichnungen interpretiert, sofern der Zugriff über die Segmentladehelfer erfolgt.
+
+**Nächster Schritt 2262:** Den GeoWorks-Ladepfad bzw. Kernel-Startvertrag untersuchen, um die tatsächliche Ladeabsatzkonvention zu bestimmen und den direkten Immediate-Segmentwert bei `9ADFH) gegen den relocierbaren Wert zu prüfen. Danach kann die Segmentnotation im Dossier endgültig vereinheitlicht werden.
