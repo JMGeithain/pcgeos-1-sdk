@@ -2969,3 +2969,77 @@ Die genaue interne Struktur des referenzierten Blocks sowie die symbolischen Nam
 **Quellenbasis:** Bytegenaue statische Disassemblierung des aus `GEOWORKS.zip` extrahierten deutschen Originalkernels `GEOWORKS/KERNEL.OLD`; Load-Image-Offsets `0x1CF7–0x1D98`, `0x1D9C–0x1DC1`, `0x209C–0x20C8` und `0x6E87`. Die Bytes wurden mit `objdump -D -b binary -mi8086 -M intel` ab Load-Image-Beginn disassembliert. Keine Laufzeitbestätigung.
 
 **Korrekturstatus:** 2228 wird hinsichtlich der anfänglichen Allokationswerte teilweise wiederhergestellt; 2229 wird hinsichtlich der pauschalen Deskriptorzeiger-Deutung zurückgenommen. Unverändert bleiben die getrennte DWORD-Dateioffsettabelle ab `DS:003C` und die Relokationszähltabelle ab `DS:003E`. Originaldateien und SDK-Quelltexte unverändert; kein `geoTest.geo` erstellt.
+
+
+## Untersuchung 2231 – Handle-Größe und GEODE-Ressourcenauflösung
+
+**Untersuchungsgrundlage:** Originaldatei `KERNEL.OLD` aus dem vom Nutzer bereitgestellten `GEOWORKS.zip`; disassembliertes Load-Image `/tmp/kernel.bin` mit GNU `objdump -D -b binary -mi8086 -M intel`. Die folgenden Adressen sind Offsets im Load-Image, nicht Dateioffsets der vollständigen EXE.
+
+### 1. Kernel-Datensegment-Kontext
+
+Die Hilfsroutinen sind jetzt bytegenau identifiziert:
+
+- `0x9630`: `mov ds, WORD PTR cs:[0x962E]`; danach `ret`.
+- `0x9636`: `mov es, WORD PTR cs:[0x962E]`; danach `ret`.
+
+Sie setzen also jeweils das Kernel-Datensegment in DS bzw. ES. Sie sind keine Speicherallokatoren und keine GEODE-spezifischen Deskriptor-Leser.
+
+### 2. Bedeutung von `[BX+2]` im Pfad `0x209C`
+
+In `0x209C` geschieht nach dem DS-Kontextwechsel:
+
+```asm
+20A1  call 0x9630
+20A4  mov  cx,[bx+2]
+20A7  shl  cx,1
+20A9  shl  cx,1
+20AB  shl  cx,1
+20AD  shl  cx,1
+20AF  mov  dx,ax
+20B1  call 0x20CB
+```
+
+Damit wird das WORD `[BX+2]` mit 16 multipliziert und als Byte-Länge in CX weiterverwendet.
+
+Die Herkunft dieses Feldes ist durch den Allokationspfad `0x7363` zusätzlich belegt: Nach dem Aufrunden der angeforderten Bytezahl auf 16-Byte-Absätze ruft der Code bei gesetztem CL-Bit 1 `0x6D96` auf und speichert den zuvor berechneten Absatzwert anschließend mit `pop WORD PTR [BX+2]`. Die Aufrundung erfolgt unmittelbar zuvor durch `(AX+15) >> 4`. Damit ist `[BX+2]` in diesem Handle-Kontext die gespeicherte Blockgröße in 16-Byte-Absätzen; `0x209C` rechnet sie wieder in Bytes um.
+
+**Wichtige Einschränkung:** Diese Aussage gilt für den hier verfolgten Kernel-Handle-Kontext. Sie ist keine pauschale Aussage über jedes beliebige Datenobjekt, das ein beliebiger Codepfad über BX adressiert.
+
+### 3. Was `0x20CB` tatsächlich auflöst
+
+Die Routine `0x20CB` erhält den Handle in BX und arbeitet folgendermaßen:
+
+1. Sie wechselt mit `0x9636` in das Kernel-Datensegment (ES).
+2. Sie liest aus dem Handle-Datensatz den WORD-Zeiger bei `ES:[BX+8]` nach DI.
+3. Sie prüft das Byte `ES:[DI+1]`; bei einem Wert ab `0xF0` bricht die Suche mit Carry ab.
+4. Andernfalls lädt sie das Segment aus `ES:[DI]` nach ES.
+5. In diesem Segment liest sie den Ressourcen-Tabellenzeiger aus `ES:[0x3A]` und die Anzahl aus `ES:[0x38]`.
+6. Sie sucht den ursprünglichen Handlewert BX als WORD in dieser Tabelle.
+7. Bei Treffer liefert sie AX = Segment der gefundenen GEODE-Datenstruktur und BX = nullbasierter Tabellenindex. Bei Fehlschlag wird Carry gesetzt.
+
+Der Trefferindex wird in `0x209C` mit zwei multipliziert (`SI = index * 2`). Der Aufrufer setzt DS auf das von `0x20CB` gelieferte GEODE-Segment und ruft `0x20FE` auf. Zusammen mit dem zuvor aus dem Handle-Datensatz ermittelten Längenwert wird so die zugehörige Ressource über ihre GEODE-Ressourcentabelle und den Dateioffset-/Relokationspfad geladen.
+
+### 4. Abgleich mit weiteren Aufrufern
+
+Der Suchhelfer wird nicht nur aus `0x209C` verwendet:
+
+- Bei `0x868E–0x86B0` wird ein Handle-Kontext vorbereitet, `[BX+2]` separat gesichert und anschließend `0x20CB` aufgerufen. Der Aufrufer verwendet das Ergebnis als GEODE-Segment und Ressourcenindex.
+- Bei `0x880C–0x8818` wird `0x20CB` ebenfalls als Handle-zu-GEODE-Ressourcenindex-Auflösung verwendet.
+- Bei `0x8E2E–0x8E3B` wird der Rückgabestatus geprüft und das gelieferte Segment ES gesetzt; auch dort wird das Ergebnis anschließend als Ressourcenbezug weiterverarbeitet.
+
+Das stützt die Interpretation von `0x20CB` als Zuordnung eines Kernel-Handles zu einem Eintrag in einer GEODE-Ressourcentabelle. Der Code beweist an dieser Stelle die Zuordnung; eine weitergehende Bezeichnung als „Sharing“, „Caching“ oder „Deduplizierung“ wäre ohne vollständige Analyse der jeweiligen Aufrufer zu weitgehend.
+
+### 5. Verhältnis der beiden Ladepfade
+
+- Der Sonderpfad `0x1D9C` liest für den Ressourcenindex 1 (SI = 2) einen Handle aus dem bereits aufgebauten Ressourcenarray und verwendet dessen Laufzeitdaten, um eine Größe zu bestimmen; anschließend folgt `0x20FE`.
+- Der allgemeine Pfad `0x209C` erhält einen Handle in BX, liest dessen Absatzgröße aus `[BX+2]`, löst über `0x20CB` den zugehörigen GEODE-Ressourceneintrag auf und lädt/relokiert über `0x20FE`.
+
+Beide Pfade benutzen somit die GEODE-Ressourcentabelle und den gemeinsamen Datei-/Relokationsleser, aber sie gewinnen Ressourcenindex und Längeninformation auf unterschiedlichen Wegen. Die genaue semantische Sonderrolle des ersten Ressourcenblocks bleibt gesondert zu untersuchen.
+
+### 6. Status und offene Punkte
+
+**Gesichert:** `[BX+2]` ist im hier untersuchten Handle-Datensatz eine Absatzgröße; `0x20CB` sucht den Handle in einer GEODE-Ressourcentabelle und liefert Segment plus Tabellenindex; `0x9630/0x9636` stellen den Kernel-Datenkontext her.
+
+**Noch offen:** die genaue Bedeutung und Herkunft des Handle-Feldes bei `[BX+8]`, die Bedeutung des Grenzwerts `0xF0` in `[DI+1]`, sowie die vollständige semantische Rolle des Sonderpfads `0x1D9C`. Bis zur Klärung werden diese Felder nicht mit spekulativen Symbolnamen versehen.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
