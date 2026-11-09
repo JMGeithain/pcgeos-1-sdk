@@ -1,0 +1,74 @@
+ICONMAKE.EXE – Korrektur der Instruktionsstart-Offets
+Untersuchung 2330
+Stand: 2026-11-09
+
+Anlass
+Bei einer erneuten bytegenauen Prüfung der Originaldatei ICONMAKE.EXE
+wurden mehrere in den bisherigen Berichten 2328/2329 genannte
+Instruktionsstart-Adressen um ein bis zwei Bytes falsch zugeordnet.
+Die Rohbytes sind maßgeblich. Diese Korrektur ersetzt die betreffenden
+Adressangaben, nicht automatisch die inhaltlichen Schlussfolgerungen.
+
+Quelle
+Originaldatei aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Größe 19.477 Bytes; MZ-Header 0x200 Bytes.
+Die Offsets in diesem Bericht beziehen sich auf das geladene Modul.
+
+1. Schreibzugriffe auf DS:2FD6
+Bytefolge bei Moduloffset 0x18F6:
+  88 87 D6 2F
+Instruktion beginnt bei 0x18F6:
+  MOV byte ptr [BX+2FD6h],AL
+
+Bytefolge bei Moduloffset 0x1912:
+  88 9F D6 2F
+Instruktion beginnt bei 0x1912:
+  MOV byte ptr [BX+2FD6h],BL
+
+2. Lesezugriffe auf DS:2FD6
+Die fünf Bytefolgen mit Displacement D6 2F wurden erneut auf
+Instruktionsgrenzen geprüft. Die bestätigten Ladeinstruktionen beginnen
+bei:
+  0x1BA3: 8A 87 D6 2F  MOV AL,[BX+2FD6h]
+  0x1CE2: 8A 87 D6 2F  MOV AL,[BX+2FD6h]
+  0x1CF0: 8A 87 D6 2F  MOV AL,[BX+2FD6h]
+
+Die beiden früher genannten Werte 0x1BA2 und 0x1CE4 sind keine
+Instruktionsstart-Adressen. 0x1CE4 ist das dritte Byte der
+Instruktion bei 0x1CE2 (das Displacement-Byte D6).
+
+3. Kontext des Konvertierungspfads
+Der erste Lesezugriff bei 0x1BA3 folgt unmittelbar auf:
+  0x1BA0: 83 E3 0F   AND BX,000Fh
+  0x1BA3: 8A 87 D6 2F   MOV AL,[BX+2FD6h]
+Damit wird ein auf 0..15 begrenzter BX-Index als Index in die
+16-Byte-Tabelle verwendet.
+
+Der Bereich 0x1CE2 und 0x1CF0 enthält ebenfalls zwei Ladezugriffe
+auf dieselbe Tabelle. Sie liegen innerhalb der zuvor identifizierten
+Nibble-Konvertierungssequenz. Das stützt die Verbindung zwischen
+Mapping-Tabelle und Pixel-/Nibble-Umsetzung. Die vollständige
+Bedeutung der umgebenden Bitoperationen ist weiterhin separat zu
+dokumentieren.
+
+4. Korrektur der Darstellung in Bericht 2328/2329
+- Der Store der ersten Mapping-Tabelle beginnt bei 0x18F6, nicht 0x18F7.
+- Die Ladeinstruktionen beginnen bei 0x1BA3, 0x1CE2 und 0x1CF0.
+- Die Adressangaben 0x1BA2 und 0x1CE4 aus älteren Notizen dürfen nicht
+  als Instruktionsanfänge zitiert werden.
+- Die 16-Byte-Tabelle wird weiterhin durch Stores an [BX+2FD6h] und
+  den Indexbereich 0..15 gestützt. Der genaue Kontrollfluss muss bei
+  einer weitergehenden Interpretation berücksichtigt werden.
+
+5. Nächster Schritt
+Die beiden Ladepfade bei 0x1BA3 und 0x1CE2/0x1CF0 werden weiter
+zurückverfolgt. Insbesondere sind die Herkunft des BX-Index und die
+Aufbereitung der zwei Nibbles pro Byte zu bestimmen. Außerdem muss
+der Datenbereich DS:0220h..024Fh bis zu seiner Initialisierung bzw.
+seinem Aufrufer verfolgt werden.
+
+Ergebnisstatus
+Instruktionsgrenzen und direkte Tabellenzugriffe sind bytegenau
+korrigiert. Die genaue Semantik der gesamten Pixelkonvertierung bleibt
+noch in Arbeit.
