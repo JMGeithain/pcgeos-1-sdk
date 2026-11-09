@@ -769,3 +769,52 @@ Die Aufrufe von `0CA5h` in `0BD0h` verwenden denselben Synchronisationsoffset `0
 5. Die genauen symbolischen Namen der drei Synchronisationsobjekte sind nicht belegt.
 
 **Nächster Schritt 2258:** Die drei Synchronisationsobjekte `0186h`, `018Eh` und `0196h` mit ihren Initialisierungs- und Aufrufstellen vergleichen. Zusätzlich die Schedulerpfade `9C19h` und `9C8Bh` so weit verfolgen, dass die Blockier-/Aufweckwirkung und die Bedeutung der jeweiligen Zählergrenzen vollständig belegt sind.
+
+
+## 19. Untersuchung 2258 – Warte- und Aufweckpfade `9C8Bh/9C19h`
+
+**Ziel:** Die in Untersuchung 2257 festgestellten Semaphore-Verzweigungen bis zu den Scheduler-/Kontextpfaden verfolgen. Grundlage sind die Routinen `9C19h`, `9C8Bh`, `9CF6h` und deren Übergänge zu `9B1Ah`/`9B1Bh).
+
+### 19.1 Wartepfad `9C8Bh`
+
+Die Routine sichert DS, SI, DI, CX, Flags, DX, ES und BP. Danach:
+- DS wird über `9630h` auf `0E35h` gesetzt; ES wird aus dem übergebenen AX geladen.
+- Der aktuelle Wert am Semaphore-/Synchronisationswort `ES:[BX]` wird gelesen.
+- Ist eines der unteren vier Bits gesetzt, wird das Wort dekrementiert und der Kontrollfluss geht zum Schedulerpfad `9B1Ah) zurück.
+- Andernfalls prüft die Routine globale Schedulerzustände bei `0FC8h) und den aktuellen Kontext bei `0FB8h).
+- Im regulären Wartefall werden Kontextdaten gesichert: Rücksprung-/Stackinformationen erscheinen in den Feldern `+02h), `+04h) und `+06h) des Kontextknotens. Anschließend wird in den Schedulerstack gewechselt und der Schedulerpfad fortgesetzt.
+- Ein alternativer Pfad verwendet globale Austauschfelder `0FC4h) und `0FC6h), setzt den Synchronisationswert vorübergehend auf `FFFFh) und wartet auf eine Änderung des globalen Signals `0FC3h).
+
+**Gesichert:** `9C8Bh` ist kein gewöhnlicher Rückgabecode. Bei nicht verfügbarem Synchronisationsobjekt sichert sie den aktuellen Ausführungskontext und übergibt die Kontrolle an die Schedulerlogik.
+
+### 19.2 Aufweck-/Freigabepfad `9C19h)
+
+Die Routine sichert ebenfalls umfangreiche Register und Flags, lädt DS auf `0E35h), sperrt Interrupts und prüft den Zähler bei `ES:[BX]):
+
+- Liegt der Wert unter `0010h), wird er erhöht und der Kontrollfluss geht zu `9B1Bh).
+- Andernfalls wird `9CF6h` aufgerufen, um die mit dem Synchronisationsobjekt verbundene Warteliste zu bearbeiten.
+- Die globale Liste wird über `0FC0h) verwaltet; `0FB8h) enthält den aktuellen Kontextzeiger.
+- Die Routine vergleicht das erste Byte der Wartelisteneinträge und verfolgt deren Verknüpfung über das Wort bei `+06h). Der ausgewählte Eintrag wird aus der Liste gelöst bzw. der Kopfzeiger angepasst.
+- Für einen Kontextwechsel werden Segment-/Stackwerte in den Eintragsfeldern `+02h) und `+04h) gespeichert; anschließend wird über den Schedulerpfad weitergeschaltet.
+
+**Gesichert:** `9C19h` verwaltet nicht nur einen Zähler. Sie bearbeitet auch die Warteliste und den aktuellen Kontext; die Liste enthält verkettete Einträge und wird anhand eines Bytewertes sortiert bzw. ausgewählt.
+
+### 19.3 Bedeutung der Zählergrenze
+
+Die Grenze `0010h` wird in `9C19h` ausdrücklich geprüft. Sie ist damit eine reale Grenze der internen Zähler-/Wartelogik. Aus dem Ausschnitt allein folgt jedoch nicht, dass sie die maximale Anzahl gleichzeitig wartender Prozesse darstellt; dafür müsste die vollständige Datenstruktur einschließlich der Alternativpfade und globalen Schedulerzustände ausgewertet werden.
+
+### 19.4 Initialisierung der Synchronisationsobjekte
+
+Im linearen Kernel-Disassembly sind die Offsets `0186h`, `018Eh` und `0196h` als unmittelbare Operanden der Wrapperkonstanten sichtbar. Direkte absolute Initialisierungs-Schreibzugriffe auf genau diese drei Offsets wurden in den bisher untersuchten Codebereichen nicht gefunden. Da `0E35h` ein Laufzeit-Datensegment ist und seine vollständig initialisierte Abbildung nicht aus dem Load-Modul allein rekonstruiert werden kann, wäre die Behauptung, diese Objekte würden nie initialisiert, nicht gerechtfertigt.
+
+**Offen:** Die Herkunft ihrer Anfangswerte muss über Segmentaufbau, Initialisierungstabellen oder indirekte Schreibpfade geklärt werden.
+
+### 19.5 Ergebnis Untersuchung 2258
+
+1. `9C8Bh` sichert im Wartefall den aktuellen Ausführungskontext und übergibt an den Scheduler.
+2. `9C19h` bearbeitet den Zähler und die zugehörige Warteliste; dabei werden verkettete Kontexteinträge untersucht und angepasst.
+3. Die Wartelisteneinträge verwenden mindestens die Felder `+02h), `+04h) und `+06h) für Kontext-/Verknüpfungsinformationen.
+4. Die Zählergrenze `0010h` ist direkt belegt; ihre vollständige Kapazitätsbedeutung bleibt offen.
+5. Die Anfangswerte der drei Synchronisationsobjekte bei `0186h), `018Eh) und `0196h) sind aus dem bisherigen Codeausschnitt nicht sicher rekonstruierbar.
+
+**Nächster Schritt 2259:** Die Initialisierung von Datensegment `0E35h` und die indirekten Schreibpfade auf die Synchronisationsobjekte verfolgen. Parallel prüfen, ob die Knoten bei `05AEh/05B2h` und die Scheduler-Wartelisten denselben Allocator verwenden oder getrennte Datenstrukturen sind.
