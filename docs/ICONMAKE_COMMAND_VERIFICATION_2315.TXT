@@ -1,0 +1,60 @@
+ICONMAKE 1.0 — COMMAND-LINE VERIFICATION
+Investigation 2315
+Date: 2026-11-09
+
+Primary input
+-------------
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.ENG
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+GEOWORKS/ICONS/PAPR.000
+
+The English manual and the executable's embedded ASCII strings were both
+examined. The executable identifies itself as:
+  IconMake 1.0 -=- by Marcus Groeber, May 16 1992
+
+The executable's embedded usage text independently confirms:
+  ICONMAKE x <geos_file>
+      to extract icons to PCX files
+  ICONMAKE m[<transp_color>] [<path>]<tokn>[,<num>] {<PCX_file(s)>...}
+      to make icons from PCX files
+  ICONMAKE w [<path>]<tokn>[,<num>] <ICO_file>
+      to make icons from Windows ICO file
+
+The manual gives the concrete extraction naming scheme:
+  <token>_CGA.PCX
+  <token>_HGC.PCX
+  <token>_EGA.PCX
+
+For PAPR.000, the expected output names are therefore:
+  PAPR_CGA.PCX
+  PAPR_HGC.PCX
+  PAPR_EGA.PCX
+
+The documented command to attempt in a DOS environment is:
+  ICONMAKE x PAPR.000
+
+This command is supported both by the manual and the executable's embedded
+usage string. It is not a guess.
+
+Execution status
+----------------
+ICONMAKE.EXE is an MZ MS-DOS executable. The current analysis container has
+no DOSBox, DOSBox Staging, DOSEMU, or Wine executable available (checked
+with command lookup). Therefore ICONMAKE could not be executed here.
+No PCX output files were generated, and no claim is made that extraction
+succeeded.
+
+What the source says about the output
+-------------------------------------
+The manual says the extraction command writes icon definitions to PCX files
+using the token-based names above. It does not promise that every source
+provider contains all three icon forms. The executable's usage string
+confirms the extraction command but does not by itself document the
+individual image formats.
+
+Integrity
+---------
+ICONMAKE.EXE and PAPR.000 were extracted from GEOWORKS.zip to separate
+working files for inspection. The archive and its members were not changed.
+No output PCX files were created. No GEO was built and TOKEN.DB was not
+modified. No PC/GEOS 2.x or FreeGEOS definitions were used.
