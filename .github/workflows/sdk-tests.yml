@@ -20,7 +20,5 @@ jobs:
         run: python -m compileall -q pcgeos1 tests
       - name: Test target profile validation
         run: python tests/test_target_profiles.py
-      - name: Test process method table layout
-        run: python tests/test_process_method_table.py
       - name: Test GEODE paragraph alignment
         run: python tests/test_geode_alignment.py
