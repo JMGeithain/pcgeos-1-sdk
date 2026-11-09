@@ -10,5 +10,5 @@
   "sources": ["src/app.c"],
   "help": "src/help.txt",
   "native_stack_bytes": 8192,
-  "allow_unknown_target": true
+  "target_profile": "geoworks-1.2.8-de"
 }
