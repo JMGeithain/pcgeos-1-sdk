@@ -110,6 +110,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2265 | GEOTEST-Quellprojekt und Zielarchiv-Vorbereitung veröffentlicht |
 | Untersuchung 2266 | Byteidentitätsprüfung deckt Abweichungen zwischen lokalem Build-Unterbau und GitHub-HEAD auf; Reproduzierbarkeit ausdrücklich nicht bestätigt |
 | Untersuchung 2267 | Test-Gates und Selftest-Annahmen gegen das deutsche Zielprofil geprüft; Standard-Selftest scheitert erwartungsgemäß an strikten Referenzhashes |
+| Untersuchung 2268 | Zielprofil-Integrität geprüft: `allow_unknown_target` umgeht den Hashschutz vollständig; abgesicherter Profilvertrag erforderlich |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1453,3 +1454,61 @@ Ein globales Abschalten von Hashprüfungen ist ausdrücklich nicht vorgesehen. D
 6. Standardprofil und deutsches Experimentalprofil müssen getrennte, ausdrücklich benannte Testpfade behalten.
 
 **Nächster Schritt 2268:** Die vollständigen Quelltexte des aktuellen Repository-HEAD in einer sauberen Arbeitskopie bereitstellen und deren Git-Blob-SHAs vor dem Build prüfen. Dann zuerst den profilunabhängigen GEODE-Parser-Regressionstest und `doctor` ausführen, danach das deutsche Profil vorbereiten und den GEOTEST-Build mit exakt der veröffentlichten C-Quelle starten. Die Standard-Selftests bleiben unverändert und werden separat nur mit dem bekannten Referenzarchiv ausgeführt.
+
+
+## 29. Untersuchung 2268 – Integritätsgrenze zwischen Zielarchiv-Vorbereitung und Buildsystem
+
+**Ziel:** Prüfen, ob die in Untersuchung 2265 veröffentlichte Vorbereitung des deutschen Zielarchivs beim eigentlichen Build zwingend durchgesetzt wird oder nur eine dokumentierte Empfehlung ist. Untersucht wurden `tools/prepare_geoworks_1_2_8_de.py`, `examples/geotest/project.json`, `examples/geotest/README.md`, `pcgeos1/buildsys.py` und `pcgeos1/target.py` des GitHub-HEAD.
+
+### 29.1 Schutzwirkung des Vorbereitungsskripts
+
+Das veröffentlichte Skript prüft vor dem Schreiben:
+- den exakten Archivmember für SPINTEXT unter `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO`;
+- die drei festgelegten Mitglieder für NOTEPAD, VIEWER und TERM;
+- den SHA-256-Wert jeder dieser vier Dateien.
+
+Bei Abweichung bricht das Skript ab. Es schreibt anschließend eine neue ZIP-Datei mit den vom SDK erwarteten vier Zielpfaden. Das Originalarchiv wird nicht überschrieben.
+
+**Gesichert:** Wird das Skript tatsächlich ausgeführt, ist die Eingabe der vier Templates auf die dokumentierten Hashes gepinnt.
+
+### 29.2 Keine Verknüpfung zwischen Skript und Builder
+
+Der Buildpfad in `pcgeos1/buildsys.py` ruft `load_templates(gwp, strict=not cfg.get('allow_unknown_target', False))` auf. Das Projekt `examples/geotest/project.json` setzt `allow_unknown_target=true`.
+
+In `pcgeos1/target.py` bedeutet `strict=False), dass die SHA-256-Prüfung gegen `KNOWN` übersprungen wird. Der Builder prüft weiterhin:
+- ob genau ein Archivmember pro erwarteter Endung vorhanden ist;
+- ob die Geode-Datei vom Parser akzeptiert wird;
+- ob ihre Strukturgrenzen plausibel sind.
+
+Er prüft jedoch nicht, ob die vier Dateien zuvor vom veröffentlichten Vorbereitungsskript verifiziert wurden. Das Skript schreibt auch kein maschinenlesbares Profilmanifest in die ZIP-Datei, das der Builder anschließend validieren könnte.
+
+### 29.3 Konsequenz
+
+Die Dokumentation sagt, dass die Vorbereitungsroutine der erforderliche Eingangsschritt ist. Das Buildsystem erzwingt diesen Ablauf aber nicht. Wer `allow_unknown_target=true` verwendet, kann direkt ein beliebiges Archiv mit passenden Pfadnamen und parsebaren GEODE-Dateien übergeben.
+
+Das ist keine Aussage, dass das aktuelle GEOTEST-Projekt tatsächlich mit beliebigen Dateien gebaut wurde. Es ist eine konkrete Integritätslücke in der technischen Durchsetzung der dokumentierten Profilregel.
+
+### 29.4 Anforderungen an die Profilabsicherung
+
+Ein sicherer Profilvertrag sollte mindestens enthalten:
+
+1. **Profil-ID:** `geoworks-1.2.8-de`.
+2. **Vier Quellpfade:** die tatsächlich geprüften Originalpfade.
+3. **Vier SHA-256-Werte:** die Werte aus Untersuchung 2262.
+4. **Vier normalisierte Zielpfade:** die vom Builder erwarteten Memberpfade.
+5. **Parser-Mindestbedingungen:** GEOS-Format 1 und Kernelprotokoll 622.3; UI-Protokoll der tatsächlich verwendeten UI-Importe.
+6. **Builder-Prüfung:** Der Build muss das Profilmanifest selbst lesen und alle Hashes erneut prüfen. Ein bloßer Schalter `allow_unknown_target` darf nicht als Ersatz dienen.
+7. **Strikte Trennung:** Das unveränderte Standardprofil bleibt hashgebunden; das deutsche Profil wird als eigenes, explizit benanntes Experimentalprofil behandelt.
+
+Ein Manifest kann als Sidecar-Datei oder als zusätzlicher Eintrag in der normalisierten ZIP-Datei abgelegt werden. Bei einer ZIP-internen Variante muss der Builder den Manifestinhalt selbst gegen einen im SDK hinterlegten erwarteten Profilhash prüfen, damit ein beliebig verändertes Manifest nicht als Vertrauensanker dient.
+
+### 29.5 Ergebnis Untersuchung 2268
+
+1. Das Vorbereitungsskript prüft die vier deutschen Template-Hashes korrekt, bevor es die normalisierte ZIP-Datei schreibt.
+2. Der Builder weiß derzeit nicht, ob das Skript ausgeführt wurde.
+3. `allow_unknown_target=true` schaltet die Template-Hashprüfung vollständig ab.
+4. Die Build-README beschreibt einen zwingenden Vorbereitungsschritt, den die Build-Engine technisch nicht erzwingt.
+5. Vor einer reproduzierbaren Freigabe des deutschen Zielprofils muss ein maschinenprüfbarer Profilvertrag in die Build-Engine integriert werden.
+6. Die vorhandene GEOTEST-Datei bleibt ein experimenteller Vorab-Build; eine abgesicherte Profilprüfung ist noch nicht erfolgt.
+
+**Nächster Schritt 2269:** Ein kleines, rückwärtskompatibles Design für `target_profile` erarbeiten: Standardprofil `geoworks-pro-1.2` bleibt unverändert; `geoworks-1.2.8-de` erhält eine eigene Hash-/Pfadmanifestdatei. Danach Unit-Tests für gültiges Profil, falschen Hash, fehlenden Member, doppelten Member und unbekannte Profil-ID ergänzen. Erst nach diesen Tests den deutschen GEOTEST-Build neu ausführen.
