@@ -1909,7 +1909,7 @@ Die GitHub-Actions-Pipeline wurde um tests/test_process_method_table.py ergänzt
 - zwei Prozessmethoden-Tests;
 - GEODE-Absatz-/Relokationsregression.
 
-Der vollständige CI-Lauf für den aktuellen Commit wird nach der Dokumentationsaktualisierung geprüft. Der Host-Build ist weiterhin aus der rekonstruierten lokalen Buildkopie erzeugt; vollständige Byteidentität aller Quelldateien mit GitHub-HEAD ist nicht nachgewiesen. Ein echter Start in GeoWorks 1.2 steht weiterhin aus.
+GitHub Actions Run `42608173374` auf Commit `1b350e06e6d72cef80b47e207920d62e85572ac7` ist `completed / success`. Python-Compile, neun Zielprofiltests, zwei Prozessmethoden-Tests und GEODE-Absatz-/Relokationsregression bestanden. Der Host-Build ist weiterhin aus der rekonstruierten lokalen Buildkopie erzeugt; vollständige Byteidentität aller Quelldateien mit GitHub-HEAD ist nicht nachgewiesen. Ein echter Start in GeoWorks 1.2 steht weiterhin aus.
 
 ### 36.5 Ergebnis Untersuchung 2275
 
