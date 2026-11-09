@@ -1,0 +1,81 @@
+ICONMAKE DS:2FD6 — DYNAMIC TABLE INITIALIZATION FOUND
+Investigation 2323
+Date: 2026-11-09
+Scope: Original GeoWorks 1.x ICONMAKE.EXE.
+
+Input and executable layout
+---------------------------
+Original archive member:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+
+Verified MZ facts:
+- file size: 19,477 bytes
+- MZ header size: 0x20 paragraphs = 0x0200 bytes
+- load-module size: 18,965 bytes
+- entry CS:IP = 0000:1D24
+- initial SS:SP = 0856:3000
+- relocation count: 10
+
+Address-space rule
+------------------
+For this MZ executable, load-image offset N corresponds to file offset
+0x0200 + N, as long as N is within the load module. Thus load-image offset
+0x2FD6 corresponds to file offset 0x31D6. However, a DS-relative operand
+[2FD6+BX] is a runtime data-segment address, not automatically a file
+offset. The runtime DS value and any dynamic writes must be considered.
+
+New decisive observation
+------------------------
+The disassembly contains WRITE references to DS:2FD6, not only READ
+references:
+
+- load-image offset 0x1CF7: MOV [BX+2FD6], AL
+- load-image offset 0x1D12: MOV [BX+2FD6], BL
+
+The read references include:
+- load-image offset 0x1CE6: MOV AL,[BX+2FD6]
+- load-image offset 0x1CF2: MOV AL,[BX+2FD6]
+- load-image offset 0x1FA3: MOV AL,[BX+2FD6]
+- load-image offset 0x20E4: MOV AL,[BX+2FD6]
+- load-image offset 0x20F0: MOV AL,[BX+2FD6]
+
+Therefore DS:2FD6 is written at runtime and subsequently read. It is
+not valid to interpret the raw bytes at file offset 0x31D6 as the
+initialized lookup-table contents. Those file bytes are part of the
+static load image, but runtime code populates/overwrites the DS-relative
+area.
+
+This is the first concrete lead to the table initialization logic:
+the stores at 0x1CF7 and 0x1D12 must be traced backwards to identify
+the loop bounds, source values, and translation rules.
+
+Verified conversion reads
+-------------------------
+At load-image offsets 0x1CE6 and 0x1CF2, the code reads from
+DS:[BX+2FD6], with BX set from the low and high nibbles of the source
+byte. The values are then packed into a byte/word and passed to 0x1694.
+This confirms that the dynamically written region is used as a lookup
+table in the nibble conversion path.
+
+What remains unresolved
+----------------------
+- Exact 16-entry table contents at runtime.
+- Whether the two write loops initialize the same or separate table ranges.
+- Meaning of the table mapping (palette remap vs device-specific index map).
+- Whether routine 0x1694 writes to an intermediate buffer or final GEODE
+  resource.
+- Exact connection between this path and the R6 serialization.
+
+Next actions
+------------
+1. Disassemble control flow around stores at 0x1CF7 and 0x1D12.
+2. Identify source registers and loop limits before each store.
+3. Reconstruct the complete runtime table from the initialization loops.
+4. Trace 0x1694 output buffer and final file writer.
+5. Correlate output bytes with the extracted PAPR/GDOC R6 resources.
+
+Integrity
+---------
+Read-only analysis. No original archive members, ICONMAKE.EXE, provider
+files, GEO files, or TOKEN.DB were modified.
+No PC/GEOS 2.x or FreeGEOS assumptions were used.
