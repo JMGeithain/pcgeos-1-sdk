@@ -104,6 +104,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2259 | Objektliste, Speicherfreiliste und Scheduler-Warteliste strukturell getrennt; unterschiedliche Linkfelder belegt |
 | Untersuchung 2260 | Synchronisationsobjekte anhand konkreter Aufruferprofile zugeordnet; Startwerte weiterhin offen |
 | Untersuchung 2261 | MZ-Header und Relokation `CS:962Eh` ausgewertet; Segmentnotation präzisiert |
+| Untersuchung 2262 | GEOWORKS.zip auf SDK-Pfade, Hashes, Formate und Protokolle geprüft; direkt nicht kompatibel, Profilpfad möglich |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
@@ -1104,3 +1105,84 @@ Eine temporäre Archivkopie mit angepasstem SPINTEXT-Pfad könnte diesen ersten 
 5. Ein separates deutsches Zielprofil muss Pfade und Hashes ausdrücklich dokumentieren und die verwendeten UI-Ressourcen vor dem Build strukturell vergleichen.
 
 **Nächster Schritt 2263:** Ein explizites Zielprofil `geoworks-1.2.8-de` für das Nutzerarchiv vorbereiten. Zunächst SPINTEXT-Ressourcen R03/R04 und VIEWER-Ressourcen R0C/R1C gegen die vom SDK erwarteten Objekt-/LMem-Annahmen prüfen; erst nach bestandener Prüfung die Pfadauflösung profilabhängig ergänzen. Das strikte Standardprofil bleibt unverändert.
+
+
+## 24. Untersuchung 2263 – Strukturvergleich der tatsächlich verwendeten UI-Templates
+
+**Ziel:** Nach dem Gesamtdatei-Hash-Audit aus Untersuchung 2262 nicht bei der Geode-Datei als Ganzes stehen bleiben. Der SDK-Build übernimmt aus SPINTEXT die Ressourcen R03/R04 und aus VIEWER R0C/R1C. Deshalb werden genau diese vier Ressourcen und alle vom aktuellen `build_basic_ui()` angesprochenen Handles im Nutzerarchiv geprüft.
+
+### 24.1 Auswahl des SPINTEXT-Kandidaten
+
+Das Nutzerarchiv enthält zwei SPINTEXT-Dateien. Für den Kandidaten `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` ergeben sich:
+
+| Ressource | Länge | Feld 08h | Feld 14h | Handle-Anzahl |
+|---|---:|---:|---:|---:|
+| R03 | `01E0h` | `01E0h` | `01E0h` | 16 |
+| R04 | `0150h` | `014Ch` | `0150h` | 6 |
+
+Diese Werte stimmen mit den Messwerten des Referenz-Audits vom 05.11.2026 überein. Auch die Handle-Flagfolgen stimmen exakt überein:
+
+- R03: `00 02 03 02 03 02 07 02 02 07 02 07 02 03 02 07`
+- R04: `00 03 02 02 02 00`
+
+Die andere Datei `GEOWORKS/WORLD/SPINTEXT.GEO` hat bei R03 eine Ressourcenlänge von `01F0h` und zusätzliche 16 Bytes hinter dem bei `14h` angegebenen Wert. Ihre Handle-Flagfolge ist gleich, aber für die erste Profilbildung ist die Datei aus `PROGRAMM.E` der bessere Kandidat, weil Größe und beide Headerfelder dem Referenz-Audit exakt entsprechen.
+
+### 24.2 SPINTEXT-Handles, die der SDK-Generator verwendet
+
+Die aktuelle Funktion `build_basic_ui()` greift zu auf:
+
+| Ressource | Handle | Flag | Chunk-Datenlänge | SHA-256 der Chunk-Daten |
+|---|---:|---:|---:|---|
+| R03 | `24h` | 03h | 21h | `a77f44d72ae4c9f2111cef3b71ea573535dd37f91e6b973730d5b68281cd1620` |
+| R03 | `26h` | 02h | 08h | `7395b05d7f8c12284d825b3af6bc2619dd756b30233e2708dd373c498b9b369b` |
+| R03 | `3Eh` | 07h | 47h | `69dbb0e67fddc64b0dd30b77622203e6c710d3be6c174aadb0bc6ad36fe38715` |
+| R04 | `22h` | 03h | C6h | `625ad7d42b57ad99f0891f5615a2e6363d23707232b226f1cf862d515c66651f` |
+| R04 | `24h` | 02h | 2Ah | `b363331aad64058ddf5cfb3a1304a83a72eefbd6617b5e5a9aea9fe1e648a865` |
+| R04 | `26h` | 02h | 08h | `14130b018aef8b11e4d66efc55cfb98b4578d68a0c374f552faefcaba76d0229` |
+| R04 | `28h` | 02h | 16h | `e8407786ed8b9de434e88f4793b4c2c40896f000d2a80556da6aa099bf599230` |
+
+Die Handle-Offsets und Chunk-Längen liegen innerhalb der jeweiligen LMem-Ressourcen. Die Daten wurden mit der im Repository dokumentierten Handle-/Chunk-Auswertung ausgelesen.
+
+### 24.3 VIEWER-Ressourcen
+
+Für VIEWER R0C und R1C stimmen die Handle-Anzahlen und die im Referenz-Audit dokumentierten Flagfolgen exakt überein:
+
+- R0C: 22 Handles; Flags `00 03 02 03 02 03 02 03 02 03 02 02 02 02 03 02 03 02 03 02 03 02`.
+- R1C: 30 Handles; Flags `00 02 03 02 03 02 03 02 07 07 02 02 03 02 02 03 02 02 03 02 02 03 02 02 03 02 02 03 02 02`.
+
+R0C besitzt im Nutzerarchiv eine größere rohe Ressourcengröße (`16A0h)) als die im Referenz-Audit gemessene LMem-Länge (`1440h)). Das Feld bei Offset `14h` enthält jedoch `1440h`; zusätzliche Daten liegen hinter dem LMem-Bereich. Der vom SDK verwendete Satz an Handles `22h), `32h), `36h), `3Ch), `44h), `48h) und `40h` liegt vor dem zusätzlichen langen Textchunk bei Handle `34h`. Der Generator verwendet Handle `34h` nicht.
+
+R1C hat in der Nutzerdatei die Länge `02C0h`; die Felder bei `08h) und `14h` sind beide `02C0h), passend zum Referenz-Audit.
+
+### 24.4 Bytevergleich der bereits dokumentierten Objektpaare
+
+Zwei Bytevergleiche stimmen exakt mit den im Referenz-Audit dokumentierten Befunden überein:
+
+**VIEWER R1C, Handles 0032h und 0038h:** Beide Chunks sind 29 Bytes lang. Unterschiede liegen ausschließlich bei:
+- Offset `0Ch`: `38h` gegenüber `3Eh`
+- Offset `12h`: `1Bh` gegenüber `19h`
+- Offset `14h`: `34h` gegenüber `3Ah`
+- Offset `18h`: `36h` gegenüber `3Ch`
+
+**SPINTEXT R03, Handles 0032h und 0036h:** Beide Chunks sind 31 Bytes lang. Unterschiede liegen ausschließlich bei:
+- Offset `0Ch`: `36h` gegenüber `2Dh`
+- Offset `14h`: `34h` gegenüber `38h`
+- Offset `1Dh) und `1Eh`: jeweils `FFh` gegenüber `00h`
+
+Damit sind die im Referenz-Audit beschriebenen Strukturmerkmale in den deutschen Dateien reproduziert.
+
+### 24.5 Aussagegrenze
+
+Die vier Ressourcen besitzen die erwarteten Handle-Anzahlen und Flagfolgen; die zwei dokumentierten Objektpaare reproduzieren die Referenzunterschiede bytegenau. Das ist deutlich stärker als eine bloße Übereinstimmung der Protokollnummern.
+
+Es ist dennoch kein vollständiger Bytevergleich gegen die ursprünglichen Referenzdateien, weil diese Referenzdateien hier nicht als Binärdateien vorliegen. Die neu berechneten Chunk-Hashes dokumentieren die konkrete deutsche Ausgangsbasis und können künftig als festes Zielprofil dienen. Die Laufzeitsemantik der kopierten privaten Objekt-Chunks ist damit nicht getestet.
+
+### 24.6 Ergebnis Untersuchung 2263
+
+1. `PROGRAMM.E/SPINTEXT.GEO` ist für R03/R04 der strukturell passende Kandidat; Größe, LMem-Headerwerte und Handle-Flags entsprechen dem Referenz-Audit.
+2. VIEWER R0C/R1C besitzen die dokumentierten Handle-Anzahlen und Flagfolgen.
+3. Die vom SDK verwendeten Handle-IDs sind vorhanden und ihre Chunkdaten wurden gehasht.
+4. Die beiden bereits dokumentierten Bytevergleichspaare (VIEWER R1C und SPINTEXT R03) stimmen exakt mit den Referenz-Audit-Befunden überein.
+5. Das deutsche Archiv ist daher ein plausibler Kandidat für ein separates SDK-Zielprofil, aber noch nicht als vollständig ABI-kompatibel oder laufzeitgetestet zertifiziert.
+
+**Nächster Schritt 2264:** Einen separaten Zielprofil- und Archivadapter für `geoworks-1.2.8-de` entwerfen, ohne die strikten Standardhashes zu verändern. Vor einer Codeänderung werden die vom Generator verwendeten Chunk-Hashes und Metadaten als explizite Profil-Prüfwerte festgehalten. Anschließend erfolgt ein reiner Host-Build mit vollständigem Buildreport; die resultierende GEO-Datei wird nicht als laufzeitfähig bezeichnet, bevor der echte GEOS-Test erfolgt.
