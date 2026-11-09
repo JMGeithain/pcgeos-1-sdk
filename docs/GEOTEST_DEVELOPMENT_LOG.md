@@ -2110,3 +2110,45 @@ Der Test-Build besitzt weiterhin die oben genannte SHA-256-Prüfsumme und eine D
 **Ergebnis:** GEOTEST 1.0 ist nicht länger nur ein experimenteller Host-Build. Der Nutzer hat die Anwendung erfolgreich in GeoWorks 1.2 gestartet und die sichtbare Hauptfenster-/Help-Funktion bestätigt. Die SDK-Dokumentation wird entsprechend aktualisiert; der Binärbuild selbst bleibt aus Lizenzgründen außerhalb des öffentlichen Repositories.
 
 **Nächster Schritt 2279:** Die dokumentierte Laufzeitprüfung in eine reproduzierbare Test-Checkliste überführen. Danach gezielt View-Klick, Enter, Help-Schaltflächen, Dialog-Close und Anwendungs-Close prüfen und die Ergebnisse einzeln festhalten. Parallel die Quellbyteidentität des Builds mit einem sauberen GitHub-Checkout klären.
+
+
+## 40. Untersuchung 2279 – GEOTEST-Programmsymbol (Token-Icon)
+
+**Datum:** 2026-11-09  
+**Eingabedatei:** `Testbild_48x30_16farben.pcx` (vom Nutzer bereitgestellt)  
+**Bilddaten:** PCX, 48 × 30 Pixel, 16 Farben; verwendete Palettenindizes 0–15.  
+**Zielanwendung:** `GEOTEST.GEO`, Token `GTS1`, Manufacturer-ID `0`.
+
+### 40.1 Formatprüfung
+
+Die PCX-Datei wurde gelesen und dekodiert. Das Bildmaß 48 × 30 und die 16-Farben-Palette entsprechen dem in der mitgelieferten GeoWorks-1.x-Dokumentation zu ICONMAKE beschriebenen EGA/VGA-Iconformat. Die PCX-Datei verwendet alle 16 Indizes. Deshalb wird bei der ICONMAKE-Konvertierung die Transparenz ausdrücklich ausgeschaltet (`m0`), damit kein tatsächlich verwendeter Farbindex ungewollt transparent wird.
+
+### 40.2 Wesentliche Erkenntnis zur Einbindung
+
+Das Programmsymbol wird bei GeoWorks 1.x nicht durch einfaches Anhängen einer PCX-Datei an die ausführbare `.GEO`-Datei eingebunden. Die sichtbaren Programm-Moniker werden über das Token-System bzw. die Token-Datenbank verwaltet. Die mit dem Nutzerarchiv vorhandene Dokumentation `ICONMAKE.DOC` (Marcus Gröber, ICONMAKE 1.0) beschreibt ausdrücklich den Erzeugungsweg über eine zusätzliche Token-Dummy-Datei. Die ebenfalls im Archiv enthaltene `ICONINST.TXT` bestätigt, dass eine solche Datei ein Token mit Icon bereitstellt und dass die Zuordnung über Token-Code und Manufacturer-ID erfolgt.
+
+Die GEOTEST-Datei enthält bereits den Token-Code `GTS1` und die Manufacturer-ID `0` (Headerfelder ab Offset `0x14`). Daher muss das Icon für genau diesen Token erzeugt werden; ein anderes Token oder die Standard-ID 255 wäre nicht die korrekte Zuordnung.
+
+### 40.3 Vorbereitete Konvertierung
+
+Für das vom Nutzer bereitgestellte Bild wurden folgende Hilfsdateien erstellt:
+
+- `GEOTEST_EGA.PCX` – unveränderte PCX-Bilddaten, umbenannt für den Konvertierungslauf;
+- `ERZEUGE_ICON.BAT` – ruft `ICONMAKE m0 GTS1,0 GEOTEST_EGA.PCX` auf;
+- `README_ICON_DE.txt` – beschreibt den 1.x-Tokenweg und die Installation;
+- `GEOTEST.GEO` – unveränderte, zuvor erfolgreich getestete Anwendung.
+
+Erwartete Ausgabe des originalen ICONMAKE-Programms ist `GTS10000.000` (Token `GTS1`, Manufacturer-ID 0). Diese Datei muss neben `GEOTEST.GEO` in den GeoWorks-WORLD-Ordner gelegt werden, damit GeoWorks den Token einlesen kann.
+
+### 40.4 Status und offene Laufzeitprüfung
+
+Die Bilddatei ist geprüft und die korrekte Token-Zuordnung aus dem GEOTEST-Header abgeleitet. Das Konvertierungs- und Installationspaket ist vorbereitet. **Die erzeugte `.000`-Token-Datei und die Anzeige des Icons im GeoManager sind noch nicht verifiziert**, da ICONMAKE hier nicht ausgeführt werden konnte. Deshalb wird nicht behauptet, dass das Icon bereits in GeoWorks angezeigt wird oder in die `.GEO`-Binärdatei selbst eingebettet wurde.
+
+Nach Erzeugung der `.000`-Datei sind folgende Tests erforderlich:
+1. Token-Dummy mit einem GEODE-Parser strukturell prüfen;
+2. Datei neben `GEOTEST.GEO` in den Test-WORLD-Ordner kopieren;
+3. GeoManager den Ordner neu einlesen lassen;
+4. kontrollieren, ob das GEOTEST-Symbol im GeoManager angezeigt wird;
+5. GEOTEST starten und prüfen, dass die Anwendung weiterhin unverändert funktioniert.
+
+**Ergebnis:** Das Icon ist für das richtige GEOTEST-Token vorbereitet. Die abschließende Token-Erzeugung und der sichtbare GeoWorks-1.2-Nachweis stehen noch aus.
