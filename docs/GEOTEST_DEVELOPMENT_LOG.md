@@ -824,3 +824,71 @@ Im linearen Kernel-Disassembly sind die Offsets `0186h`, `018Eh` und `0196h` als
 5. Die Anfangswerte der drei Synchronisationsobjekte bei `0186h), `018Eh) und `0196h) sind aus dem bisherigen Codeausschnitt nicht sicher rekonstruierbar.
 
 **Nächster Schritt 2259:** Die Initialisierung von Datensegment `0E35h` und die indirekten Schreibpfade auf die Synchronisationsobjekte verfolgen. Parallel prüfen, ob die Knoten bei `05AEh/05B2h` und die Scheduler-Wartelisten denselben Allocator verwenden oder getrennte Datenstrukturen sind.
+
+
+## 20. Untersuchung 2259 – Abgrenzung von Objektliste, Freiliste und Scheduler-Warteliste
+
+**Quelle:** reproduzierte Disassemblierung von `KERNEL.OLD`; untersucht wurden `6DACh–6E67h), `11CBh–1227h), `9C19h–9D4Ah) sowie die Scheduler-Aufrufpfade `9B07h), `9B1Ah) und `9CF6h). Alle Segmentbezüge auf das zentrale Datensegment beruhen auf den in Untersuchung 2251 bestätigten Ladehelfern.
+
+### 20.1 Speicherfreiliste bei `0E35h:0E48h`
+
+Die Routine `6DACh` beschafft einen Block aus der globalen Freiliste:
+
+1. Interruptsperre und Sicherung der Flags.
+2. BX erhält den Kopfzeiger aus `[0E48h]`.
+3. Bei vorhandenem Block wird dessen Nachfolger aus `[BX+6]` als neuer Kopf nach `[0E48h]` übernommen.
+4. Die Wortfelder bei `+0), `+2), `+4), `+6), `+0Ah), `+0Ch) und `+0Eh) werden auf null gesetzt.
+5. Das zuvor gesicherte BX-Eingangsargument wird nach `+08h` geschrieben.
+6. Der freie Blockzähler `[0E4Ah]` wird dekrementiert.
+
+Die Freigaberoutine `6E2Fh` prüft zunächst die Blockadresse: 16-Byte-Ausrichtung und zulässiger Adressbereich ab `15B0h) bis unter `[0E4Ch]). Danach setzt sie `[BX]` und `[BX+8]` auf null, schreibt den Marker `F3h` nach `[BX+1]), hängt den Block über `[BX+6]` an den bisherigen Kopf und setzt `[0E48h]=BX). Der freie Blockzähler `[0E4Ah]` wird erhöht.
+
+**Gesichert:** Die Freiliste `0E48h` verkettet 16-Byte-Blöcke über Offset `+6). Der Marker `F3h` kennzeichnet den freigegebenen Block im untersuchten Pfad. Die Routine `6DACh` nimmt denselben Block wieder aus der Freiliste und löscht die Felder vor seiner erneuten Verwendung.
+
+### 20.2 Objektliste bei `05AEh/05B2h)
+
+Die in Untersuchung 2252 und 2253 rekonstruierte Routine `11CBh` fordert über `6DACh` einen 16-Byte-Block an und verwendet ihn als Objektknoten:
+- `+01h = FDh) als Knotentypmarker;
+- `+04h) als Verkettungsfeld zur Objektliste;
+- `+06h) als indexabhängigen Zeigerwert;
+- `+08h) als übernommener Kontextwert aus `SS:[0002h]);
+- `+0Ch) als optionaler Verweis auf einen weiteren Knoten;
+- `+0Eh = 0001h) als initialisierter Wortwert.
+
+Der neue Knoten wird an den Kopf-Link `0E35h:05B2h) gehängt. Die Freiliste verwendet dagegen `+6) nur solange der Block frei ist. Nach der Entnahme aus der Freiliste wird dieses Feld von `11CBh) als Objekt-/Cachefeld neu belegt.
+
+**Gesichert:** Objektliste und Freiliste verwenden dieselben 16-Byte-Blöcke, aber unterschiedliche Linkfelder und unterschiedliche Lebenszykluszustände. `+6) hat deshalb keine globale, für alle Zustände gleiche Bedeutung.
+
+### 20.3 Scheduler-Warteliste bei `9C19h/9CF6h)
+
+Die Scheduler-Warteliste ist eine dritte Struktur:
+
+- `9C19h` erhält den Synchronisationsbereich über ES:BX. Wenn der Zähler unter `0010h` liegt, erhöht die Routine ihn und kehrt über den Scheduler-Wiederaufnahmepfad zurück.
+- Bei erreichter Grenze ruft sie `9CF6h` auf.
+- `9CF6h` liest den Wartelistenkopf aus `ES:[BX]`. Der Wert `FFFFh` steht für die leere Liste.
+- Ein Wartelisteneintrag wird über das Byte bei `+0) nach einer Rang-/Prioritätsgröße verglichen. Die Routine durchläuft die Liste über den Zeiger bei `+6).
+- Beim Einfügen wird der Vorgängerlink angepasst; der neue Kontext wird an der passenden Position eingehängt.
+- Der aktuelle Kontext wird durch `[0FB8h]` referenziert. Die Schedulerpfade `9C8Bh` und `9C19h` speichern Stackoffset und Stacksegment in den Kontextfeldern `+2) und `+4); das Feld `+6) wird als Wartelistenlink benutzt.
+
+Die Routine `9CF6h` erzeugt in diesem Pfad keinen neuen 16-Byte-Knoten über `6DACh`. Sie verknüpft bereits vorhandene Kontextobjekte des Schedulers.
+
+**Gesichert:** Die Scheduler-Warteliste ist nach dem ersten Byte der Kontextobjekte geordnet und verwendet `+6) als Link. Die Elemente sind vorhandene Schedulerkontexte, nicht die über `11CBh` angelegten Objektknoten.
+
+### 20.4 Vergleich der drei Listen
+
+| Struktur | Kopf / Anker | Linkfeld | Elementtyp | Verwaltung |
+|---|---|---:|---|---|
+| Objektliste | `0E35h:05AEh`, Kopf-Link `05B2h` | `+4` | 16-Byte-Objektknoten mit Marker `FDh` | `11CBh` einfügen, `1228h` entfernen |
+| Speicherfreiliste | `0E35h:0E48h` | `+6` | freie 16-Byte-Blöcke, Marker `F3h` | `6DACh` entnehmen, `6E2Fh` freigeben |
+| Scheduler-Warteliste | Synchronisationsobjekt `ES:[BX]` | `+6` | bestehende Schedulerkontexte | `9CF6h` sortiert ein/entfernt; `9C8Bh/9C19h` schalten |
+
+### 20.5 Ergebnis Untersuchung 2259
+
+1. Die Freiliste `0E48h` und die Objektliste `05AEh/05B2h` verwenden denselben 16-Byte-Blockpool, aber verschiedene Linkfelder.
+2. `6DACh` entfernt einen freien Block; `6E2Fh` hängt einen freigegebenen Block über `+6) wieder ein.
+3. `11CBh` nutzt den entnommenen Block als Objektknoten und verwendet `+4) als Objektlistenlink.
+4. Die Scheduler-Warteliste ist davon getrennt: Sie verwendet bestehende Kontextobjekte, deren `+6)-Feld als Link dient.
+5. Die Schedulerliste wird nach dem Byte bei `+0) geordnet; dies ist ein belegtes Sortierkriterium, aber die exakte symbolische Prioritätsdefinition ist noch nicht dokumentiert.
+6. Der identische Feldoffset `+6) bedeutet je nach Lebenszyklus und Struktur etwas anderes; künftige Dossierabschnitte müssen die jeweilige Struktur ausdrücklich nennen.
+
+**Nächster Schritt 2260:** Die Initialisierung und Verwendung der Synchronisationsobjekte bei `0186h), `018Eh) und `0196h) im Datensegment `0E35h) weiter verfolgen. Zusätzlich den Erzeugungs- und Freigabepfad der Schedulerkontexte (insbesondere die Aufrufstellen von `9C8Bh), `9C19h) und die Felder `+0/+2/+4/+6)) anhand der Kernel-Taskverwaltung untersuchen.
