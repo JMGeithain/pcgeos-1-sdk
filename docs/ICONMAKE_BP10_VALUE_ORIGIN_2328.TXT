@@ -1,0 +1,68 @@
+ICONMAKE.EXE – Rückverfolgung von [BP-10] / DS:2FD6
+Untersuchung 2328
+Stand: 2026-11-09
+
+Geltungsbereich
+Untersucht wurde ausschließlich die originale ICONMAKE.EXE aus
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE im Archiv GEOWORKS.zip.
+Die Datei ist 19.477 Bytes groß. Die hier genannten Code-Offets beziehen sich
+auf das geladene MZ-Modul; der MZ-Header belegt 0x200 Bytes. Für einen
+Dateioffset ist daher 0x200 zu addieren.
+
+1. Ausgangsfrage
+Welche Quelle hat der Wert, den die Anweisung bei Moduloffset 0x18F1
+aus [BP-10] lädt und bei 0x18F7 in DS:[BX+2FD6] ablegt?
+
+2. Verifizierte Instruktionsfolge
+Die Bytes wurden direkt aus der Originaldatei erneut gelesen.
+
+Moduloffset   Bytes             Dekodierung
+0x1850        C7 46 F2 00 00    MOV word [BP-0E],0000
+0x1862        C7 46 FE 00 00    MOV word [BP-02],0000
+0x18D3        8B 46 FE          MOV AX,[BP-02]
+0x18D6        89 46 F0          MOV [BP-10],AX
+0x18F1        8A 46 F0          MOV AL,[BP-10]
+0x18F4        8B 5E F2          MOV BX,[BP-0E]
+0x18F7        88 87 D6 2F       MOV [BX+2FD6],AL
+0x18FE        FF 46 F2          INC word [BP-0E]
+0x1901        83 7E F2 10       CMP word [BP-0E],0010
+0x1907        E9 4E FF          JMP near 0x185A (wenn Bedingung erfüllt)
+
+Die relative Sprungzielberechnung: Instruktionsende 0x190A plus
+vorzeichenbehafteter Relativwert -0x00B2 ergibt 0x1858? Achtung:
+Der Sprung beginnt bei 0x1907, die drei Bytes enden bei 0x190A;
+0x190A - 0x00B2 = 0x1858. Das Ziel ist somit 0x1858, nicht 0x1857.
+
+3. Herkunft des gespeicherten Wertes
+[BP-10] wird bei 0x18D3/0x18D6 aus [BP-02] übernommen.
+[BP-02] wird bei 0x1862 mit 0 initialisiert und im Schleifenpfad bei
+0x18E2 durch INC word [BP-02] erhöht.
+Damit ist die unmittelbare Datenherkunft des AL-Wertes bei 0x18F1
+nachgewiesen: Er ist das niederwertige Byte des aktuellen [BP-02]-Wertes.
+Er stammt an dieser Stelle nicht als direktes Byte aus dem PCX-Eingabepuffer.
+
+4. Was die Befunde noch nicht beweisen
+- Die semantische Bedeutung von [BP-02] (z.B. Farb-/Eintragsindex) ist
+  durch diese Datenbewegung allein noch nicht abschließend bewiesen.
+- Ebenso ist die vollständige Bedeutung der Tabelle DS:2FD6 noch offen.
+- Die Vergleiche und Berechnungen im Bereich 0x1867–0x18E8 entscheiden,
+  wann der aktuelle [BP-02]-Wert in den Tabellenslot [BP-0E] gelangt.
+- Der Schleifenpfad ist noch vollständig mit seinen Sprungzielen und
+  Randbedingungen zu rekonstruieren.
+
+5. Wichtige Korrektur zur früheren Lesart
+Die frühere Formulierung, [BP-10] enthalte einen aus dem Eingabepuffer
+gelesenen Pixelwert, ist nicht belegt und wird hier ausdrücklich nicht
+übernommen. Der nachgewiesene unmittelbare Ursprung ist [BP-02].
+Die Anweisung ADD BX,3 bei 0x18FB ist für den nächsten Tabellenstore
+nicht ohne Weiteres als Schrittweite zu interpretieren, da BX vor dem
+nächsten Store erneut aus [BP-0E] geladen wird.
+
+6. Nächster Untersuchungsschritt
+Die Kontrollflussbedingungen ab 0x18C7 einschließlich der bedingten
+Sprünge 0x18CA, 0x18CC und 0x18D1 sowie die SI-Schrittweite ab 0x18E5
+werden vollständig aufgelöst. Anschließend wird geprüft, welche
+Eingabedaten die Vergleichs-/Grenzwerte beeinflussen.
+
+Ergebnisstatus: unmittelbare Herkunft von [BP-10] verifiziert;
+Gesamtsemantik der Tabelle DS:2FD6 noch nicht abschließend geklärt.
