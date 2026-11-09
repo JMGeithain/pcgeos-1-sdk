@@ -1,0 +1,78 @@
+GEOWORKS 1.x ICON PROVIDERS — CROSS-CATALOG RESOURCE PATTERN
+Investigation 2313
+Date: 2026-11-09
+
+Scope and method
+----------------
+A static scan was performed over all files ending in .000 directly under
+GEOWORKS/ICONS/ in the user's GEOWORKS.zip archive. Files were parsed with
+pcgeos1/geode.py from pcgeos-1-sdk. Of the scanned files, 82 parsed as
+GEODEs with at least resources R0-R6 and had readable resource payloads
+for R4-R6.
+
+This is a structural comparison only. No graphics decoder was applied,
+and no resource was executed or modified.
+
+Cross-provider result
+---------------------
+Across the 82 provider GEODEs, R4, R5 and R6 repeatedly exhibit the same
+two-handle LMem layout already observed in PAPR.000, GDOC.000 and NBAT.000:
+- handle count at resource offset 0x0A: 2
+- handle table at 0x20
+- first chunk: short two-byte payload 00 02
+- second chunk: provider-specific payload
+
+The second chunk's first six bytes form three highly stable signatures:
+
+R4: 61 30 00 0E 00 1A
+R5: 41 30 00 1E 00 1A
+R6: 46 30 00 1E 00 1A
+
+These patterns occur in the 82 scanned providers, with exceptions/variants
+in a small number of older or special entries (for example GEM300E5.000
+uses 61 2F in R4, and GM* entries may use 00 0F in the next field).
+This is a much stronger basis for treating R4-R6 as three recurring
+provider payload classes than the comparison of only PAPR/GDOC/NBAT.
+
+Measured dimensions-like fields
+-------------------------------
+Interpreting the two words following the signature as little-endian values:
+- R4 common pattern: 000E, 001A => 14, 26
+- R5 common pattern: 001E, 001A => 30, 26
+- R6 common pattern: 001E, 001A => 30, 26
+
+The consistency across many independent providers supports the hypothesis
+that these fields describe a small/large moniker's dimensions. It does not,
+by itself, prove the exact VisMoniker structure or the meaning of the
+preceding signature words.
+
+Payload length variation
+------------------------
+The resource and chunk lengths vary by provider, while the R4/R5/R6
+signature patterns remain stable. This is consistent with provider-specific
+image payloads encoded using common format classes. No claim is made about
+the color depth, compression method, or palette of each class.
+
+Important limits
+----------------
+- R4 has a 14x26-like header; R5 and R6 have 30x26-like headers.
+- R4/R5/R6 are three recurring icon-payload classes in the catalog.
+- The evidence does NOT yet prove which class is monochrome or color.
+- The evidence does NOT yet prove the binary format is exactly the
+  GeoWorks VisMoniker structure rather than a related icon payload format.
+- The meaning of 61 30 / 41 30 / 46 30 is not assigned.
+- No pixel decoding or runtime display verification has been performed.
+
+Implication for GEOTEST
+-----------------------
+The next useful task is not to guess the class labels, but to decode one
+representative payload from each class and compare it with known 1.x
+moniker definitions or an original icon-editor/provider implementation.
+If a matching native decoder is found, the same method can be used to
+prepare a correctly encoded color and monochrome test-document icon.
+
+Integrity
+---------
+The scan read files directly from GEOWORKS.zip. The archive and its
+members were not modified. No GEO was built and TOKEN.DB was not touched.
+No PC/GEOS 2.x or FreeGEOS definitions were used.
