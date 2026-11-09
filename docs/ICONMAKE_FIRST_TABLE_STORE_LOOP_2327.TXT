@@ -1,0 +1,88 @@
+ICONMAKE FIRST DS:2FD6 STORE LOOP — RAW BYTE RECHECK
+Investigation 2327
+Date: 2026-11-09
+Scope: Original GeoWorks 1.x ICONMAKE.EXE from GEOWORKS.zip.
+
+Source verification
+-------------------
+The executable was re-extracted directly from:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+
+MZ load-module starts at file offset 0x0200.
+All offsets below are load-module offsets. The bytes were checked
+directly against the original executable.
+
+First store loop: exact bytes
+----------------------------
+Load offset  File offset  Bytes
+0x18F0      0x1AF0       8A 46 F0
+0x18F3      0x1AF3       8B 5E F2
+0x18F6      0x1AF6       88 87 D6 2F
+0x18FA      0x1AFA       83 C7 03
+0x18FD      0x1AFD       FF 46 F2
+0x1900      0x1B00       83 7E F2 10
+0x1904      0x1B04       7D 03
+0x1906      0x1B06       E9 4E FF
+
+Decoded sequence:
+  18F0  MOV AL,[BP-10]
+  18F3  MOV BX,[BP-0E]
+  18F6  MOV [BX+2FD6],AL
+  18FA  ADD BX,3
+  18FD  INC word [BP-0E]
+  1900  CMP word [BP-0E],10h
+  1904  JGE short 1909
+  1906  JMP near 1857
+
+Important interpretation
+-------------------------
+The actual table store is at 0x18F6. It writes AL to DS:[BX+2FD6].
+The next instruction increments BX by 3, but the following instruction
+increments the stack local [BP-0E], and the next loop iteration reloads
+BX from [BP-0E]. Therefore the ADD BX,3 does not by itself establish a
+three-byte stride in the table destination. The destination index is
+reloaded from the incremented local on each iteration.
+
+The loop's index local [BP-0E] is compared against 0x10, so the loop
+appears to iterate over 16 index values. The source AL is loaded from
+[BP-10] on each pass. The preceding code around 0x1850–0x18F0 builds
+and advances other local/source state; its exact semantic relation to
+the AL source must be traced before calling these values a palette map.
+
+This corrects the overstatement in investigation 2325 that the table
+writes were spaced three bytes apart. The ADD BX,3 is visible, but BX
+is reloaded before the next table store. The effective table destination
+index advances by one through [BP-0E].
+
+Zero-fill loop
+--------------
+The second loop at 0x1910 is independently verified:
+  1910  2B DB             SUB BX,BX
+  1912  88 9F D6 2F       MOV [BX+2FD6],BL
+  1916  43                INC BX
+  1917  83 FB 10          CMP BX,10h
+  191A  7C F6             JL 1912
+
+This writes zero to DS:[2FD6] through DS:[2FE5] for BX values 0..15.
+It follows the first loop in the function's control flow. The first loop
+may therefore populate 16 entries before a later path clears them, or
+the two loops may belong to separate control-flow paths; the exact
+branching and function caller must be examined before concluding runtime
+order for a given invocation.
+
+Next steps
+----------
+1. Trace the function entry and callers to identify the two paths and
+   when each is executed.
+2. Identify the source of [BP-10] and [BP-0E] in the first loop.
+3. Determine whether the table is populated after the zero-fill on
+   the actual EGA conversion path.
+4. Capture or reconstruct runtime table values only after control flow
+   is established.
+5. Continue tracing the conversion and output buffer separately.
+
+Integrity
+---------
+Read-only byte-level inspection of the original ICONMAKE.EXE.
+No archive members, provider files, GEO files, or TOKEN.DB were changed.
+GeoWorks 1.x only.
