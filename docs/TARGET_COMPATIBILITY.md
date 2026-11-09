@@ -1,6 +1,6 @@
 # Target Compatibility
 
-SDK 0.1 is validated against one GeoWorks Pro 1.2 target set.
+SDK 0.1 uses explicit, hash-pinned target profiles. The default remains the original GeoWorks Pro 1.2 reference set.
 
 ## Required native interface
 
@@ -20,9 +20,20 @@ SDK 0.1 is validated against one GeoWorks Pro 1.2 target set.
 
 The generic basic-view build currently requires all four hashes even though it directly consumes only SPINTEXT and VIEWER. This is intentional: the target set is treated as a coherent known distribution.
 
-## Unknown targets
+## Registered profiles
 
-`allow_unknown_target` exists for research, not routine application development. Disabling hash checks does not make private object layouts compatible.
+The default project profile is `geoworks-pro-1.2`; projects without `target_profile` retain the original strict hash set. The experimental German GeoWorks 1.2.8 profile is selected explicitly with `target_profile: geoworks-1.2.8-de` and verifies these four hashes before compilation:
+
+| File | SHA-256 |
+|---|---|
+| SPINTEXT.GEO | `18f2075c9d61fe7231b1dacae8c171e68c2028ef2fca6d40a6694158fdfcb9fd` |
+| NOTEPAD.GEO | `a1ebd0cb84712a126b1f67f5fd1ca6b57f8bda2e9038e9224ba16ebc008f9ea9` |
+| VIEWER.GEO | `c884b76cdc4f9119d4794f7830d5438e0abcc1d92d3cc248aa912bde85ed43e7` |
+| TERM.GEO | `a62ebc0fb3c01acb4b59c8172d20d520653822a6d42f0bec4831dfdb93e1cf3a` |
+
+The former `allow_unknown_target=true` bypass is rejected. Projects select a named profile; they cannot supply arbitrary trusted hashes.
+
+## Adding another target
 
 To add a target properly:
 
