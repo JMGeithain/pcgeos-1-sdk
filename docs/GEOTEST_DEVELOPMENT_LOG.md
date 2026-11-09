@@ -703,3 +703,69 @@ Die Routine `0B20h` ruft `0BD0h` nur im Zweig auf, in dem CX bei Eintritt in `0B
 6. Die symbolischen Bedeutungen der Statusbits und der externen Strukturfelder bleiben offen.
 
 **Nächster Schritt 2257:** Die gemeinsamen Zielroutinen `971Dh`, `9754h`, `9776h` und `978Ch` untersuchen. Damit soll geklärt werden, welche Kerneloperationen die Wrapper-Konstanten `0186h`, `018Eh` und `0196h` tatsächlich auswählen.
+
+
+## 18. Untersuchung 2257 – Synchronisationswrapper und Semaphorepfade
+
+**Ziel:** Die gemeinsamen Ziele der Wrapper `0C97h`, `0C9Eh`, `0CA5h`, `0CAC h`, `0CB3h` und `0CBAh` untersuchen. Grundlage sind die Instruktionen `971Dh`, `9754h`, `9776h`, `978Ch` sowie die von ihnen aufgerufenen Kernelroutinen `9C8Bh` und `9C19h`.
+
+### 18.1 Einfaches atomisches Zählerpaar `9776h/978Ch`
+
+`9776h`:
+- lädt DS auf `0E35h`;
+- führt `LOCK DEC WORD PTR [BX]` aus;
+- kehrt zurück, wenn das Ergebnis nicht negativ ist;
+- ruft bei negativem Ergebnis `9C8Bh` auf.
+
+`978Ch`:
+- lädt DS auf `0E35h`;
+- führt `LOCK INC WORD PTR [BX]` aus;
+- kehrt zurück, wenn das Ergebnis positiv ist;
+- ruft bei null oder negativem Ergebnis `9C19h` auf.
+
+Das ist das typische Maschinenmuster eines atomaren Semaphore-P/V-Paares: Der Abstieg kann einen wartenden Aufrufer blockieren; der Anstieg kann einen wartenden Aufrufer aufwecken. Diese Einordnung stützt sich auf die tatsächlichen Vorzeichenverzweigungen und die Aufrufe der Warte-/Schedulerpfade, nicht allein auf die Wrappernamen.
+
+### 18.2 Erweiterter Kontext-/Besitzerpfad `971Dh/9754h`
+
+`971Dh` führt im Datensegment `0E35h` folgende Operationen aus:
+1. AX erhält das Wort `[BX+06h]`; es wird mit `[0FB8h]` verglichen.
+2. Wenn die Werte verschieden sind, wird das Wort `[BX]` dekrementiert. Bei negativem Ergebnis folgt `9C8Bh`.
+3. Danach wird der aktuelle Wert `[0FB8h]` nach `[BX+06h]` geschrieben.
+4. Das Wort `[BX+04h]` wird inkrementiert.
+
+`9754h` führt den Gegenpfad aus:
+1. `[BX+04h]` wird dekrementiert.
+2. Wenn das Ergebnis nicht mehr positiv ist, wird `[BX+06h]` auf `FFFFh` gesetzt.
+3. `[BX]` wird atomar inkrementiert.
+4. Bei einem Ergebnis kleiner oder gleich null folgt `9C19h`.
+
+**Gesichert:** Neben dem Zähler bei `[BX]` verwaltet dieses Paar einen zweiten Zähler bei `+04h` und einen Kontextwert bei `+06h`. Der Kontextwert wird mit dem globalen Wert `[0FB8h]` verglichen und bei Erwerb aktualisiert. Das ist ein erweiterter, kontextabhängiger Synchronisationspfad. Ob er im engeren Sinn als rekursiver Mutex oder als eine andere Kernel-Sperrstruktur bezeichnet werden soll, bleibt ohne Analyse aller Nutzer offen.
+
+### 18.3 Zuordnung der sechs Wrapper
+
+| Wrapper | BX-Wert | gemeinsames Ziel | belegte Funktion |
+|---|---:|---|---|
+| `0C97h` | `0186h` | `971Dh` | erweiterter Erwerb-/Kontextpfad |
+| `0C9Eh` | `0186h` | `9754h` | erweiterter Freigabe-/Kontextpfad |
+| `0CA5h` | `018Eh` | `9776h` | Semaphore-Abstieg / ggf. warten |
+| `0CAC h` | `018Eh` | `978Ch` | Semaphore-Anstieg / ggf. aufwecken |
+| `0CB3h` | `0196h` | `971Dh` | erweiterter Erwerb-/Kontextpfad |
+| `0CBAh` | `0196h` | `9754h` | erweiterter Freigabe-/Kontextpfad |
+
+Die Wrapper sichern BX, setzen die jeweilige Konstante und springen in die gemeinsamen Routinen. Diese Konstanten sind Offsets im zentralen Segment `0E35h`, weil die Ziele selbst DS über `9630h` auf dieses Segment setzen.
+
+### 18.4 Bestätigung durch den Aufrufer `0A3Ch`
+
+`0A3Ch` ruft `0CA5h` am Anfang auf und auf seinen Erfolgs- wie Fehlerpfaden `0CAC h` zum Verlassen des geschützten Bereichs. Damit ist für diesen konkreten Aufrufer die Paarung aus Semaphore-Abstieg und Semaphore-Anstieg direkt belegt.
+
+Die Aufrufe von `0CA5h` in `0BD0h` verwenden denselben Synchronisationsoffset `018Eh`; der vollständige Freigabepfad muss dort weiterhin über die nachfolgenden Unterroutinen betrachtet werden.
+
+### 18.5 Ergebnis Untersuchung 2257
+
+1. `9776h/978Ch` bilden ein atomisches Semaphore-P/V-Paar mit bedingtem Warten bzw. Aufwecken.
+2. `971Dh/9754h` verwalten zusätzlich zu einem Zähler einen zweiten Zähler bei `+04h` und einen Kontextwert bei `+06h`.
+3. Die Wrapperkonstanten `0186h`, `018Eh` und `0196h` wählen drei getrennte Synchronisationsobjekte im Segment `0E35h) aus.
+4. `0A3Ch` verwendet `0CA5h` und `0CAC h` als Eintritts-/Austrittspaar um den Zugriff auf die über `[0192h]` referenzierte Datenstruktur.
+5. Die genauen symbolischen Namen der drei Synchronisationsobjekte sind nicht belegt.
+
+**Nächster Schritt 2258:** Die drei Synchronisationsobjekte `0186h`, `018Eh` und `0196h` mit ihren Initialisierungs- und Aufrufstellen vergleichen. Zusätzlich die Schedulerpfade `9C19h` und `9C8Bh` so weit verfolgen, dass die Blockier-/Aufweckwirkung und die Bedeutung der jeweiligen Zählergrenzen vollständig belegt sind.
