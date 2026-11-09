@@ -1,0 +1,175 @@
+ICONMAKE.EXE – RGB-Abstandsberechnung und Palette-Mapping
+Untersuchung 2329
+Stand: 2026-11-09
+
+Geltungsbereich / Quelle
+Originaldatei: GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+aus GEOWORKS.zip, 19.477 Bytes, MZ-Header 0x200 Bytes.
+Alle Code-Offets unten beziehen sich auf das geladene Modul (Dateioffset =
+Moduloffset + 0x200). Dekodierung anhand der Originalbytes mit 16-bit-
+x86-Disassemblierung; die Rohbytes wurden zusätzlich geprüft.
+
+1. Ergebnis
+Der Code bildet eine Zuordnung für 16 RGB-Farbtripel. Für jedes der
+16 Quelltripel werden die 16 Tripel einer Vergleichspalette geprüft.
+Aus den drei Komponenten-Differenzen wird jeweils ein quadrierter
+Abstand berechnet und zu einer Summe addiert. Der kleinste gefundene
+Abstand bestimmt den gespeicherten Palettenindex.
+
+Das ist eine Suche nach dem nächsten Farbwert im RGB-Raum mit
+quadratischer euklidischer Distanz:
+  d² = (R1-R2)² + (G1-G2)² + (B1-B2)²
+Die Wurzel ist für die Rangfolge nicht erforderlich und wird hier
+nicht berechnet.
+
+2. Schleifen- und Datenstruktur
+Moduloffset 0x184E:
+  C7 46 F2 00 00   MOV word [BP-0E],0
+[BP-0E] ist der äußere Zähler / Zieltabellenindex.
+
+Moduloffset 0x1853:
+  8B 7E 0A        MOV DI,[BP+0A]
+  47 47           INC DI / INC DI
+DI zeigt damit auf den Beginn der RGB-Tripel in der übergebenen
+Quellstruktur, zwei Bytes hinter dem übergebenen Basiszeiger.
+
+Moduloffset 0x1862:
+  C7 46 FE 00 00   MOV word [BP-02],0
+[BP-02] ist der Index der gerade geprüften Vergleichsfarbe.
+
+Moduloffset 0x1867:
+  BE 20 02        MOV SI,0220h
+SI beginnt bei DS:0220h. Der innere Durchlauf endet bei SI >= 0250h
+(Moduloffset 0x18E8: CMP SI,0250h), mit Schrittweite 3
+(Moduloffset 0x18E5: ADD SI,3). Das sind 16 RGB-Tripel zu je 3 Bytes,
+also 48 Bytes von 0220h bis 024Fh.
+
+Moduloffset 0x18E2:
+  FF 46 FE        INC word [BP-02]
+Der Kandidatenindex wird nach jedem geprüften Vergleichsfarbtripel
+erhöht.
+
+Moduloffset 0x18FE:
+  FF 46 F2        INC word [BP-0E]
+Moduloffset 0x1901:
+  CMP word [BP-0E],0010h
+Der äußere Durchlauf erzeugt 16 Tabellenwerte.
+
+3. Berechnung der RGB-Abstände
+Für jede der drei Komponenten wird die Differenz zwischen dem Byte
+bei DI und dem entsprechenden Byte bei SI gebildet und mit CWD
+vorzeichenerweitert. Danach wird derselbe Hilfsaufruf bei 0x27B6
+verwendet. Die drei zurückgegebenen 32-Bit-Ergebnisse werden addiert.
+
+Erste Komponente:
+  186A MOV AL,[DI]
+  186C SUB AH,AH
+  186E MOV CL,[SI]
+  1870 SUB CH,CH
+  1872 SUB AX,CX
+  1874 CWD
+  1875/1876 PUSH DX / PUSH AX
+  1877/1878 PUSH DX / PUSH AX
+  1879 CALL 27B6
+
+Zweite Komponente beginnt bei 0x187E; dritte bei 0x189C.
+Die Ergebnisse der ersten und zweiten Komponente werden in lokalen
+Variablen zwischengespeichert (0x1891–0x1894 und 0x18AF–0x18B2).
+Nach dem dritten Aufruf addiert der Code die drei 32-Bit-Werte:
+  18B8 ADD AX,[BP-18]
+  18BB ADC DX,[BP-16]
+  18BE ADD AX,[BP-14]
+  18C1 ADC DX,[BP-12]
+Das Resultat wird bei 0x18C4 in [BP-06] (low word) und im DX-Register
+als high word für den Vergleich gehalten.
+
+4. Hilfsroutine 0x27B6
+Bytes / Dekodierung:
+  27B6 55             PUSH BP
+  27B7 8B EC          MOV BP,SP
+  27B9 8B 46 06       MOV AX,[BP+06]
+  27BC 8B 4E 0A       MOV CX,[BP+0A]
+  27BF 0B C8          OR CX,AX
+  27C1 8B 4E 08       MOV CX,[BP+08]
+  27C4 75 09          JNE 27CF
+  27C6 8B 46 04       MOV AX,[BP+04]
+  27C9 F7 E1          MUL CX
+  27CB 5D             POP BP
+  27CC C2 08 00       RET 8
+  27CF 53             PUSH BX
+  27D0 F7 E1          MUL CX
+  27D2 8B D8          MOV BX,AX
+  27D4 8B 46 04       MOV AX,[BP+04]
+  27D7 F7 66 0A       MUL word [BP+0A]
+  27DA 03 D8          ADD BX,AX
+  27DC 8B 46 04       MOV AX,[BP+04]
+  27DF F7 E1          MUL CX
+  27E1 03 D3          ADD DX,BX
+  27E3 5B             POP BX
+  27E4 5D             POP BP
+  27E5 C2 08 00       RET 8
+
+Die Aufrufstelle übergibt dieselbe 32-Bit-Differenz zweimal
+(jeweils DX:AX). Die Hilfsroutine liefert das 32-Bit-Produkt der
+beiden 32-Bit-Argumente (niederwertige 32 Bit). Im vorliegenden
+Aufruf ist das die quadrierte Komponentendifferenz. Die
+Sonderbehandlung berücksichtigt, dass die Differenz vorzeichen-
+erweitert als 32-Bit-Wert übergeben wird.
+
+5. Auswahl des kleinsten Abstandes
+Initialisierung:
+  1858 MOV word [BP-0A],FFFFh
+  185D MOV word [BP-08],7FFFh
+Diese beiden Wörter bilden den anfänglichen Vergleichswert
+DX:AX = 7FFF:FFFFh.
+
+Vergleich:
+  18C7 CMP DX,[BP-08]
+  18CA JG 18E2
+  18CC JL 18D3
+  18CE CMP AX,[BP-0A]
+  18D1 JAE 18E2
+Wenn der neue 32-Bit-Abstand kleiner ist, läuft der Code über
+0x18D3 in den Aktualisierungspfad:
+  18D3 MOV AX,[BP-02]
+  18D6 MOV [BP-10],AX       ; Index der besten Vergleichsfarbe merken
+  18D9 MOV AX,[BP-06]
+  18DC MOV [BP-0A],AX       ; low word des besten Abstandes
+  18DF MOV DX,[BP-08]
+  (Achtung: Der tatsächliche High-Word-Store ist 89 56 F8 bei 0x18DF.)
+Der Vergleich ist ein vorzeichenloser 32-Bit-Vergleich, da JG/JL
+hier auf die vorangehende CMP DX,[BP-08] folgen. Korrektur:
+JG/JL sind vorzeichenbehaftete Sprünge. Die initiale obere Schranke
+7FFF:FFFFh und die nichtnegativen quadrierten Summen sorgen dafür,
+dass gültige Abstände im positiven 32-Bit-Bereich liegen; dadurch
+ist die verwendete lexikographische High-/Low-Wortprüfung für die
+erwarteten Werte passend.
+
+6. Tabelleneintrag
+Wenn die 16 Kandidaten abgearbeitet sind:
+  18F1 MOV AL,[BP-10]
+  18F4 MOV BX,[BP-0E]
+  18F7 MOV [BX+2FD6],AL
+Damit enthält DS:2FD6..DS:2FE5 eine 16-Byte-Tabelle mit dem Index
+der jeweils nächstliegenden Vergleichsfarbe für jedes der 16
+Quell-RGB-Tripel.
+
+7. Grenzen / offene Punkte
+- Die Analyse belegt die Rechenmethode und die Tabellenform aus dem
+  Code. Sie identifiziert noch nicht abschließend, an welcher
+  übergeordneten Stelle die 16 Quellfarben und die Vergleichspalette
+  semantisch ausgewählt bzw. befüllt werden.
+- Die 16 Tripel bei DS:0220h..024Fh sind durch SI-Start, Schrittweite
+  und Endvergleich nachgewiesen; ihre genaue Herkunft im Aufrufer
+  bleibt separat zu verfolgen.
+- Der äußere Quellpuffer beginnt bei dem übergebenen Zeiger +2; die
+  Bedeutung der beiden vorangestellten Bytes ist noch offen.
+- Die Tabelle DS:2FD6 wird hier als 16 Einträge beschrieben; spätere
+  Verbraucher müssen noch gefunden werden, um den konkreten
+  Konvertierungspfad (z.B. Pixel-Nibble-Umsetzung) vollständig zu
+  bestätigen.
+
+Ergebnisstatus
+RGB-Komponentenvergleich, quadratische Distanzsumme, Auswahl des
+nächstliegenden Palettenindex und 16-Byte-Mapping-Tabelle sind durch
+Instruktionsfolge und Hilfsroutine belegt.
