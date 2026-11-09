@@ -48,7 +48,7 @@ Aus dem Gesprächsübergang wurde als letzter Untersuchungsstand genannt:
 - offene Nachbar-/Unterroutine-Adressen `0BD0h`, `0CACh` und `0CC5h`
 - beobachteter Kopiervorgang bei `0B6Fh–0B75h` mit elf Bytes
 
-**Beweisstatus:** Diese Angaben sind hier zunächst nur als übernommene Arbeitsnotiz festgehalten. Die zugrunde liegende vollständige `KERNEL_DIS.TXT` und der exakt zugehörige Kernel-Body liegen für diese Fortsetzung nicht als prüfbare Quelle vor. Deshalb werden daraus noch keine neuen Aussagen über Registerverträge, Kontrollfluss oder GEOTEST-ABI abgeleitet.
+**Beweisstatus:** Diese Angaben sind hier zunächst nur als übernommene Arbeitsnotiz festgehalten. Die Datei `KERNEL_DIS.TXT` ließ sich laut Nutzer nicht erstellen. Bei der Suche im vorhandenen Projektdossier wurde jedoch ein früher dokumentierter, abweichender Dateiname gefunden: `kernel_original_body.dis` (nicht `KERNEL_DIS.TXT`). Das zugehörige Original-Binary wurde als `kernel_original_body.bin` geführt. Ein älterer Audit-Nachtrag dokumentiert dafür folgende SHA-256-Werte: Binary `948324ccd5fac49172548209c8137530dbdee6e3a64c81e2c52c503f5d85552d`, Disassemblierung `9356bbc05b83106f1e72f47ec6cb75163b1d1e5ed73152507203ead542d71461`. Diese Hashwerte stammen aus früheren Dossier-/Auditunterlagen; die beiden Quelldateien selbst wurden in dieser Fortsetzung nicht erneut geöffnet und gehasht. Die früher dokumentierte Arbeitsbasis ist damit identifizierbar, aber noch nicht aktuell reproduziert. Es werden daraus keine neuen Aussagen über Registerverträge, Kontrollfluss oder GEOTEST-ABI abgeleitet.
 
 Vor einer Fortsetzung der Disassemblierungsanalyse müssen feststehen:
 - genaue Kerneldatei und Version,
@@ -83,8 +83,8 @@ Vor einer Fortsetzung der Disassemblierungsanalyse müssen feststehen:
 | Repository und Schreibberechtigung | bestätigt |
 | SDK 0.1 Buildarchitektur | aus Repository-Dokumentation bestätigt |
 | GeoWorks-1.2 Zielprotokolle | dokumentiert: Kernel 622.3, UI 693.0 |
-| Untersuchungsnotiz 2245 | übernommen, Primärquelle fehlt |
-| vollständige Kernel-Disassemblierung für 2246 | fehlt |
+| Untersuchungsnotiz 2245 | übernommen; frühere Originalquellen-Hashes im Dossier wiedergefunden, Dateien aktuell noch nicht erneut verifiziert |
+| frühere Originaldisassemblierung `kernel_original_body.dis` | Hash in Dossier dokumentiert; Datei aktuell nicht erneut verifiziert |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
