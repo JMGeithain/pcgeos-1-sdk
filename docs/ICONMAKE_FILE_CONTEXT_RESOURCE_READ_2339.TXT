@@ -1,0 +1,105 @@
+ICONMAKE – Dateikontext und Ressourcen-Leseweg
+Untersuchungsschritt 2339
+Stand: 10. November 2026
+
+Ziel
+Präzisierung der Routine 1558h anhand ihrer tatsächlichen Aufrufparameter und der Initialisierung des globalen Dateikontexts DS:40E8h. Schwerpunkt: Woher stammen Tabellenzeiger und Index, und was liest 1558h aus der Ressourcendatei?
+
+Untersuchungsbasis
+ICONMAKE.EXE aus GEOWORKS.zip; MZ-Ladebereich ab Dateioffset 0200h, disassembliert als 8086-Code. Adressen in diesem Bericht sind Offsets im Ladebereich.
+
+1. Initialisierung des Dateikontexts DS:40E8h
+Im Code um 0B4Eh:
+  0B4E PUSH WORD PTR [SI+04]
+  0B51 CALL 144Ch
+  0B54 ADD SP,2
+  0B57 MOV [40E8h],AX
+
+Der Rückgabewert von 144Ch wird global unter DS:40E8h gespeichert. Bei Null folgt ein Fehlerpfad (0B5Ch ff.). Bei Erfolg wird der Kontext weiterverwendet.
+
+Danach wird 25D6h mit mehreren Parametern aufgerufen (0B68h–0B81h). Der genaue Aufbau dieses Initialisierungsschritts ist noch nicht vollständig geklärt.
+
+2. Konkrete Aufrufe von 1558h
+Erster Aufruf bei 0B86h:
+  0B86 PUSH 0000h
+  0B87 MOV BX,[40E8h]
+  0B8B PUSH WORD PTR [BX+00EAh]
+  0B8F PUSH WORD PTR [BX+00ECh]
+  0B93 PUSH BX
+  0B94 CALL 1558h
+
+Zweiter Aufruf bei 0B9Dh:
+  0B9D LEA AX,[BP-0Ch]
+  0BA0 PUSH AX
+  0BA1 MOV BX,[BP-02]
+  0BA4 PUSH WORD PTR [BX+14h]
+  0BA7 MOV BX,[40E8h]
+  0BAB PUSH WORD PTR [BX+00ECh]
+  0BAF PUSH BX
+  0BB0 CALL 1558h
+
+Nach der 8086-Stack-Konvention mit BP-Frame ergeben sich für 1558h:
+- [BP+04] = Kontextzeiger BX.
+- [BP+06] = Wert aus Kontext +00ECh.
+- [BP+08] = Wert aus Kontext +00EAh beim ersten Aufruf; beim zweiten Aufruf der Wert aus Kontext +00ECh.
+- [BP+0A] = Ausgabewortzeiger (beim ersten Aufruf NULL; beim zweiten Aufruf LEA BP-0Ch).
+
+Die zweite Parametergruppe ist damit nicht identisch mit der ersten. 1558h wird mehrfach für unterschiedliche Einträge/Teilbereiche desselben Dateikontexts verwendet.
+
+3. Tabellenzugriff in 1558h
+Bytegenauer Code:
+  1560 MOV SI,[BP+04]
+  1563 MOV BX,[SI+08]
+  1566 MOV DI,[BP+06]
+  1569 SHL DI,1
+  156B SHL DI,1
+  156D MOV AX,[BX+DI]
+  156F MOV DX,[BX+DI+2]
+  1572 MOV [BP-04],AX
+  1575 MOV [BP-02],DX
+
+Damit liest die Routine einen 4-Byte-Eintrag aus der Tabelle, deren Zeiger bei Kontext +08h liegt. Der Index ist der Parameter [BP+06], multipliziert mit vier. Der Tabelleneintrag wird als 32-Bit-Wert in zwei 16-Bit-Wörtern zwischengespeichert.
+
+4. Leseablauf und Pufferbeschaffung
+Nach dem Tabellenzugriff:
+  1578 XOR CX,CX
+  157A PUSH CX
+  157B ADD AX,[BP+08]
+  157E ADC DX,CX
+  1580 PUSH DX
+  1581 PUSH AX
+  1582 PUSH WORD PTR [SI]
+  1584 CALL 217Eh
+
+Der 32-Bit-Tabellenwert wird um [BP+08] erhöht und als Position an 217Eh übergeben. 217Eh ist der Positionierungs-/Dateizugriffspfad; seine genaue interne Semantik wird separat weiter untersucht.
+
+Danach wird über 1EF8h ein 2-Byte-Wert in eine lokale Variable gelesen (Aufruf 158Ah–159Bh). Anschließend wird die Position erneut aus dem gespeicherten Tabellenwert plus diesem gelesenen Wert minus zwei berechnet und über 217Eh eingestellt (15A1h–15BAh). An dieser Position wird ein weiteres 2-Byte-Wort gelesen (15BDh–15CEh).
+
+Dieses zweite Wort wird bei 15D1h als Größe an 212Ch übergeben. 212Ch springt nach 38F1h; 38F1h ruft die Speicherbeschaffung 3CC8h auf und liefert den Pufferzeiger in AX zurück. Danach liest 1EF8h bei 15DDh–15E9h die zuvor ermittelte Anzahl Bytes in diesen Puffer.
+
+Wichtig: Die Routine gibt diesen Pufferzeiger in AX zurück (15FAh–1601h). Der Aufrufer speichert ihn als [BP-02]. Die +08h/+0Ah/+0Ch/+0Dh-Zugriffe des Aufrufers beziehen sich also auf den eingelesenen Puffer.
+
+5. Rolle von 1EF8h
+1EF8h multipliziert seine Parameter [BP+06] und [BP+08] zur Transfergröße und führt den eigentlichen Transfer über 3A28h aus. Der Code aktualisiert dabei den Datei-/Pufferkontext:
+  1F5B SUB CX,AX
+  1F5D SUB [SI+02],AX
+  1F60 ADD BX,AX
+  1F62 ADD [SI],AX
+
+Das ist ein generischer Transferpfad mit Fortschritts-/Restlängenverwaltung. Seine weiteren Zweige behandeln zusätzliche Transfermodi; sie sind für den hier dokumentierten einfachen 2-Byte- und Blocklesepfad nicht als Formatbeweis erforderlich.
+
+6. Belastbare Schlussfolgerungen
+- DS:40E8h enthält einen von 144Ch gelieferten Dateikontext-Zeiger.
+- Der Kontext enthält bei +08h einen Zeiger auf eine Tabelle mit 4-Byte-Einträgen.
+- 1558h verwendet den Parameter [BP+06] als Tabellenindex und liest den entsprechenden 32-Bit-Eintrag.
+- Die Routine liest anschließend positionsabhängige 2-Byte-Werte, beschafft einen Puffer und liest einen Block in diesen Puffer.
+- Der Rückgabewert ist der Pufferzeiger; die vom Aufrufer analysierten Felder +08h, +0Ah, +0Ch und +0Dh gehören zu diesem eingelesenen Block.
+
+7. Noch offen
+- Der genaue Aufbau des von 144Ch gelieferten Kontexts und die Erzeugung seiner Tabelle.
+- Die genaue Bedeutung der beiden 2-Byte-Werte im Ressourcenstrom (insbesondere der erste Wert bei Basisposition + Parameter [BP+08] und der zweite Wert am Ende des durch den ersten Wert bestimmten Bereichs).
+- Die vollständige Semantik von 217Eh und 3A28h.
+- Die Zuordnung konkreter PAPR.000-/GDOC.000-Ressourcen zu diesen Tabellenindizes und dem resultierenden Puffer.
+
+Korrekturhinweis zu Schritt 2338
+Der Ausdruck „Descriptor-Adresse +0Eh“ ist nur eine bequeme Arbeitsbeschreibung für den eingelesenen Puffer. Die Analyse belegt nun, dass 1558h den Puffer dynamisch aus dem Ressourcenstrom befüllt. Sie belegt noch nicht, dass +0Eh der offizielle Beginn eines eigenständigen Descriptor-Formats ist.
