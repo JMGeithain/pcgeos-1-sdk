@@ -6,8 +6,12 @@ import tempfile
 import unittest
 import warnings
 import zipfile
+import sys
 from pathlib import Path
 from unittest.mock import patch
+
+SDK = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SDK))
 
 from pcgeos1 import target, buildsys
 
