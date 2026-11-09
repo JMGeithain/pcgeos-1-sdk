@@ -1,0 +1,81 @@
+ICONMAKE EXTRACTION RESULT — GDOC.000
+Investigation 2318
+Date: 2026-11-09
+
+Input files supplied by the user
+-------------------------------
+GDOC_CGA.PCX
+GDOC_HGC.PCX
+GDOC_EGA.PCX
+
+All three uploaded files were opened and decoded successfully as PCX images.
+
+Measured image properties
+-------------------------
+GDOC_CGA.PCX
+- Dimensions: 48 x 14 pixels
+- PCX encoding: PCX RLE
+- Bits per pixel per plane: 1
+- Number of color planes: 1
+- Decoded image mode: 1-bit monochrome
+- Actual decoded colors: 2
+- File size: 234 bytes
+- SHA-256: 86e9c89eb37b4e894f910666e144ccdc44a6747fa5573d254ddf8213c8727b06
+
+GDOC_HGC.PCX
+- Dimensions: 48 x 30 pixels
+- PCX encoding: PCX RLE
+- Bits per pixel per plane: 1
+- Number of color planes: 1
+- Decoded image mode: 1-bit monochrome
+- Actual decoded colors: 2
+- File size: 309 bytes
+- SHA-256: b1ea27e764fb6b803f4d91107433dcb43fec6639e075881e8da872d995eace68
+
+GDOC_EGA.PCX
+- Dimensions: 48 x 30 pixels
+- PCX encoding: PCX RLE
+- Bits per pixel per plane: 4
+- Number of color planes: 1
+- Decoded image mode: paletted
+- Palette entries in header: 16
+- Actual distinct palette indices used in decoded pixels: 6
+- File size: 916 bytes
+- SHA-256: 046b2a9064548b52def856aa46f701c7c547bf55085dc6b84ce04e5030620c3e
+
+Cross-provider confirmation
+---------------------------
+The GDOC extraction produces the same documented standard dimensions as
+the PAPR extraction:
+- CGA: 48 x 14, 1-bit monochrome
+- HGC: 48 x 30, 1-bit monochrome
+- EGA: 48 x 30, 4-bit paletted
+
+The earlier static examination of GDOC.000 resource payload headers found:
+- R4 begins 61 30 00 0E 00 1A ... and carries dimension-like words 48, 14
+- R5 begins 41 30 00 1E 00 1A ... and carries dimension-like words 48, 30
+- R6 begins 46 30 00 1E 00 1A ... and carries dimension-like words 48, 30
+
+This independently supports the same resource mapping proposed from PAPR:
+  R4 ↔ CGA
+  R5 ↔ HGC
+  R6 ↔ EGA
+
+Confidence and limits
+---------------------
+The agreement of the independent GDOC PCX extraction dimensions with the
+previously parsed R4-R6 dimension-like header fields substantially
+strengthens the mapping. This is still a header/dimension correspondence,
+not a complete pixel-for-pixel decode of the native GEODE resource payload.
+The exact meaning of the 0x1101 field in R6 and transparency semantics
+remain unresolved.
+
+Note: the PAPR_EGA.PCX extraction used nine distinct palette indices.
+GDOC_EGA.PCX uses six. This is a provider-specific image palette difference,
+not a contradiction of the shared 4-bit EGA format.
+
+Integrity
+---------
+The three uploaded PCX files were read only. GEOWORKS.zip and its members
+were not modified. No GEO was built and TOKEN.DB was not modified.
+No PC/GEOS 2.x or FreeGEOS definitions were used.
