@@ -50,7 +50,12 @@ Aus dem Gesprächsübergang wurde als letzter Untersuchungsstand genannt:
 
 **Beweisstatus:** Diese Angaben sind hier zunächst nur als übernommene Arbeitsnotiz festgehalten. Die Datei `KERNEL_DIS.TXT` ließ sich laut Nutzer nicht erstellen. Die Quelle wurde deshalb aus dem nun bereitgestellten Archiv `GEOWORKS.zip` wiederhergestellt. Darin liegen `GEOWORKS/KERNEL.OLD` (72.688 Bytes) und `GEOWORKS/KERNEL.EXE` (72.736 Bytes). Verwendet wurde ausschließlich `KERNEL.OLD`; `KERNEL.EXE` blieb unangetastet. Der MZ-Header von `KERNEL.OLD` umfasst 96 Paragraphen = 1.536 Bytes. Der danach extrahierte Kernel-Body umfasst 71.152 Bytes und hat SHA-256 `948324ccd5fac49172548209c8137530dbdee6e3a64c81e2c52c503f5d85552d` – exakt den bereits im früheren Dossier dokumentierten Wert. Die Disassemblierung wurde reproduzierbar mit `objdump -D -b binary -m i8086 kernel_original_body.bin` erzeugt. Ihre SHA-256-Prüfsumme lautet `9356bbc05b83106f1e72f47ec6cb75163b1d1e5ed73152507203ead542d71461` und stimmt ebenfalls exakt mit dem früher dokumentierten Wert überein. Ein früherer Audit-Ankercheck wurde erneut ausgeführt: 53 von 53 Adressanker vorhanden. Damit ist die frühere Originalanalysegrundlage erfolgreich wiederhergestellt und unabhängig hashbestätigt. Die Originaldateien wurden nicht verändert; die Binärdateien werden aus Urheberrechtsgründen nicht in dieses öffentliche Repository hochgeladen.
 
-Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klären. Im reproduzierten Disassembly erscheinen die korrespondierenden Stellen als `10B20h`, `10B6Fh`, `10CAC h` und `10CC5h`; `10BD0h` liegt innerhalb einer Instruktion und ist kein Instruktionsanfang. Deshalb dürfen die verkürzten Angaben `0B20h`, `0BD0h`, `0CACh` und `0CC5h` nicht ungeprüft als gleichbedeutende Labels verwendet werden. Insbesondere ist `10B20h` zunächst nur ein Disassembly-Offset; seine Funktion als Code oder Daten muss anhand der Aufrufer und Kontrollflussreferenzen bestimmt werden. Der konkrete Bytekontext zeigt bei `10B18h` ein `ret`; ab `10B1Ah` folgen zunächst Wortwerte (`22 12`, `2B 12`, `34 12`, `3D 12`) und anschließend ASCII-ähnliche Dateinamenfragmente (`dos2.geo`, `dos3.geo`, `dos4.geo`, `dos5.geo`, `drdos.geo`). Die lineare x86-Disassemblierung ab `10B20h` interpretiert diese Daten zwangsläufig als Instruktionen; `10B20h` darf daher nicht ohne Kontrollflussbeleg als Codeeinstieg gelten. Bei `10B6Fh` liegt ein fünf Byte langer Far-Aufruf (`lcall $0x0,$0x399`), danach folgt bei `10B74h` `mov $0x19,%ax`; die frühere Notiz „elf Bytes kopiert“ ist durch diesen Ausschnitt nicht bestätigt und muss separat geklärt werden. Die inklusive Spanne `10B6Fh–10B75h` umfasst sieben Bytes, nicht elf. `10BD0h` liegt innerhalb der Instruktion ab `10BCFh` (`lcall *0x5b8`) und ist kein gültiger Instruktionsanfang.
+Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 2245 zunächst vermischt wurden:
+
+- **Offsetbereich `0B20h` bis `0B86h`:** `0B20h` ist eine echte Codeadresse. Die Routine wird von `0A2Bh` aus aufgerufen. Sie initialisiert einen zuvor angeforderten 16-Byte-Block. Innerhalb dieser Routine liegt der 11-Byte-Kopiervorgang bei `0B6Fh–0B75h`; Einzelheiten sind in Untersuchung 2255 dokumentiert.
+- **Offsetbereich `10B1Ah` bis `10BD6h`:** Dies ist ein anderer, eigenständiger Bereich. `10B1Ah–10B52h` enthält Tabellenwerte und Dateinamenfragmente (`dos2.geo`, `dos3.geo`, `dos4.geo`, `dos5.geo`, `drdos.geo`). Der Codekandidat beginnt erst bei `10B53h`. Bei `10B6Fh` liegt hier ein fünf Byte langer Far-Aufruf (`lcall $0x0,$0x399`), gefolgt von `mov $0x19,%ax` bei `10B74h`. `10BD0h` liegt innerhalb der Instruktion ab `10BCFh` (`lcall *0x5b8`) und ist kein gültiger Instruktionsanfang.
+
+**Korrektur:** Die frühere Notiz „11 Bytes kopiert“ ist für `0B20h` richtig und durch den tatsächlichen `rep movsb`-Befehl bestätigt. Sie ist nicht auf `10B6Fh–10B75h` zu beziehen. Die Adressen `0B20h` und `10B20h` sowie `0B6Fh` und `10B6Fh` bezeichnen unterschiedliche Offsets und dürfen nicht gleichgesetzt werden.
 
 ## 4. Nächste Arbeitsschritte
 
@@ -556,3 +561,67 @@ Die Routine `11CBh` speichert den von `72Bh` zurückgegebenen BX-Wert in `+06h),
 6. Die fachliche Bedeutung der Datensatztypen und die Einheit von `[105Ah]` bleiben offen.
 
 **Nächster Schritt 2255:** Die Rückgabepfade und Datenzugriffe der Hilfsroutinen `0BD0h`, `0C97h`, `0CAC h`, `0A20h` und `0A3C h` im Zusammenhang mit `72Bh` verfolgen. Ziel ist, den erzeugten bzw. wiederverwendeten Zeiger genauer zu klassifizieren, ohne aus den Offsets allein einen Objektnamen zu erfinden.
+
+
+## 16. Untersuchung 2255 – Verifikation der Routine `0B20h` und des 11-Byte-Kopierens
+
+**Ausgangsfrage:** Die Arbeitsnotiz 2245 nannte `0B20h` als Routine und `0B6Fh–0B75h` als Kopierstelle mit elf Bytes. Die frühere Prüfung des davon verschiedenen Bereichs `10B20h` hatte diese Notiz fälschlich mit dem Code bei `10B53h` vermischt. Diese Untersuchung trennt die beiden Offsetbereiche und verifiziert den ursprünglichen Befund.
+
+### 16.1 Aufrufkette und Blockgröße
+
+Bei `0A20h` beginnt eine Far-Routine:
+- `0A25h`: BX wird auf `0010h` gesetzt.
+- `0A28h`: Aufruf von `6DACh`, dem Kernel-Blockallocator.
+- `0A2Bh`: Near-Aufruf von `0B20h`.
+- Bei Carry wird der angeforderte Block über `6E2Fh` freigegeben, BX auf null gesetzt und Carry gesetzt.
+- Die Routine stellt ihre gesicherten Register wieder her und kehrt mit Far Return zurück.
+
+Der einzige direkte Aufruf von `0B20h` im untersuchten Kernel-Disassembly liegt bei `0A2Bh`.
+
+### 16.2 Initialisierung bei `0B20h`
+
+Die Routine beginnt mit `call 29DCh` und schreibt anschließend `F5h` nach `[BX+1]`. Der Kontrollfluss hängt danach unter anderem davon ab, ob CX null ist:
+
+- Bei CX ungleich null wird ein Statusbyte aus `[01A6h]` gebildet, mit dem unteren Nibble maskiert und abhängig von CL-Bit `10h` um Bit `80h` ergänzt. Dieses Byte wird bei `0B38h` nach `[BX]` geschrieben.
+- `CC5h` prüft den durch AL bezeichneten Index; abhängig von Bit `40h` des zurückgegebenen Statusbytes wird Bit `40h` im Blockstatus gesetzt.
+- Danach folgen weitere Prüfungen über `0B0Eh`, gegebenenfalls `0A8Eh` und `0AB4h`.
+- Bei CX gleich null wird zunächst `0BD0h` aufgerufen. Bei gesetztem Carry endet der Initialisierungspfad mit Fehler; andernfalls wird der Statusaufbau erneut durchlaufen.
+
+Die genaue fachliche Bedeutung des Markers `F5h` und der Statusbits ist noch nicht belegt.
+
+### 16.3 Exakter 11-Byte-Kopiervorgang
+
+Die entscheidende Instruktionsfolge lautet:
+
+| Offset | Instruktion | Wirkung |
+|---|---|---|
+| `0B66h` | `push cx` | CX sichern |
+| `0B67h` | `mov [bx+2],di` | DI als Wort bei `+2` speichern |
+| `0B6Ah` | `mov [bx+4],dl` | DL bei `+4` speichern |
+| `0B6Dh–0B6Eh` | `push ds / pop es` | ES = DS |
+| `0B6Fh` | `lea di,[bx+5]` | Zieladresse = Blockanfang + 5 |
+| `0B72h` | `mov cx,000Bh` | Kopieranzahl = 11 Bytes |
+| `0B75h` | `rep movsb` | elf Bytes von DS:SI nach ES:DI kopieren |
+| `0B77h` | `pop cx` | ursprüngliches CX wiederherstellen |
+
+Damit werden genau die elf Bytes `DS:SI` bis `DS:SI+0Ah` nach `ES:(BX+5)` bis `ES:(BX+0Fh)` kopiert. Zusammen mit den vorherigen Feldern belegt die Routine damit den 16-Byte-Block von Offset `+0` bis `+0Fh`.
+
+### 16.4 Rückgabe und Einordnung
+
+- Nach dem Kopieren wird CL-Bit `20h` geprüft; bei gesetztem Bit folgt ein Aufruf von `1752h`.
+- Danach folgt `0CAC h` und schließlich `ret` bei `0B86h`.
+- Die aufrufende Routine `0A20h` übernimmt den Carry-Status und gibt den Block bei Fehler wieder frei.
+
+**Gesicherter Befund:** `0B20h` ist eine echte Routine; sie initialisiert einen 16-Byte-Block und kopiert exakt elf Bytes an dessen Offset `+5`. Die ursprüngliche Notiz 2245 war in diesem Punkt richtig.
+
+**Abgrenzung:** Der Bereich `10B1Ah–10BD6h` bleibt davon unabhängig. Die dortige Daten-/Codegrenze und der indirekte Aufruf bei `10BCFh` werden durch diese Korrektur nicht verändert.
+
+### 16.5 Ergebnis Untersuchung 2255
+
+1. Der 11-Byte-Kopiervorgang bei `0B6Fh–0B75h` ist bestätigt.
+2. Zieladresse ist `BX+5`; Quelladresse ist DS:SI; die Kopieranzahl ist `000Bh`.
+3. Der umgebende Allocatorpfad fordert zuvor einen 16-Byte-Block an.
+4. `0B20h` wird direkt von `0A2Bh` aufgerufen und kehrt mit Carry-Status zurück.
+5. Die getrennten Adressbereiche `0B20h` und `10B20h` dürfen nicht vermischt werden.
+
+**Nächster Schritt 2256:** Den Pfad `0BD0h` im CX=0-Zweig von `0B20h` und im Erneuerungspfad von `72Bh` vergleichen. Dabei die Bedeutung der Statusbits `20h` und `40h`, die Rückgaberegister und die Übergabe an `0A3Ch` untersuchen.
