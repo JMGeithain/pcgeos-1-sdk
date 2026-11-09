@@ -3498,3 +3498,85 @@ Der F5-Datensatz ist damit nachweislich Teil einer textbasierten Such-/Namensver
 - Wird der F5-Eintrag bei Treffer wiederverwendet, referenzgezählt oder nur als Suchindex gehalten?
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2238 – F5h: DOS-FCB-Suche und Namensdatensatz
+
+Die Rückverfolgung des F5-Datensatzes hat einen konkreten Bezug zur DOS-Dateisuche ergeben. Damit ist die bisherige vorsichtige Bezeichnung „textbasierte Namensverwaltung“ präzisiert.
+
+### 1. F5-Erzeugung ruft eine DOS-Suchroutine auf
+
+Der Ablauf in `0x0B20`:
+
+- markiert den neuen 16-Byte-Datensatz mit `F5h` im oberen Byte des ersten WORDs;
+- liest Konfigurations-/Geräteinformationen über `0x0CC5`;
+- ruft `0x0B0E` auf;
+- bei erfolgreichem Rücklauf setzt er Bit `0x20` in CL;
+- kopiert anschließend genau elf Bytes von DS:SI nach Datensatzoffset +5.
+
+`0x0B0E` übergibt AL als DL, erhöht DX und ruft `0x1901` auf. Das Ergebnis wird über Carry und AL ausgewertet.
+
+### 2. 0x1901 baut eine Extended-FCB-Suchmaske
+
+Der Stackpuffer wird in `0x1901` folgendermaßen vorbereitet:
+
+```asm
+1904  sub  sp,0x2C
+190B  lea  di,[bp-0x2C]
+190E  mov  cx,0x2C
+1911  xor  al,al
+1913  rep  stosb
+1915  mov  byte [bp-0x2C],0xFF
+1919  mov  byte [bp-0x26],0x08
+191D  mov  byte [bp-0x25],dl
+1920  lea  di,[bp-0x24]
+1923  mov  cx,0x0B
+1926  mov  al,0x3F
+1928  rep  stosb
+```
+
+Das Layout entspricht dem DOS-Extended-FCB-Präfix:
+- Byte 0 = `FFh`;
+- Bytes 1–5 = reserviert/Null;
+- Byte 6 = Attribut `08h`;
+- Byte 7 = übergebenes Attributbyte;
+- Bytes 8–18 = elf Wildcard-Zeichen `? (3Fh)`.
+
+Danach setzt die Routine mit DOS-Funktion `AH=1Ah` die DTA auf `DS:057Fh` und ruft mit `AH=11h` die FCB-Suchfunktion auf, wobei DS:DX auf den Extended-FCB-Puffer zeigt. Der DOS-Aufruf läuft über den Kernel-DOS-Wrapper `0x1849`.
+
+**Damit ist bytegenau belegt:** Der F5-Erzeugungspfad ist mit einer DOS-FCB-Dateisuche verbunden. Der Aufruf `0x1901` verwendet eine Extended-FCB-Suchmaske mit elf Wildcards und den Attributwerten `08h` sowie dem übergebenen Attributbyte.
+
+### 3. Bedeutung der elf Bytes ab +5
+
+Die elf Bytes werden nach dem DOS-Such-/Namenspfad im F5-Datensatz gespeichert. Eine getrennte Routine `0x09FA` vergleicht exakt diese elf Bytes mit einem vorhandenen Datensatz ab dessen Offset +5. Das ist mit einem 8+3-DOS-Namenformat vereinbar und die DOS-FCB-Suchmaske bestätigt die 11-Byte-Namensbreite.
+
+**Präzisierung:** Das belegt eine 11-Byte-Dateinamens-/FCB-bezogene Schlüsselverwaltung. Ob der konkrete Schlüssel stets ein DOS-Kurzname ist oder in bestimmten Pfaden auch eine GEOS-interne Namensrepräsentation enthält, muss durch Prüfung der Herkunft von DS:SI und der Aufrufer noch bestätigt werden.
+
+### 4. Felder +0B und +0C
+
+Die Such-/Trefferverwaltung verwendet:
+- `+0B`: wird in `0x09CA` erhöht und in `0x09EC` wieder verringert. Das ist ein temporärer Zähler während des Such-/Zugriffsabschnitts.
+- `+0C`: wird bei Treffer in `0x09E9` aus `DS:105A` belegt.
+
+Die Routine `0x09B6` schützt den Zugriff mit `CLI/STI`, prüft das erste WORD des Datensatzes und verwaltet den Zähler. Die genaue fachliche Semantik von +0C (z.B. Thread-/Suchkontext oder anderer Handlebezug) bleibt offen.
+
+### 5. Quellenabgrenzung
+
+Der interne Nachweis stammt aus dem untersuchten GeoWorks-1.x-Kernel-Load-Image. Als externe historische Kontextquelle existiert das GeoWorks-Dokument „PC/GEOS System Software Overview“, Draft vom 10. November 1990. Es beschreibt, dass PC/GEOS eigene Dateisystemroutinen bereitstellt, die für Dateizugriffe DOS verwenden, und führt unter anderem FileFindFirst sowie Long-Name-Dateiroutinen auf. Das Dokument bestätigt den allgemeinen DOS-Dateisystemkontext, ordnet aber die hier untersuchten Kernel-Offets nicht einzelnen API-Namen zu.
+
+### 6. Ergebnis / offene Punkte
+
+**Gesichert:**
+- F5h wird im 16-Byte-Datensatzformat verwendet.
+- Der Erzeugungspfad ruft eine DOS-Extended-FCB-Suche über `AH=11h` auf.
+- Die Suchmaske enthält elf Wildcards; Byte 6 ist `08h`, Byte 7 stammt aus DL.
+- Die elf Bytes ab +5 werden später byteweise mit Einträgen derselben relativen Position verglichen.
+- +0B wird während des Suchpfads temporär erhöht und wieder verringert.
+
+**Offen:**
+- genaue Quelle und Semantik der elf Bytes in DS:SI;
+- Bedeutung des Attributparameters und der zusätzlichen FCB-Attributmaske;
+- fachliche Bedeutung des WORDs +0C;
+- welcher öffentliche Dateisystemdienst diesen internen Datensatz erzeugt.
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
