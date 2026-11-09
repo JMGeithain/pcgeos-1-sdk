@@ -3043,3 +3043,60 @@ Beide Pfade benutzen somit die GEODE-Ressourcentabelle und den gemeinsamen Datei
 **Noch offen:** die genaue Bedeutung und Herkunft des Handle-Feldes bei `[BX+8]`, die Bedeutung des Grenzwerts `0xF0` in `[DI+1]`, sowie die vollständige semantische Rolle des Sonderpfads `0x1D9C`. Bis zur Klärung werden diese Felder nicht mit spekulativen Symbolnamen versehen.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2232 – Herkunft des Owner-Handles bei Handle-Offset +8
+
+Die Schreibzugriffe auf Handle-Offset `+8` wurden im Kernel-Load-Image weiterverfolgt. Das klärt den bisher offenen Zwischenschritt in `0x20CB`.
+
+### 1. Das Feld +8 wird mit dem GEODE-eigenen Handle belegt
+
+Drei Stellen sind dafür besonders aussagekräftig:
+
+- `0x1B81–0x1B85`: `BX = DS:[0]`; danach `ES:[BX+8] = BX`.
+- `0x1A06–0x1A0D`: `BX = DS:[0]`, `AX = DS:[0]`; danach `ES:[BX+8] = AX`.
+- `0x1D8A–0x1D90`: `DX = DS:[0]`; danach `ES:[BX+8] = DX`.
+
+In allen drei Fällen wird somit der Wert aus dem GEODE-Datenblockfeld `DS:[0]` in Handle-Offset `+8` geschrieben. Das ist kein unmittelbarer Segmentwert, sondern der Handlewert, mit dem der GEODE-Datenblock im Kernel-Handle-System referenziert wird.
+
+### 2. Rückverfolgung in 0x20CB
+
+Die zuvor analysierte Folge in `0x20CB` lautet:
+
+```asm
+20CE  call 0x9636       ; ES = Kernel-Datensegment
+20D1  mov  di,es:[bx+8] ; Owner-Handle aus dem Ressourcenhandle
+20D5  cmp  byte es:[di+1],0xF0
+20DC  mov  es,es:[di]   ; Segment aus dem Owner-Handle
+20DF  mov  di,es:[0x3A] ; GEODE-Ressourcentabelle
+20E4  mov  cx,es:[0x38] ; Anzahl der Ressourcen
+```
+
+Damit ist der Datenfluss jetzt genauer:
+
+1. Der Ressourcenhandle enthält bei Offset +8 den Handle des zugehörigen GEODE-Datenblocks.
+2. `0x20CB` liest diesen Owner-Handle.
+3. Über das erste WORD des Owner-Handle-Datensatzes gewinnt die Routine das Segment des GEODE-Datenblocks.
+4. In diesem GEODE-Segment sucht sie den ursprünglichen Ressourcenhandle in der Tabelle ab `DS:3A`.
+
+Die Bezeichnung **Owner-Handle** ist hier durch die Schreibstellen und den Leseweg belegt. Der exakte Status-/Typcode in Byte `[owner_handle+1]` bleibt offen.
+
+### 3. Abgrenzung: Handle-Datensatz und GEODE-Datenblock
+
+Die Felder sind nicht zu verwechseln:
+
+- `[resource_handle+2]`: Absatzgröße des verwalteten Blocks, wie in Untersuchung 2231 aus dem Allokationspfad abgeleitet.
+- `[resource_handle+8]`: Handle des zugehörigen GEODE-Datenblocks.
+- `[owner_handle]`: Segmentwert des durch den Owner-Handle referenzierten GEODE-Datenblocks (so von `0x20CB` verwendet).
+- `[owner_segment+0x3A]`: Zeiger auf die Ressourcen-Handle-Tabelle.
+- `[owner_segment+0x38]`: Anzahl der Ressourcen-Handles in dieser Tabelle.
+
+Diese Zuordnung erklärt, warum `0x20CB` vom Ressourcenhandle zunächst zu einem zweiten Handle springt und erst danach die GEODE-Ressourcentabelle durchsucht.
+
+### 4. Status / nächste offene Fragen
+
+**Gesichert:** Handle-Offset +8 verweist auf den GEODE-eigenen Owner-Handle; `0x20CB` verwendet dessen ersten WORD als Segment des GEODE-Datenblocks und sucht darin den Ressourcenhandle.
+
+**Offen:** die Bedeutung des Statusbytes `[owner_handle+1]` und insbesondere die Semantik des Abbruchvergleichs gegen `0xF0`. Dafür müssen die Erzeugungs-, Freigabe- und Statusänderungspfade des Kernel-Handle-Datensatzes vollständig verglichen werden.
+
+Weiterhin keine Änderungen an Originaldateien, kein Patch und keine Erstellung von `geoTest.geo`.
