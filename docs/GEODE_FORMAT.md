@@ -102,24 +102,18 @@ The original German `KERNEL.OLD` reads 24 bytes at file offset `00C8h`. Static d
 The internal allocation request is `46h + 8*R + 4*E + 2*I`, plus `18h` when bit 7 of `00C9h` is set. This is a kernel-side management allocation, not the file size or the serialized GEODE header length. The exact symbolic names of the type, protocol fields, attribute bits, and the optional 18h-byte extension remain unconfirmed. See the 2141–2150 section in the reassessment dossier. No parser changes were made.
 
 
+
 ## Process-class method far pointers (audited GeoWorks 1.x examples, 2026-11-09)
 
-The Class_rel1 method table in the supplied GeoWorks 1.x BOUNCE.GEO and SPINTEXT.GEO samples provides a concrete byte-level check for process method pointers.
+The Class_rel1 method table in BOUNCE.GEO and SPINTEXT.GEO has a method count at DGROUP offset 0x46. Message IDs begin at 0x52. The handler pointer table begins immediately after the count's message-ID words, at 0x52 + 2*method_count.
 
-- The method count is stored at DGROUP offset 0x46.
-- Message IDs begin at 0x52; the handler pointer table follows the message-ID words.
-- In both audited files, each handler pointer is stored as resource WORD followed by offset WORD.
-- The relocation record targets the first WORD (the resource/segment word), not the second WORD.
+The two audited files store each handler as **offset WORD followed by resource WORD**. The relocation targets the second WORD (the resource/segment word), not the first WORD.
 
-Evidence from the German installation archive:
-
-| File | DGROUP method count | First handler bytes | Relocation target |
+| File | Method count | First handler record | Relocation target |
 |---|---:|---|---:|
-| BOUNCE.GEO | 7 | 02 00 38 00 | 0x62 |
-| PROGRAMM.E/SPINTEXT.GEO | 8 | 02 00 38 00 | 0x62 |
+| BOUNCE.GEO | 7 | 00 00 02 00 | 0x62 |
+| PROGRAMM.E/SPINTEXT.GEO | 8 | 00 00 02 00 | 0x64 |
 
-The first WORD is resource ID 2; the second WORD is code offset 0x0038. The relocation stream contains a resource relocation (info=0x22) at offset 0x62. Subsequent handler records advance by four bytes and their relocation targets likewise point to the first WORD.
+The first handler points to code offset 0 in resource 2. The next handler in both files has offset 0x0038 and resource 2. For BOUNCE.GEO its record begins at 0x64 and relocation is at 0x66; for SPINTEXT.GEO its record begins at 0x66 and relocation is at 0x68.
 
-Packer invariant: when a process method points into code resource 2, write (resource_id=2, code_offset) and emit the relocation at the pointer's first WORD. Do not write (code_offset, resource_id) or relocate the second WORD. The regression test is tests/test_process_method_table.py.
-
-This statement is limited to the observed GeoWorks 1.x process-class layout and the two named reference files. It does not claim that every class or every GEODE pointer representation uses the same layout.
+Packer invariant for the audited process classes: write (code_offset, resource_id) and emit the resource relocation at the pointer's second WORD. The original SDK 0.1 writer follows this layout. This is a sample-specific finding, not a claim about every pointer representation in every GEODE resource.
