@@ -1271,3 +1271,40 @@ Die erzeugte Datei und Buildnachweise wurden im Arbeitsverzeichnis abgelegt:
 **Die GEO-Datei und die Build-Evidence-ZIP werden nicht in das öffentliche GitHub-Repository hochgeladen**, weil die GEO-Datei UI-Vorlagenbytes aus der GeoWorks-Installation enthält. Das GitHub-Dossier enthält die Analyse, die Hashes und den Buildstatus, aber keine aus der proprietären Installation abgeleiteten Binärdateien.
 
 **Nächster Schritt 2265:** Den Build aus einem byteidentischen Checkout des Repository-Standes reproduzieren und die Target-Profilprüfung in eine getrennte, explizite Profiloption überführen. Danach GEOTEST.GEO in einer gesicherten GeoWorks-1.2-Testinstallation starten und die Loader-/Laufzeitresultate protokollieren.
+
+
+## 26. Untersuchung 2265 – GEOTEST-Quellprojekt und Zielarchiv-Vorbereitung veröffentlicht
+
+Nach dem ersten Host-Build wurden die wiederverwendbaren, nicht-binären Projektbestandteile in das SDK-Repository aufgenommen.
+
+### 26.1 Neu veröffentlichte Dateien
+
+| Pfad | Inhalt |
+|---|---|
+| `tools/prepare_geoworks_1_2_8_de.py` | Prüft vier festgelegte Quell-GEO-Dateien anhand ihrer SHA-256-Werte und erstellt eine neue temporäre ZIP-Datei mit den vom SDK erwarteten Member-Pfaden. |
+| `examples/geotest/project.json` | GEOTEST-Projektdefinition, permanent name `geotest`, Token `GTS1`. |
+| `examples/geotest/src/app.c` | Minimale Anwendung mit Init-, Draw-, Key- und Click-Callbacks. |
+| `examples/geotest/src/help.txt` | Help-Text der Testanwendung. |
+| `examples/geotest/README.md` | Anleitung für Profilvorbereitung und Host-Build einschließlich der experimentellen Einschränkungen. |
+
+Die Verzeichnisübersicht in der Repository-README wurde um `examples/geotest/` und `tools/` ergänzt.
+
+### 26.2 Integritätsprüfung der veröffentlichten Quellen
+
+Die lokalen Dateien für das Vorbereitungsskript, `project.json`, `app.c` und `help.txt` wurden mit Git-Blob-SHA-1 gegen die von GitHub zurückgelieferten Blob-SHAs verglichen. Alle vier Werte stimmen überein. Damit sind diese veröffentlichten Dateien byteidentisch mit den lokal getesteten Fassungen.
+
+Die Vorbereitung wurde anschließend mit dem veröffentlichten Skript erneut ausgeführt. Es verifizierte die vier erwarteten SHA-256-Werte und erzeugte die normalisierte Zielarchivkopie. Ein erneuter Host-Build mit dieser Skriptausgabe ergab dieselbe GEOTEST-Dateigröße und denselben SHA-256-Wert wie der erste Versuch.
+
+### 26.3 GitHub-Stand
+
+Die neuen Dateien wurden einzeln auf `main` angelegt; die Repository-README wurde aktualisiert. Die Entwicklungsdokumentation bleibt unter:
+
+`docs/GEOTEST_DEVELOPMENT_LOG.md`
+
+Die erzeugte `GEOTEST.GEO`, die temporäre Zielarchivkopie und die Build-Evidence-ZIP wurden bewusst nicht in GitHub abgelegt. Die GEO-Datei enthält aus der GeoWorks-Installation übernommene UI-Vorlagenbytes.
+
+### 26.4 Noch offene Reproduzierbarkeit
+
+Die vier Projekt-/Vorbereitungsdateien sind byteidentisch bestätigt. Die übrigen lokal rekonstruierten Buildmodule (Parser, UI-Generator, Packer, Buildsystem und Runtime) wurden noch nicht als vollständiger byteidentischer Repository-Checkout nachgewiesen. Deshalb bleibt die Wiederholung des Builds mit einem unveränderten Checkout des GitHub-Repositorys der nächste zwingende Prüfschritt.
+
+**Nächster Schritt 2266:** Die übrigen Buildmodule aus dem aktuellen GitHub-Stand byteidentisch in einer sauberen Arbeitskopie bereitstellen, ihre Git-Blob-SHAs gegen GitHub prüfen und den GEOTEST-Build erneut ausführen. Nur wenn der neue Build dieselbe strukturelle Prüfung besteht, wird der Host-Build als repository-reproduzierbar eingestuft. Danach folgt der Starttest in GeoWorks 1.2.
