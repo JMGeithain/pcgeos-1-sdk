@@ -109,6 +109,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2264 | Erster experimenteller Host-Build von GEOTEST.GEO erzeugt und strukturell geprüft |
 | Untersuchung 2265 | GEOTEST-Quellprojekt und Zielarchiv-Vorbereitung veröffentlicht |
 | Untersuchung 2266 | Byteidentitätsprüfung deckt Abweichungen zwischen lokalem Build-Unterbau und GitHub-HEAD auf; Reproduzierbarkeit ausdrücklich nicht bestätigt |
+| Untersuchung 2267 | Test-Gates und Selftest-Annahmen gegen das deutsche Zielprofil geprüft; Standard-Selftest scheitert erwartungsgemäß an strikten Referenzhashes |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1389,3 +1390,66 @@ Bei dieser Untersuchung wurden weder `GEOWORKS.zip` noch `KERNEL.OLD`, die erzeu
 6. Es ist erforderlich, eine saubere, vollständige Quellarbeitskopie aus Commit `b57926472adc61f00d37091b192f0cb4080f3778` aufzubauen und genau diese Buildkette erneut zu testen.
 
 **Nächster Schritt 2267:** Die aktuelle Repository-Engine einschließlich `bin/sdkcli.py`, sämtlicher `pcgeos1/`-Module, `include/`, `runtime/` und `templates/basic_view/` als sauberen Quellstand bereitstellen. Danach `doctor`, Zielarchivvorbereitung, Parser-/Selftests und erst dann den GEOTEST-Build mit der veröffentlichten Projektdatei ausführen. Den alten GEO-Build getrennt als Vorab-Artefakt aufbewahren.
+
+
+## 28. Untersuchung 2267 – Test-Gates und Selftest-Kompatibilität des deutschen Zielprofils
+
+**Ziel:** Prüfen, ob die im Repository vorhandenen Tests mit dem in Untersuchung 2262/2263 ermittelten deutschen GeoWorks-1.2.8-Template-Satz arbeiten können. Maßgeblich sind `tests/selftest.py`, `tests/SELFTEST_RESULTS.json`, `pcgeos1/target.py`, `pcgeos1/buildsys.py` und die tatsächliche normalisierte Archivkopie `/tmp/geotest-build/GWP2-normalized-script.zip`.
+
+### 28.1 Standard-Selftest verwendet strikt das bekannte Referenzprofil
+
+Die veröffentlichte Funktion `tests/selftest.py:run()` ruft `load_templates(gwp)` ohne `strict=False` auf. Der Standardwert in `pcgeos1/target.py` ist `strict=True`. Anschließend wird das generische Beispiel `examples/hello` gebaut, dessen Projektdefinition keinen experimentellen Profilfreischalter setzt.
+
+Der Standard-Selftest akzeptiert deshalb nur den in `KNOWN` festgelegten Vierer-Satz von Gesamtdatei-SHA-256-Werten. Er ist kein profilneutraler Parser- oder Laufzeittest.
+
+### 28.2 Reproduzierter Hash-Gate-Test mit dem deutschen normalisierten Archiv
+
+Die normalisierte Archivkopie enthält genau vier Mitglieder:
+
+| Mitglied | Bytes | SHA-256 |
+|---|---:|---|
+| `WORLD/EXTRAS/SPINTEXT.GEO` | 3.748 | `18f2075c9d61fe7231b1dacae8c171e68c2028ef2fca6d40a6694158fdfcb9fd` |
+| `WORLD/NOTEPAD.GEO` | 8.070 | `a1ebd0cb84712a126b1f67f5fd1ca6b57f8bda2e9038e9224ba16ebc008f9ea9` |
+| `WORLD/VIEWER.GEO` | 59.984 | `c884b76cdc4f9119d4794f7830d5438e0abcc1d92d3cc248aa912bde85ed43e7` |
+| `WORLD/TERM.GEO` | 63.718 | `a62ebc0fb3c01acb4b59c8172d20d520653822a6d42f0bec4831dfdb93e1cf3a` |
+
+Der tatsächliche Aufruf von `load_templates()` mit Standardparametern bricht erwartungsgemäß beim ersten Template ab:
+
+`Unsupported SPINTEXT.GEO: SHA-256 18f2075c...; SDK 0.1 knows 848f5afb...`
+
+Der anschließende Aufruf mit `strict=False` parst alle vier Geodes erfolgreich; alle melden Kernelprotokoll `622.3`. Das ist eine Parser-/Formatprüfung, keine vollständige ABI-Freigabe.
+
+### 28.3 Aussage der gespeicherten Selftest-Ergebnisse
+
+`tests/SELFTEST_RESULTS.json` dokumentiert zwei Builds mit den vier unveränderten SDK-Referenzhashes:
+- GCC 14.2.0: 70.954 Bytes, 12 Ressourcen, 41 Relokationen.
+- Clang 17: 70.954 Bytes, 12 Ressourcen, 41 Relokationen.
+
+Diese Ergebnisse sind wertvolle Referenzwerte für das Standardzielprofil. Sie sind nicht auf den deutschen Template-Satz übertragbar. Die erste GEOTEST-Datei mit 70.794 Bytes ist außerdem nicht mit diesen generischen Hello-Builds gleichzusetzen.
+
+### 28.4 Absatz-/Relokationsregression
+
+Das Repository enthält zusätzlich `tests/test_geode_alignment.py`. Der synthetische Test prüft, dass der Relokationsstrom nach der Absatzauffüllung und nicht direkt nach der unaufgefüllten Ressourcengröße gelesen wird. Er ist grundsätzlich unabhängig von den vier konkreten Template-Hashes.
+
+**Prüfgrenze:** Der Test wurde in dieser Untersuchung nicht gegen einen byteidentischen Checkout des aktuellen Repositorys ausgeführt, weil die lokale Parserdatei laut Untersuchung 2266 nicht mit GitHub-HEAD übereinstimmt. Der Testcode und sein beabsichtigter Prüfgegenstand sind dokumentiert; ein bestandener Lauf des aktuellen HEAD wird hier nicht behauptet.
+
+### 28.5 Konsequenz für ein sauberes Profil-Testdesign
+
+Die Tests sollten künftig in drei Ebenen getrennt werden:
+
+1. **Parser-/Formatregression:** synthetische GEODE-Header, Ressourcen- und Relokationsgrenzen; unabhängig vom Zielprofil.
+2. **Profilintegrität:** exakte Vierer-Hashliste und Pfade für `geoworks-1.2.8-de`; Prüfung durch das bereits veröffentlichte Vorbereitungsskript.
+3. **Build-/ABI-Test:** Build des GEOTEST-Projekts mit explizitem Profil und danach strukturelle Prüfung des Outputs. Die strikten Standard-Selftests bleiben unverändert auf dem bekannten Referenzprofil.
+
+Ein globales Abschalten von Hashprüfungen ist ausdrücklich nicht vorgesehen. Der experimentelle GEOTEST-Projektparameter `allow_unknown_target=true` ist nur zusammen mit dem SHA-pinnenden Vorbereitungsprogramm akzeptabel.
+
+### 28.6 Ergebnis Untersuchung 2267
+
+1. Der Standard-Selftest ist absichtlich an die vier bekannten Referenzdatei-Hashes gebunden.
+2. Das deutsche Zielarchiv scheitert deshalb erwartungsgemäß am strikten Hash-Gate.
+3. Mit `strict=False` sind die vier normalisierten deutschen Geodes parsebar und melden Kernelprotokoll 622.3.
+4. Die gespeicherten GCC-/Clang-Selftest-Ergebnisse gelten nur für das Standardzielprofil.
+5. Der Absatz-/Relokationsregressionstest ist profilunabhängig, wurde hier aber nicht gegen einen byteidentischen GitHub-Checkout ausgeführt.
+6. Standardprofil und deutsches Experimentalprofil müssen getrennte, ausdrücklich benannte Testpfade behalten.
+
+**Nächster Schritt 2268:** Die vollständigen Quelltexte des aktuellen Repository-HEAD in einer sauberen Arbeitskopie bereitstellen und deren Git-Blob-SHAs vor dem Build prüfen. Dann zuerst den profilunabhängigen GEODE-Parser-Regressionstest und `doctor` ausführen, danach das deutsche Profil vorbereiten und den GEOTEST-Build mit exakt der veröffentlichten C-Quelle starten. Die Standard-Selftests bleiben unverändert und werden separat nur mit dem bekannten Referenzarchiv ausgeführt.
