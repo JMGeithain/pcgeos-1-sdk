@@ -116,7 +116,8 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2271 | Neun Profil-/Bypass-Unit-Tests, Parser-Absatzregression und realer deutscher Profil-Parse erfolgreich ausgeführt |
 | Untersuchung 2272 | GitHub Actions testet den aktuellen Repository-Checkout erfolgreich: Python-Compile, Profiltests und GEODE-Absatzregression PASS |
 | Untersuchung 2273 | Build mit rekonstruierter GitHub-Quellfassung wiederholt; identischer GEO-Hash, Quellbyteidentität weiterhin offen |
-| Untersuchung 2274 | Schwerer Fehler im Prozessmethoden-Farzeiger entdeckt und korrigiert: Ressourcenwort/Offsetwort vertauscht; Relokation lag auf falschem WORD |
+| Untersuchung 2274 | Erste Farzeiger-Fehlinterpretation durch korrekte Tabellenposition widerlegt; ursprüngliche Reihenfolge des Packers bestätigt |
+| Untersuchung 2275 | Korrekte Farzeiger-Serialisierung in Hilfsfunktion gekapselt; Offset/Resource- und Relokationsregression ergänzt |
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
@@ -1857,3 +1858,66 @@ Der frühere Build mit SHA-256 9ace19da2535a1f05875f891876417bc8adafbdbce2b32540
 6. Der Buildhash 9ace19da... bleibt als experimenteller Host-Build erhalten; Laufzeittest und byteidentischer GitHub-Build bleiben offen.
 
 **Nächster Schritt 2275:** Den zurückgenommenen Packer-Stand und die CI-Datei im aktuellen Repository-HEAD prüfen, einen neuen CI-Lauf abwarten und anschließend die acht Handlerziele sowie den Einstiegspfad anhand der originalen Code-Ressourcen von BOUNCE.GEO und SPINTEXT.GEO weiter untersuchen.
+ 
+
+## 36. Untersuchung 2275 – Regressionstest für die bestätigte Prozessmethoden-Struktur
+
+Nach der Korrektur aus Untersuchung 2274 wurde die bestätigte Struktur nicht nur dokumentiert, sondern in eine kleine, direkt testbare Packer-Funktion überführt.
+
+### 36.1 Implementierung
+
+In pcgeos1/packer.py schreibt write_process_methods() nun die Prozessmethodentabelle:
+- Methodenzahl nach DGROUP+46h;
+- Message-IDs ab DGROUP+52h;
+- Handler-Tabelle unmittelbar danach;
+- pro Handler zuerst Codeoffset-WORD, danach Ressourcen-WORD (hier 2);
+- Relokation 0x22 auf das zweite WORD jedes Handlerpaares.
+
+Die Funktion weist fehlende Symbolnamen ab, bevor der Packer eine unvollständige Methodentabelle ausgibt.
+
+### 36.2 Unit-Tests
+
+tests/test_process_method_table.py prüft:
+1. korrekte Methodenanzahl;
+2. Message-ID-Werte und deren Position;
+3. Handler-Pointer-Tabelle bei 52h + 2*method_count;
+4. Reihenfolge (Codeoffset, Ressourcen-ID);
+5. Relokation auf das zweite WORD;
+6. Ablehnung eines fehlenden Handler-Symbols.
+
+Der zuvor angelegte Test mit der falsch angenommenen Tabellenposition wurde entfernt. Der jetzt eingecheckte Test verwendet die in Untersuchung 2274 aus den Originaldateien abgeleitete Tabellenbasis.
+
+### 36.3 Wiederhergestellter Host-Build
+
+Die vorübergehend geänderte Wortreihenfolge wurde verworfen. Das ursprüngliche GEOTEST.GEO wurde aus der lokalen Arbeitskopie mit dem ursprünglichen Packer erneut als Referenz herangezogen und geprüft:
+
+- SHA-256: 9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b
+- Größe: 70.794 Bytes
+- GEOS-Format: 1
+- Kernel: 622.3
+- UI-Import: ui 693.0
+- Ressourcen: 12
+- Relokationen: 41
+
+Für alle acht Methoden wurde die tatsächliche Ausgabe geprüft. Die Handler-Tabelle beginnt bei 0062h; die Handlerzeiger enthalten jeweils Codeoffset, danach Ressourcen-ID 2. Die Relokation liegt jeweils auf dem Ressourcen-WORD, also beim ersten Eintrag bei 0064h. Alle acht Offsets liegen innerhalb der Code-Ressource mit 1.397 Bytes.
+
+### 36.4 CI und Grenzen
+
+Die GitHub-Actions-Pipeline wurde um tests/test_process_method_table.py ergänzt. Damit umfasst sie jetzt:
+- Python-Compile;
+- neun Zielprofiltests;
+- zwei Prozessmethoden-Tests;
+- GEODE-Absatz-/Relokationsregression.
+
+Der vollständige CI-Lauf für den aktuellen Commit wird nach der Dokumentationsaktualisierung geprüft. Der Host-Build ist weiterhin aus der rekonstruierten lokalen Buildkopie erzeugt; vollständige Byteidentität aller Quelldateien mit GitHub-HEAD ist nicht nachgewiesen. Ein echter Start in GeoWorks 1.2 steht weiterhin aus.
+
+### 36.5 Ergebnis Untersuchung 2275
+
+1. Die Prozessmethoden-Serialisierung ist nun gekapselt und unit-getestet.
+2. Die geprüfte Struktur entspricht den Originaldateien BOUNCE.GEO und SPINTEXT.GEO.
+3. Der alte Hash 9ace19da... bleibt der aktuelle experimentelle Host-Build.
+4. Der zwischenzeitliche Hash 3f72580d... wird ausdrücklich verworfen.
+5. Die CI prüft jetzt auch die Prozessmethoden-Struktur.
+6. Die Anwendung ist noch nicht als startbar in GeoWorks 1.2 bestätigt.
+
+**Nächster Schritt 2276:** Den CI-Lauf des aktuellen Repository-HEAD abwarten und danach die acht Handler-Eintrittspunkte sowie den Nachrichtenvertrag gegen die Disassemblierungen der originalen BOUNCE.GEO- und SPINTEXT.GEO-Code-Ressourcen vergleichen. Erst wenn diese Prüfung keine offenen ABI-Widersprüche zeigt, den Starttest in einer gesicherten GeoWorks-1.2-Installation vorbereiten.
