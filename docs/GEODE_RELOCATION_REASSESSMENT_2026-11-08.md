@@ -3445,3 +3445,56 @@ Die identische Position des Markers im oberen Byte des ersten WORDs bedeutet nic
 **Offen:** die vollständige Semantik des F5-Objekts; die fachliche Funktion der FA-Liste und des Wertes bei GEODE-Offset +4A; die genaue Rolle des +6-Feldes.
 
 **Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
+
+
+## Untersuchung 2237 – Verbraucherpfade des F5h-Datensatzes
+
+Der F5-Datensatz aus `0x0A20/0x0B20` wurde nun anhand seiner direkten Hilfsroutinen und der Suchroutine `0x09FA` weiter eingeordnet.
+
+### 1. Nachweisbarer Zweck des Datensatzes: Namensvergleich
+
+Die Routine `0x09FA` erhält einen Zeiger auf einen vorhandenen Datensatz in ES:DI und vergleicht elf Bytes:
+
+```asm
+09FA  call 0x29DC
+09FD  mov  di,es:[di-2]
+0A01  mov  es,bp
+0A03  add  di,5
+0A06  mov  cx,0x0B
+0A09  repe cmpsb
+0A0B  je   0A14
+0A0D  cmp  byte [si-1],0
+0A11  je   0A18
+0A13  stc
+0A14  call 0x29EE
+0A17  ret
+```
+
+Der Vergleich startet also bei Datensatzoffset +5 und umfasst genau elf Bytes. Dies entspricht exakt dem Speicherort und der Länge, die `0x0B20` beim Erzeugen des F5-Datensatzes beschreibt (`DI=[BX+2]`, `DL=[BX+4]`, elf Bytes ab +5).
+
+Bei einer Abweichung wird zusätzlich geprüft, ob das letzte gelesene Zeichen null ist; bei Null folgt ein weiterer Vergleichspfad, der Leerzeichen `0x20` überspringt. Das ist ein starker Nachweis, dass die elf Bytes in diesem Datensatz als Text-/Namensschlüssel verglichen werden.
+
+### 2. Suchschleife
+
+Die umgebende Routine `0x09CE–0x09F4` durchläuft eine Tabelle von Einträgen, liest jeweils einen Verweis und ruft `0x09FA` für den Vergleich auf. Bei Treffer kopiert sie einen WORD aus dem Kontext bei `BP:105A` nach Datensatzoffset +0C und dekrementiert das Byte +0B.
+
+Damit sind +0B und +0C Teil eines Verwaltungs-/Trefferzählers beziehungsweise eines zugehörigen Kontextwertes. Ihre exakte Semantik ist noch nicht gesichert.
+
+### 3. Abgrenzung des F5-Datensatzes
+
+Der F5-Datensatz ist damit nachweislich Teil einer textbasierten Such-/Namensverwaltung. Gesichert sind:
+- elf Zeichen-/Byteschlüssel ab Offset +5;
+- Vergleiche mit einem vorhandenen Eintrag an derselben relativen Position;
+- Sonderbehandlung eines Nullbytes und nachfolgender Leerzeichen;
+- ein Verwaltungsbyte +0B und ein WORD +0C, die im Trefferpfad verändert werden.
+
+**Nicht gesichert:** Ob der Schlüssel ein Dateiname, ein Geräte-/Treibername, ein Ressourcenname oder ein anderer Kernelname ist. Der Code belegt Textvergleich und Eintragssuche, aber ohne vollständige Aufrufer der öffentlichen Schnittstelle keine konkrete Namensdomäne.
+
+### 4. Nächste offene Fragen
+
+- Welcher öffentliche oder interne Aufrufer übergibt SI/DI an `0x0B20`?
+- Woher stammen die elf Bytes, und welche Kodierung/Zeichenregeln gelten?
+- Welche Bedeutung haben +0B und +0C?
+- Wird der F5-Eintrag bei Treffer wiederverwendet, referenzgezählt oder nur als Suchindex gehalten?
+
+**Arbeitsregel:** Keine Änderung an Originaldateien, kein Patch und weiterhin keine Erstellung von `geoTest.geo`.
