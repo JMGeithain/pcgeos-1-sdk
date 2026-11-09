@@ -89,6 +89,7 @@ Vor der Fortsetzung bleibt noch die Adressnotation der Arbeitsnotiz 2245 zu klä
 | Untersuchung 2249 | Schreibzugriffe auf `05B8h/05BAh` vollständig verglichen; Offset-/Segment-Paar nachgewiesen |
 | Untersuchung 2250 | DI-Aufrufvarianten und unterschiedliche Rückgabekanäle verglichen; keine einheitliche Callback-Signatur unterstellt |
 | Untersuchung 2251 | Überlappende Segmentladehelfer analysiert; DS/ES in den untersuchten Callback-Pfaden auf `0E35h` zurückgeführt |
+| Untersuchung 2252 | Listenanker `05AEh`, Kopf-Link `05B2h`, Statusfelder und zweites Far-Zeigerpaar untersucht |
 | GEOTEST-Projektdateien | noch nicht erzeugt |
 | GEOTEST.GEO | noch nicht gebaut |
 | strukturelle GEO-Prüfung | ausstehend |
@@ -178,6 +179,60 @@ Die zuvor dokumentierte Schreibstelle `FAD1h` setzt in DS=`0E35h` das Wort `DS:[
 Der Callback-/Dispatch-Zeiger ist für die untersuchten Kernelpfade zentral im Segment `0E35h` gespeichert. Der indirekte Aufruf über ES ist kein Hinweis auf einen zweiten, eigenständigen Callback-Speicherbereich, wenn ES zuvor durch `9636h` geladen wurde; er adressiert dann denselben Zeiger `0E35h:05B8h`.
 
 **Nächster Schritt 2252:** Die Datensegmentkonstante `0E35h` und den Inhalt des Segmentes rund um `05A0h–0620h` anhand der Kernel-Initialisierung und aller Schreibzugriffe strukturieren. Insbesondere die benachbarten Werte `05ABh`, `05B1h`, `05B2h`, `05B4h`, `05B6h`, `05B8h`, `05BAh`, `05AEh` und `0609h` auf ihre Beziehungen untersuchen.
+
+
+## 13. Untersuchung 2252 – Datenstrukturen im Segment `0E35h`
+
+**Grundlage:** Quellidentität des Kernels unverändert; Analyse der absoluten Datenzugriffe im Disassembly. Die Segmentladehelfer aus Untersuchung 2251 belegen für die betreffenden Kernelpfade `DS=0E35h` bzw. `ES=0E35h`. Die Datei `KERNEL.OLD` enthält jedoch nicht den zur Laufzeit vollständig initialisierten Inhalt dieses Datensegments. Deshalb werden hier Strukturbeziehungen aus den Instruktionen abgeleitet, nicht vermeintliche Anfangswerte aus gleichnamigen Offsets im Kernel-Code-Image.
+
+### 13.1 Verkettete Liste mit Kopfzeiger `05B2h`
+
+Die Routine `11CBh` erzeugt einen Listenknoten:
+
+1. `9630h` lädt DS auf `0E35h`.
+2. Über `6DACh` wird Speicher angefordert; BX zeigt anschließend auf den neuen Knoten.
+3. Der Code schreibt mehrere Felder relativ zu BX, u. a. Byte bei `BX+0`, Statusbyte bei `BX+1`, Bytes bei `BX+2`/`BX+3`, Wortfelder bei `BX+6`, `BX+0Ch` und `BX+0Eh`.
+4. Bei `11F5h` wird der bisherige Kopf `[05B2h]` nach SI geladen und bei `[BX+4]` als Nachfolger gespeichert.
+5. Bei `11FCh` wird BX als neuer Kopf nach `[05B2h]` geschrieben.
+
+**Gesicherter Befund:** `0E35h:05B2h` ist der Kopfzeiger einer verketteten Liste; der Link des Knotens liegt bei Offset `+4`. Der genaue semantische Typ der Knoten ist noch offen.
+
+### 13.2 Sentinel-/Ankerstruktur bei `05AEh`
+
+Die Routine `1228h` setzt SI auf `05AEh` und untersucht wiederholt das Wort `[SI+4]`, bis es dem gesuchten BX entspricht. Danach kopiert sie den Nachfolger `[BX+4]` in `[SI+4]`. Da `05AEh+4=05B2h`, ist dies die passende Entfernung eines Knotens aus der Liste mit Kopfzeiger `05B2h`.
+
+**Gesicherter Befund:** `0E35h:05AEh` ist ein Listenanker bzw. Sentinel; sein Linkfeld bei `+4` ist zugleich die globale Kopfzeigerzelle `05B2h`. `05B2h` ist damit nicht nur irgendein einzelner Pointer, sondern das Linkfeld des Ankerknotens.
+
+### 13.3 Statusbyte `05ABh` und Initialisierungsflag `05B1h`
+
+- `05ABh` wird in `10B5Fh` als Byte in BL geladen und in `110Eh` mit `03h` verglichen. Die genaue Codierung ist nicht geklärt.
+- `05B1h` wird bei `10B13h` auf `FFh` gesetzt. `10B58h` prüft, ob es null ist; bei ungleich null wird ein alternativer Pfad nach `10B90h` genommen.
+- Der Initialisierungs-/Auswahlblock verwendet `05B1h` daher als Zustandsschalter; eine präzisere Bedeutung (z. B. „nicht initialisiert“, „Treiber aktiv“ o. ä.) ist aus diesen Zugriffen allein nicht belegbar.
+
+### 13.4 Separates Far-Zeigerpaar `05B4h/05B6h`
+
+Die Routine `1849h` lädt nach `DS=0E35h`:
+- `[05B6h]` in AX und speichert es als Segmentwort nach `SS:[0010h]`;
+- `[05B4h]` in AX und speichert es als Offsetwort nach `SS:[000Eh]`.
+
+Danach führt sie mit Interruptsperre `lcall SS:[000Eh]` aus und prüft anschließend den Wert bei `SS:[0010h]`. Das belegt ein zweites Offset-/Segment-Paar, getrennt von `05B8h/05BAh`. In der untersuchten Kerneldatei sind keine direkten Schreibzugriffe auf `05B4h` oder `05B6h` sichtbar; die Initialisierung kann daher außerhalb dieses Kernel-Codepfades erfolgen.
+
+**Wichtig:** `05B4h/05B6h` darf nicht mit dem Callback-Paar `05B8h/05BAh` gleichgesetzt werden. Beide sind getrennte Wortpaare mit unterschiedlichen Aufrufpfaden.
+
+### 13.5 `0609h` – gespeicherter Index
+
+`10BA5h` speichert BX nach `0609h`. Die Routine `25A5h` liest diesen Wert später nach DX. In `10B89h` wird BX unmittelbar zuvor verdoppelt und als Index in `CS:[121Ah+BX]` verwendet. Der gespeicherte Wert ist damit der ausgewählte, bereits skalierte Tabellenindex. Eine höhere semantische Bedeutung ist noch nicht nachgewiesen.
+
+### 13.6 Ergebnis Untersuchung 2252
+
+1. `05B2h` ist der Kopf-Link einer verketteten Liste; `05AEh` ist ihr Sentinel/Anker.
+2. Das Linkfeld jedes Knotens liegt bei `+4`; Einfügen und Entfernen sind im Code sichtbar.
+3. `05ABh` ist ein Zustandsbyte mit mindestens zwei beobachteten Verwendungsweisen; genaue Codierung offen.
+4. `05B1h` ist ein Schalter, der im untersuchten Initialisierungspfad zwischen zwei Kontrollflusswegen unterscheidet.
+5. `05B4h/05B6h` bilden ein separates Far-Zeigerpaar, das `1849h` über einen Stack-basierten Aufruf verwendet.
+6. `0609h` speichert den skalierten Tabellenindex des Blocks `10B53h–10BD6h`.
+
+**Nächster Schritt 2253:** Den Knotenaufbau ab `11CBh` vollständig als Byte-Layout darstellen und die Verbraucher der Felder `+0`, `+1`, `+2`, `+3`, `+4`, `+6`, `+0Ch`, `+0Eh` verfolgen. Parallel die Herkunft der extern initialisierten Far-Zeiger `05B4h/05B6h` und `05B8h/05BAh` weiter eingrenzen.
 
 ## 6. Änderungs- und Belegregel
 
