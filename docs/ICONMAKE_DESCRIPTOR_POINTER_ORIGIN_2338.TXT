@@ -1,0 +1,87 @@
+ICONMAKE – Rückverfolgung des Descriptor-Zeigers [BP-02]
+Untersuchungsschritt 2338
+Stand: 10. November 2026
+
+Ziel
+Der in der aufrufenden Routine verwendete Zeiger [BP-02] sollte bis zu seiner Erzeugung zurückverfolgt werden. Damit soll geklärt werden, ob die Descriptor-Felder +0Ch und +0Dh aus einer statischen Tabelle stammen oder aus einem zur Laufzeit eingelesenen Datenbereich.
+
+Untersuchungsgrundlage
+Untersucht wurde das aus GEOWORKS.zip extrahierte ICONMAKE.EXE. Der MZ-Header ist 0200h Bytes lang; die hier genannten Adressen beziehen sich auf das bereits extrahierte Lade-Modul /tmp/mod.bin. Disassemblierung im 8086-Modus. Die Befunde gelten für genau diese untersuchte Datei.
+
+1. Rückgabe von Routine 1558h
+Die Routine 1558h beginnt mit:
+  1558 PUSH BP
+  1559 MOV BP,SP
+  155B SUB SP,8
+  1560 MOV SI,[BP+04]
+  1563 MOV BX,[SI+08]
+  1566 MOV DI,[BP+06]
+  1569 SHL DI,1
+  156B SHL DI,1
+  156D MOV AX,[BX+DI]
+  156F MOV DX,[BX+DI+2]
+  1572 MOV [BP-04],AX
+  1575 MOV [BP-02],DX
+
+Damit wird anhand des Parameters [BP+06] ein Eintrag aus einer Tabelle gelesen, auf die das Wort bei [SI+08] zeigt. Jeder Eintrag umfasst vier Bytes; die ersten zwei Bytes landen in AX, die nächsten zwei in DX. Die Werte werden als lokale 32-Bit-Größe zwischengespeichert.
+
+Die Routine führt anschließend mehrere Datei-/Pufferoperationen aus. Sie verwendet dabei unter anderem die Hilfsroutinen 217Eh, 1EF8h und 212Ch. Der Rückgabewert entsteht am Ende:
+  15FA MOV AX,DI
+  ...
+  1601 RET
+
+Der von 1558h zurückgegebene Wert ist somit der zuvor in DI gehaltene Zeiger. Im aufrufenden Code wird dieser Rückgabewert bei 0041h nach BX übernommen und bei 0043h in [BP-02] gespeichert.
+
+2. Speicherbeschaffung und Einlesen
+212Ch ist ein kurzer Sprung:
+  212C JMP 38F1h
+
+Die Routine 38F1h führt eine Speicherbeschaffung über die Hilfsroutine 3CC8h aus. Sie erhält ihre Größenangabe über [BP+04]. Bei nicht erfolgreicher Beschaffung beziehungsweise bei ungültiger Größe wird AX:DX auf null gesetzt. Die genaue Semantik der darunterliegenden Speicherverwaltung ist hier nicht weiter aufgelöst.
+
+Routine 1EF8h berechnet zunächst das Produkt der beiden Größenparameter [BP+06] und [BP+08]. Sie arbeitet anschließend mit einem Handle-/Dateikontext und ruft 3A28h für den eigentlichen Transfer auf. Die Routine verändert dabei unter anderem den Positions-/Restlängenstatus im übergebenen Kontext. Dies belegt, dass 1558h nicht lediglich einen statischen Descriptor-Zeiger aus einer Konstantentabelle zurückgibt, sondern einen Datenbereich anhand eines Dateikontexts und eines Tabelleneintrags beschafft und befüllt.
+
+3. Verwendung des Rückgabebereichs im Aufrufer
+Im Aufrufer bei 0037h wird 1558h aufgerufen. Direkt danach:
+  0041 MOV BX,AX
+  0043 MOV [BP-02],BX
+  0046 CMP BYTE PTR [BX+05],1Ah
+
+Der Bereich wird unmittelbar als strukturierter Datensatz interpretiert. Weitere Zugriffe im selben Aufrufer:
+  00A4 MOV AX,[BP-02]
+  00A7 ADD AX,0Eh
+  00AA MOV [2FE6h],AX
+  00C8 MOV BX,[BP-02]
+  00CB MOV AX,[BX+08]
+  00D5 MOV AX,[BX+0Ah]
+  00EC MOV AL,[BX+0Dh]
+  ...
+  0157 MOV BX,[BP-02]
+  015A MOV AL,[BX+0Dh]
+  ...
+  0176 MOV AL,[BX+0Ch]
+
+Damit ist belegt:
+- [BP-02] verweist auf den von 1558h zurückgegebenen und im Ablauf beschafften Datenbereich.
+- Die Bytes/Wörter an +08h, +0Ah, +0Ch und +0Dh werden vom Aufrufer als Felder dieses Bereichs benutzt.
+- Der Ausgabepuffer-Zeiger DS:2FE6h wird initial auf Descriptor-Adresse +0Eh gesetzt.
+- Die Felder +0Ch und +0Dh gehören damit zum selben eingelesenen Datensatz, dessen Nutz-/Ausgabebereich der Aufrufer ab +0Eh adressiert.
+
+4. Verbindung zur vorherigen Untersuchung 2337
+Die Untersuchung 2337 zeigte, dass DS:2FD4h im Pfad über 17F0h aus dem vorzeichen-erweiterten Byte [BX+0Ch] gesetzt wird. Der Befund bleibt bestehen. Jetzt ist zusätzlich die Herkunft des Zeigers BX/[BP-02] eingegrenzt: Er stammt aus dem von 1558h beschafften Datenbereich, nicht aus einem im Aufrufer statisch adressierten Descriptor.
+
+Das Byte +0Dh liefert in 0157h zwei getrennte Bitinformationen:
+- Bit 4 steuert den übergebenen Parameter 0 oder 0Eh.
+- Bit 0 steuert den übergebenen Parameter 0 oder 1.
+Die vollständige fachliche Bedeutung dieser Bits ist weiterhin nicht bewiesen.
+
+5. Abgrenzung und offene Punkte
+Nicht bewiesen ist derzeit:
+- die fachliche Bezeichnung beziehungsweise das vollständige Format des Datensatzes;
+- ob die vier Bytes des Tabelleneintrags bei [SI+08] einen Datei-Offset, eine Länge oder eine andere Kombination codieren (die Routine behandelt sie als 32-Bit-Wert für Datei-/Pufferoperationen, die genaue Tabellenkonvention muss noch weiter verfolgt werden);
+- ob die im früheren PAPR.000-/GDOC.000-Vergleich notierten 16-Byte-Folgen bytegenau dem Anfang dieses Laufzeitbereichs entsprechen;
+- die fachliche Bedeutung von +0Ch und +0Dh.
+
+Daher werden die PAPR-/GDOC-Bytes an dieser Stelle noch nicht als bestätigte ICONMAKE-Descriptorstruktur etikettiert. Der nächste Schritt ist, die Tabellen- und Dateikontext-Erzeugung vor dem Aufruf von 1558h zurückzuverfolgen und anschließend einen konkreten Laufzeit-Datensatz gegen die bekannten Ressourcenbytes abzugleichen.
+
+Korrektur-/Qualitätshinweis
+Die Aussage „[BP-02] zeigt auf einen von 1558h zurückgegebenen Datenbereich“ ist durch die Aufrufsequenz und den Rückgabepfad belegt. Die Bezeichnung „Descriptor“ wird hier nur als Arbeitsbegriff für den strukturiert ausgewerteten Bereich verwendet, nicht als bereits verifizierter offizieller Formatname.
