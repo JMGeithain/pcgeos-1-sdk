@@ -1,0 +1,131 @@
+ICONMAKE TABLE ADDRESS AND OUTPUT ROUTINE — STATIC TRACE 2322
+Date: 2026-11-09
+Scope: Original GeoWorks 1.x ICONMAKE.EXE from GEOWORKS.zip.
+
+Purpose
+-------
+Continue the verified nibble-conversion path at load-image offset 0x1CD5
+and inspect the referenced translation-table address 0x2FD6 and the
+called routine at 0x1694.
+
+Executable facts
+----------------
+- File: GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+- MZ executable size: 19,477 bytes
+- MZ header paragraph count: 0x20
+- Load-module file offset: 0x0200
+- Load-module size: 18,965 bytes
+
+Verified conversion instruction sequence
+-----------------------------------------
+At load-image offset 0x1CD5:
+  mov bx,[40EA]
+  mov bl,[bx+si]
+  sub bh,bh
+  mov ax,bx
+  and bx,000F
+  mov cx,ax
+  mov al,[bx+2FD6]
+  mov bx,cx
+  mov cl,04
+  shr bx,cl
+  mov dx,ax
+  mov al,[bx+2FD6]
+  cbw
+  shl ax,cl
+  mov cx,ax
+  mov al,dl
+  cbw
+  or cx,ax
+  push cx
+  call 0x1694
+
+The code performs two lookups indexed by the low and high nibble of the
+source byte, shifts one translated result by four bits, combines the
+results, and passes the packed value to 0x1694.
+
+Critical address-space distinction
+----------------------------------
+0x2FD6 is used as a displacement in a memory operand [BX+2FD6] with the
+program's data segment. It is NOT thereby proven to be file offset 0x2FD6
+or load-image offset 0x2FD6.
+
+The raw executable bytes at file offset 0x0200 + 0x2FD6 are:
+  00 EB 14 53 B8 00 02 50 E8 4B F1 5B 5B 0B C0 74
+This is executable-looking code, not a verified 16-entry translation table.
+Therefore the table's actual file location and contents remain unresolved.
+Any earlier wording implying that bytes at file/load-image offset 0x2FD6
+are the table must be considered incorrect.
+
+References to displacement 0x2FD6 found in the load module:
+- load-image offset 0x18F9
+- load-image offset 0x1914
+- load-image offset 0x1BA5
+- load-image offset 0x1CE6
+- load-image offset 0x1CF2
+
+These references support that 0x2FD6 is a data-segment displacement used
+by several code paths, but do not locate the backing bytes in the EXE file.
+
+Routine at load-image offset 0x1694
+-----------------------------------
+The routine begins:
+  1694  push bp
+  1695  mov bp,sp
+  1697  mov dx,[bp+4]
+  169A  cmp word [2FD4],0
+  169F  jne 16A9
+  16A1  cmp dx,0FFFF
+  16A5  je 16AA
+  16A7  jmp 1730
+  ...
+  16AA  cmp word [06AA],0
+  16B0  je 1713
+  16B2  mov bx,[06AA]
+  16B6  cmp byte [bx],0
+  16B9  jl 1703
+  16BB  je 16F3
+  16BD  mov bx,[2FE6]
+  16C1  cmp [bx+di-1],dl
+  ...
+  16E7  mov [06AA],bx
+  16EB  mov byte [bx],0FE
+  16EF  ...
+  16F6  ...
+  1700  ...
+  1713  ...
+
+This routine has stateful buffer/marker handling and accesses other
+data-segment locations. It is not yet established as a direct GEODE
+resource writer. The 0x1CD5 caller passes a packed word to it, but its
+role and the meaning of its sentinel/state values require further
+control-flow tracing.
+
+Results and limits
+------------------
+Established:
+1. The nibble lookup/packing sequence at 0x1CD5 is present in the
+   original executable.
+2. 0x2FD6 is a data-segment displacement, not a proven file offset.
+3. The called routine 0x1694 performs stateful buffer/marker operations.
+4. The translation table's backing bytes and initialization have not yet
+   been identified.
+5. The connection between this routine and native R6 serialization is
+   still unproven.
+
+Next steps
+----------
+- Reconstruct the EXE's segment layout and determine the data-segment
+  image/overlay mapping.
+- Trace initialization/writes to DS:2FD6.
+- Trace callers and callers' setup for 0x1694.
+- Identify the final output-file writer separately from intermediate
+  PCX/bitmap buffers.
+- Compare generated intermediate/output bytes with provider R6 chunks.
+
+Integrity
+---------
+Read-only analysis. ICONMAKE.EXE and provider files were not modified.
+No GEO was built; TOKEN.DB was not touched.
+Only original GeoWorks 1.x material was considered; no PC/GEOS 2.x or
+FreeGEOS assumptions were used.
