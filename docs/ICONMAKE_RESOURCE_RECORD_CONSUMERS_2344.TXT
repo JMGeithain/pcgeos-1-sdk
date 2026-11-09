@@ -1,0 +1,112 @@
+ICONMAKE – Verbraucher der Ressourcentabelle und 6-Byte-Einträge
+Untersuchungsschritt 2344
+Stand: 10. November 2026
+
+Ziel
+Nach der Korrektur der Kontext-Offset-Formeln wird der konkrete Aufrufer bei 0B86h–0C0Fh ausgewertet. Ziel ist, die Verwendung des +08h-Tabellenbereichs und der benachbarten Bereiche durch tatsächliche Verbraucher zu belegen.
+
+1. Erster Aufruf 1558h bei 0B86h
+Instruktionsfolge:
+  0B84 SUB AX,AX
+  0B86 PUSH AX
+  0B87 MOV BX,[40E8h]
+  0B8B PUSH WORD PTR [BX+00EAh]
+  0B8F PUSH WORD PTR [BX+00ECh]
+  0B93 PUSH BX
+  0B94 CALL 1558h
+  0B97 ADD SP,8
+  0B9A MOV [BP-02],AX
+
+Mit dem Stackframe von 1558h ergibt sich:
+- Kontextzeiger = DS:40E8h
+- Indexparameter = Kontext +00ECh
+- Positions-/Zusatzparameter = Kontext +00EAh
+- optionaler Ausgabezeiger = NULL
+
+Der Aufruf liefert einen Pufferzeiger zurück, der in [BP-02] gespeichert wird. Im Anschluss wird bei 0BA1h aus diesem Puffer das Wort [BX+14h] gelesen.
+
+2. Zweiter Aufruf 1558h bei 0B9Dh
+Instruktionsfolge:
+  0B9D LEA AX,[BP-0Ch]
+  0BA0 PUSH AX
+  0BA1 MOV BX,[BP-02]
+  0BA4 PUSH WORD PTR [BX+14h]
+  0BA7 MOV BX,[40E8h]
+  0BAB PUSH WORD PTR [BX+00ECh]
+  0BAF PUSH BX
+  0BB0 CALL 1558h
+  0BB3 ADD SP,8
+  0BB6 MOV [BP-06],AX
+
+Hier wird:
+- ein lokaler Ausgabewortzeiger BP-0Ch übergeben;
+- das Wort aus dem ersten eingelesenen Puffer bei +14h als Index-/Parameterwert übergeben;
+- Kontext +00ECh erneut als weiterer Parameter übergeben;
+- derselbe Dateikontext übergeben.
+
+1558h schreibt über den übergebenen Zeiger ein Wort in [BP-0Ch] und liefert zugleich einen weiteren Pufferzeiger in AX zurück. Die genaue semantische Bezeichnung des bei +14h gelesenen Worts bleibt offen.
+
+3. Auswertung des zurückgegebenen Werts
+Unmittelbar nach dem zweiten Aufruf:
+  0BB9 MOV AX,[BP-0Ch]
+  0BBC MOV CX,0006h
+  0BBF SUB DX,DX
+  0BC1 DIV CX
+  0BC3 MOV DI,AX
+  0BC5 OR DI,DI
+  0BC7 JE 0C03h
+
+Das aus dem zweiten Aufruf gelesene Wort wird durch sechs geteilt. Der Quotient wird als Schleifenzähler DI verwendet. Bei Quotient null wird die Schleife übersprungen.
+
+4. Schleife über 6-Byte-Datensätze
+Der zweite zurückgegebene Pufferzeiger steht in [BP-06]. Die Schleife initialisiert SI mit:
+  0BC9 MOV SI,AX
+  0BCB SHL SI,1
+  0BCD ADD SI,AX
+  0BCF SHL SI,1
+  0BD1 ADD SI,[BP-06]
+
+Dies berechnet SI = Puffer + 6*Quotient. Anschließend wird rückwärts durch 6-Byte-Einträge iteriert:
+  0BD4 CMP WORD PTR [SI],10C6h
+  0BDA CMP WORD PTR [SI],10C1h
+  0BE0 CMP WORD PTR [SI],10E1h
+  ...
+  0BFD SUB SI,6
+  0C00 DEC DI
+  0C01 JNE 0BD4h
+
+Nur Datensätze, deren erstes Wort einem der drei Konstantwerte 10C6h, 10C1h oder 10E1h entspricht, lösen den nachfolgenden Aufruf aus.
+
+5. Verarbeitung eines passenden Eintrags
+Für einen passenden Datensatz:
+  0BE6 PUSH WORD PTR [SI+2]
+  0BE9 MOV AX,[SI+4]
+  0BEC AND AH,0Fh
+  0BEF PUSH AX
+  0BF0 MOV AX,[BP-02]
+  0BF3 ADD AX,001Eh
+  0BF6 PUSH AX
+  0BF7 CALL 0010h
+
+Damit werden aus dem 6-Byte-Datensatz die Wörter bei +2 und +4 verwendet; beim zweiten Wort wird das obere Byte auf sein unteres Nibble maskiert. Als dritter Parameter wird der erste Pufferzeiger +001Eh übergeben. Die Routine 0010h ist der bereits untersuchte Pfad, der den strukturierten Icon-/Ressourcendatensatz anhand seines Headers verarbeitet.
+
+6. Was dieser Befund aussagt – und was nicht
+Belegt:
+- Der erste 1558h-Aufruf liefert einen Puffer, dessen Wort bei +14h als Parameter für einen zweiten 1558h-Aufruf dient.
+- Der zweite 1558h-Aufruf schreibt ein Wort in eine lokale Variable und liefert einen zweiten Puffer.
+- Das ausgegebene Wort wird durch 6 geteilt; der Quotient steuert die Anzahl der 6-Byte-Datensätze.
+- Die 6-Byte-Datensätze werden rückwärts durchlaufen.
+- Drei konkrete Kennwörter am Anfang des Datensatzes werden akzeptiert.
+- Bei passenden Datensätzen werden Felder +2 und +4 an Routine 0010h weitergereicht.
+
+Nicht belegt:
+- Die symbolischen Namen oder fachliche Bedeutung der Kennwörter 10C6h, 10C1h und 10E1h.
+- Ob das durch sechs geteilte Wort eine Byte-Länge, eine Endposition oder eine andere Größenangabe ist.
+- Die semantische Bedeutung der Felder +2 und +4.
+- Eine direkte Zuordnung dieser 6-Byte-Datensätze zu einem bestimmten PAPR-/GDOC-Icon, solange keine konkrete Ressource mit Laufzeitdaten korreliert wurde.
+
+7. Bedeutung für die korrigierten Kontextformeln
+Der Aufrufer nutzt den zweiten von 1558h gelieferten Puffer als Folge von 6-Byte-Datensätzen. Das ist ein eigenständiger Verbraucherpfad neben dem Tabellenzugriff über Kontext +08h. Die korrigierten Abschnittsgrenzen aus 2343h bleiben davon unberührt; die konkrete Zuordnung der 6-Byte-Datensätze zu den Kontextabschnitten muss noch weiter verfolgt werden.
+
+Nächster Schritt
+Die Datenquelle des zweiten 1558h-Aufrufs und die Bedeutung der Ausgabewort-Operation untersuchen. Danach die Konstanten 10C6h, 10C1h und 10E1h im gesamten ICONMAKE-Modul auf weitere Verbraucher/Erzeuger prüfen und mit dem tatsächlichen PAPR-/GDOC-Inhalt vergleichen.
