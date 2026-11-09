@@ -3,7 +3,7 @@
 **Projekt:** erste ausführbare Testanwendung für GeoWorks 1.2 / PC/GEOS 1.x  
 **SDK:** `JMGeithain/pcgeos-1-sdk`, Zweig `main`, SDK 0.1  
 **Protokollstand:** 2026-11-09  
-**Status:** Experimenteller Host-Build von `GEOTEST.GEO` erzeugt und strukturell geprüft (Untersuchung 2264/2273; SHA-256 `9ace19da...`); vollständige Quellbyteidentität mit GitHub-HEAD noch nicht bestätigt; echter Laufzeittest in GeoWorks 1.2 steht aus. Eine zwischenzeitlich vermutete Farzeiger-Fehlordnung wurde in Untersuchung 2274 durch erneuten Byteabgleich widerlegt; der ursprüngliche Packer entspricht den beiden untersuchten Vorlagen.
+**Status:** `GEOTEST.GEO` wurde am 09.11.2026 vom Nutzer erfolgreich in GeoWorks 1.2 gestartet. Hauptfenster und Help-Dialog sind sichtbar; der Nutzer bestätigt ausdrücklich: „es geht alles“. Der Laufzeittest ist damit für den gezeigten Funktionsumfang bestätigt. Vollständige Quellbyteidentität mit GitHub-HEAD und automatisierte Wiederholbarkeit des Builds bleiben davon getrennte, weiterhin offene Punkte. Eine zwischenzeitlich vermutete Farzeiger-Fehlordnung wurde in Untersuchung 2274 durch erneuten Byteabgleich widerlegt; der ursprüngliche Packer entspricht den beiden untersuchten Vorlagen.
 
 ## 1. Verbindliche Projektgrenzen
 
@@ -123,7 +123,7 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
 | GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
 | strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
-| Start in GeoWorks 1.2 | ausstehend |
+| Start in GeoWorks 1.2 | **erfolgreich vom Nutzer bestätigt am 09.11.2026**; Hauptfenster und Help-Dialog sichtbar; siehe Untersuchung 2278 |
 
 
 
@@ -2043,3 +2043,70 @@ GitHub Actions Run 42608561425 auf Commit e7c0fba03815d005db6f48e6c69350893ee530
 6. Die Anwendung ist weiterhin nicht in GeoWorks 1.2 gestartet worden.
 
 **Nächster Schritt 2278:** Die nativen Draw-/Expose-Aufrufe K 211, K 212, K 446 und K 447 sowie die in draw_native verwendeten Grafikordinale mit Original-1.x-Referenzcode abgleichen. Danach die Registerverträge von native_select und native_key einschließlich Rückgabewert und Superclass-Fallback prüfen. Erst danach ist ein kontrollierter Startversuch in der gesicherten GeoWorks-1.2-Installation sinnvoll.
+
+
+## 39. Untersuchung 2278 – erster erfolgreicher GeoWorks-1.2-Laufzeittest
+
+**Datum:** 2026-11-09  
+**Testgegenstand:** `GEOTEST.GEO`, experimenteller Build mit SHA-256  
+`9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b`  
+**Testumgebung:** GeoWorks 1.x; im Screenshot sichtbare Titelleiste der Laufzeitumgebung: `KERNEL.EXE - 50000 Zyklen/ms - Übergangsloser Maus, Ctrl+F10 oder Mittelklick schaltet um`. Die genaue Kerneldatei-/Installationsvariante und deren Hash sind aus dem Screenshot allein nicht feststellbar.
+
+### 39.1 Beobachtete Ergebnisse
+
+Der Nutzer hat einen Screenshot aus dem laufenden GeoWorks-System übermittelt und den Test ausdrücklich mit „es geht alles“ bestätigt. Sichtbar sind:
+
+1. Die GeoWorks-Arbeitsoberfläche mit geöffnetem Programmfenster `GeoWorks 1.x Test`.
+2. Das GEOTEST-Hauptfenster mit schwarzem View-Bereich.
+3. Der Menü-/Befehlseintrag `Help...`.
+4. Der geöffnete native Help-Dialog mit Titel `Help for GeoWorks 1.x Test`.
+5. Die Help-Inhalte:
+   - `GEOTEST`
+   - `Minimal GeoWorks 1.x SDK test application.`
+   - `Click the view or press Enter to exercise an application callback.`
+6. Die Dialogschaltflächen `Page Up`, `Page Down` und `Close` sind sichtbar.
+
+### 39.2 Was damit als bestätigt gilt
+
+- Die getestete `.GEO` wird vom vorliegenden GeoWorks-System geladen und gestartet.
+- Die Anwendung erzeugt ein sichtbares Hauptfenster.
+- Die native Help-Oberfläche wird geöffnet und zeigt den erwarteten Inhalt.
+- Die sichtbare UI-Struktur und die Help-Texte stimmen mit dem vorgesehenen Minimaltest überein.
+- Der Nutzer meldet, dass die Anwendung insgesamt funktioniert.
+
+Dies ist der erste dokumentierte **erfolgreiche Laufzeittest einer mit diesem SDK erzeugten GEOTEST-Anwendung in GeoWorks 1.2**. Der Status wird damit von „nur Host-Build/strukturell geprüft“ auf „im Zielsystem gestartet und visuell bestätigt“ angehoben.
+
+### 39.3 Was der Screenshot allein nicht beweist
+
+Der Screenshot zeigt einen Zustand mit geöffnetem Help-Dialog. Er belegt für sich allein nicht jeden einzelnen Bedienpfad. Insbesondere sind folgende Einzelprüfungen nicht separat durch Video, Log oder weitere Screenshots dokumentiert:
+
+- Klick in den View-Bereich und genauer Callback-Effekt;
+- Enter-Taste und genauer Callback-Effekt;
+- Page-Up-/Page-Down-Funktion;
+- Schließen des Help-Dialogs über Close;
+- Schließen der Hauptanwendung und saubere Rückkehr zum GeoManager;
+- wiederholtes Öffnen/Schließen sowie Redraw nach Überdeckung.
+
+Der Nutzer hat zwar insgesamt „es geht alles“ bestätigt; die obige Liste trennt dennoch die direkt sichtbaren Bildbelege von den nicht einzeln dokumentierten Interaktionen. Diese Punkte bleiben sinnvolle Regressionstestfälle für eine spätere, ausführlichere Testmatrix.
+
+### 39.4 Artefakte und Lizenzgrenze
+
+Der Test-Build besitzt weiterhin die oben genannte SHA-256-Prüfsumme und eine Dateigröße von 70.794 Bytes. Das SDK-Dossier und die Build-/Prüfberichte können die Struktur und Herkunft dokumentieren. Die proprietären GeoWorks-Templatebytes und die daraus abgeleitete `.GEO`-Binärdatei werden **nicht** in das öffentliche Repository eingecheckt. Das Repository erhält stattdessen Quellprojekt, reproduzierbare Buildanleitung, Prüfmetadaten und dieses Laufzeitprotokoll.
+
+### 39.5 Korrigierter Gesamtstatus
+
+| Prüfschritt | Status |
+|---|---|
+| Host-Build erzeugt | erfolgreich |
+| GEODE-Struktur geprüft | erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
+| Prozessmethodentabelle geprüft | erfolgreich; siehe Untersuchungen 2274–2275 |
+| Hauptfenster in GeoWorks 1.2 | **erfolgreich sichtbar** |
+| Help-Dialog in GeoWorks 1.2 | **erfolgreich sichtbar, erwarteter Text** |
+| Nutzerbestätigung | **„es geht alles“ am 09.11.2026** |
+| Byteidentität aller lokalen Buildquellen mit GitHub-HEAD | weiterhin nicht vollständig nachgewiesen |
+| Vollständig reproduzierbarer Build aus sauberem GitHub-Checkout | weiterhin offen |
+| Detaillierte Einzelprüfung aller Maus-/Tastatur-/Schließpfade | noch nicht separat protokolliert |
+
+**Ergebnis:** GEOTEST 1.0 ist nicht länger nur ein experimenteller Host-Build. Der Nutzer hat die Anwendung erfolgreich in GeoWorks 1.2 gestartet und die sichtbare Hauptfenster-/Help-Funktion bestätigt. Die SDK-Dokumentation wird entsprechend aktualisiert; der Binärbuild selbst bleibt aus Lizenzgründen außerhalb des öffentlichen Repositories.
+
+**Nächster Schritt 2279:** Die dokumentierte Laufzeitprüfung in eine reproduzierbare Test-Checkliste überführen. Danach gezielt View-Klick, Enter, Help-Schaltflächen, Dialog-Close und Anwendungs-Close prüfen und die Ergebnisse einzeln festhalten. Parallel die Quellbyteidentität des Builds mit einem sauberen GitHub-Checkout klären.
