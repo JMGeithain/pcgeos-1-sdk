@@ -105,9 +105,10 @@ Die Adressprüfung hat zwei getrennte Bereiche ergeben, die in der Arbeitsnotiz 
 | Untersuchung 2260 | Synchronisationsobjekte anhand konkreter Aufruferprofile zugeordnet; Startwerte weiterhin offen |
 | Untersuchung 2261 | MZ-Header und Relokation `CS:962Eh` ausgewertet; Segmentnotation präzisiert |
 | Untersuchung 2262 | GEOWORKS.zip auf SDK-Pfade, Hashes, Formate und Protokolle geprüft; direkt nicht kompatibel, Profilpfad möglich |
-| GEOTEST-Projektdateien | noch nicht erzeugt |
-| GEOTEST.GEO | noch nicht gebaut |
-| strukturelle GEO-Prüfung | ausstehend |
+| Untersuchung 2263 | Tatsächlich verwendete UI-Template-Ressourcen und Handles strukturell verglichen; Referenzmerkmale reproduziert |
+| GEOTEST-Projektdateien | experimentelles Projekt im lokalen Build-Arbeitsverzeichnis erzeugt; noch nicht als SDK-Projekt committen |
+| GEOTEST.GEO | erster Host-Build erfolgreich; SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
+| strukturelle GEO-Prüfung | Parserprüfung erfolgreich: Format 1, 12 Ressourcen, 41 Relokationen, Kernel 622.3, UI 693.0 |
 | Start in GeoWorks 1.2 | ausstehend |
 
 
@@ -1186,3 +1187,87 @@ Es ist dennoch kein vollständiger Bytevergleich gegen die ursprünglichen Refer
 5. Das deutsche Archiv ist daher ein plausibler Kandidat für ein separates SDK-Zielprofil, aber noch nicht als vollständig ABI-kompatibel oder laufzeitgetestet zertifiziert.
 
 **Nächster Schritt 2264:** Einen separaten Zielprofil- und Archivadapter für `geoworks-1.2.8-de` entwerfen, ohne die strikten Standardhashes zu verändern. Vor einer Codeänderung werden die vom Generator verwendeten Chunk-Hashes und Metadaten als explizite Profil-Prüfwerte festgehalten. Anschließend erfolgt ein reiner Host-Build mit vollständigem Buildreport; die resultierende GEO-Datei wird nicht als laufzeitfähig bezeichnet, bevor der echte GEOS-Test erfolgt.
+
+
+## 25. Untersuchung 2264 – Erster erfolgreicher Host-Build von `GEOTEST.GEO`
+
+**Ergebnis:** Am 09.11.2026 wurde erstmals eine Datei `GEOTEST.GEO` aus dem SDK-0.1-Buildpfad erzeugt. Die Host-Kompilierung und das anschließende Packaging liefen ohne Fehler durch. Die Datei wurde danach erneut mit dem GEODE-Parser eingelesen und strukturell geprüft.
+
+### 25.1 Verwendete Eingaben
+
+- Projektname: `GeoWorks 1.x Test`
+- permanent name: `geotest`
+- application token: `GTS1`
+- Ausgabe: `GEOTEST.GEO`
+- Compiler: GCC 14.2.0, Linux, GNU binutils
+- Projektquellen: minimales C-Testprogramm mit Init-, Draw-, Key- und Click-Callbacks; SDK-Runtime und nativer Adapter
+- Zielvorlagen aus dem Nutzerarchiv:
+  - SPINTEXT aus `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO`
+  - NOTEPAD aus `GEOWORKS/WORLD/NOTEPAD.GEO`
+  - VIEWER aus `GEOWORKS/WORLD/VIEWER.GEO`
+  - TERM aus `GEOWORKS/WORLD/TERM.GEO`
+
+Für den Host-Build wurde eine temporäre, normalisierte Kopie des Zielarchivs angelegt, die SPINTEXT unter dem vom SDK erwarteten Archivpfad `GEOWORKS/WORLD/EXTRAS/SPINTEXT.GEO` bereitstellt. Das Originalarchiv `GEOWORKS.zip` wurde nicht verändert. Im experimentellen Projekt war `allow_unknown_target=true` gesetzt, weil die vier Gesamtdatei-Hashes von den strikten SDK-0.1-Referenzhashes abweichen. Die in Untersuchung 2263 geprüften relevanten LMem-Ressourcen/Handles waren der Grund, diesen ausdrücklich experimentellen Versuch durchzuführen.
+
+### 25.2 Wichtige Einschränkung der Reproduzierbarkeit
+
+Die Buildlogik wurde anhand der im GitHub-Repository gelesenen SDK-0.1-Quelldateien in einem temporären lokalen Arbeitsverzeichnis rekonstruiert. Die Host-Toolchain und die Buildstufen entsprechen dem dokumentierten Ablauf (C nach Assembler, Instrumentierung, ELF-Objekte, nativer Adapter, Link, Ressourcenextraktion, Geode-Packaging und Reparse). Die temporär angelegten lokalen Dateien wurden jedoch nicht als byteidentischer Checkout des gesamten GitHub-Repositories verifiziert.
+
+**Deshalb ist das Ergebnis ein erfolgreicher Host-Build mit der aus dem Repository rekonstruierten SDK-0.1-Buildlogik.** Ein erneuter Build aus einem byteidentischen Checkout des Repository-Commits ist noch offen. Es wurden keine SDK-Dateien im Repository verändert.
+
+### 25.3 Buildresultat
+
+| Eigenschaft | Ergebnis |
+|---|---|
+| Datei | `GEOTEST.GEO` |
+| Dateigröße | 70.794 Bytes |
+| SHA-256 | `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b` |
+| GEOS-Format | 1 |
+| permanent name | `geotest` |
+| Kernelprotokoll | 622.3 |
+| UI-Import | `ui` 693.0 |
+| Ressourcen | 12 |
+| Relokationen | 41 |
+| Code-Ressource | 1.397 Bytes |
+| Engine-Nutzung | 7.692 Bytes |
+| Toolchain | GCC 14.2.0 / GNU binutils |
+
+Die 12 Ressourcen umfassen die vom SPINTEXT-Skelett übernommenen Ressourcen, die neu erzeugten UI-Ressourcen, die Code-Ressource und die angehängte Engine-Ressource. Der Parser hat die Ressourcen- und Relokationsgrenzen ohne Fehler akzeptiert.
+
+### 25.4 Instrumentierungsbericht
+
+| Quelldatei | Poll-Stellen | ursprüngliche Instruktionen | maximale lineare Lücke |
+|---|---:|---:|---:|
+| `app.c` | 12 | 42 | 8 |
+| `sdk_runtime.c` | 33 | 124 | 8 |
+
+Es wurden keine Repeat-Instruktionen aus dem C-Compiler-Ausgangscode expandiert.
+
+### 25.5 Prüfergebnis und Aussagegrenze
+
+**Bestätigt:**
+1. Der C-Code ließ sich mit GCC in Assembler übersetzen.
+2. Die instrumentierten Assemblerdateien ließen sich assemblieren.
+3. Der native Adapter wurde assembliert.
+4. Der ELF-Link und die Extraktion von Code-/Datenressourcen waren erfolgreich.
+5. Der Geode-Packer erzeugte `GEOTEST.GEO`.
+6. Der anschließende Parserlauf bestätigte Format 1, permanent name, Kernelprotokoll 622.3, UI-Import 693.0, zwölf Ressourcen und 41 Relokationen.
+
+**Noch nicht bestätigt:**
+- Der Build wurde noch nicht aus einem byteidentischen GitHub-Checkout wiederholt.
+- Die Anwendung wurde noch nicht in GeoWorks 1.2 geladen.
+- Fensteröffnung, Zeichenroutine, Tastatur, Maus, Help-Dialog, Schließen und erneuter Start wurden noch nicht getestet.
+- Die private Runtime-/Scheduler-Brücke ist experimentell; der Host-Build beweist nicht ihre Laufzeitstabilität.
+
+### 25.6 Artefakte und Schutz der Originaldateien
+
+Die erzeugte Datei und Buildnachweise wurden im Arbeitsverzeichnis abgelegt:
+- `GEOTEST.GEO`
+- `GEOTEST_BUILD_REPORT.json`
+- `GEOTEST_APP.map`
+- `GEOTEST_SYMBOLS.txt`
+- `GEOTEST_BUILD_EVIDENCE.zip`
+
+**Die GEO-Datei und die Build-Evidence-ZIP werden nicht in das öffentliche GitHub-Repository hochgeladen**, weil die GEO-Datei UI-Vorlagenbytes aus der GeoWorks-Installation enthält. Das GitHub-Dossier enthält die Analyse, die Hashes und den Buildstatus, aber keine aus der proprietären Installation abgeleiteten Binärdateien.
+
+**Nächster Schritt 2265:** Den Build aus einem byteidentischen Checkout des Repository-Standes reproduzieren und die Target-Profilprüfung in eine getrennte, explizite Profiloption überführen. Danach GEOTEST.GEO in einer gesicherten GeoWorks-1.2-Testinstallation starten und die Loader-/Laufzeitresultate protokollieren.
