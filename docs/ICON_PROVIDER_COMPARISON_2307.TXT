@@ -1,0 +1,51 @@
+# GeoWorks 1.2 icon-provider comparison: PAPR / gDOC / nBAT
+
+**Date:** 2026-11-09  
+**Scope:** GeoWorks 1.2 / PC/GEOS 1.x only  
+**Input:** user-provided `GEOWORKS.zip`
+
+## Verified GEOS file-header fields
+
+The archive members were read directly from the ZIP. For all three icon-provider applications, the fields agree with the original `DOS_ICON.TXT` description:
+
+| File | Bytes at 0x14 (type/token code) | WORD at 0x18 (manufacturer ID) | Bytes at 0x1A (creator) | Size |
+|---|---|---:|---|---:|
+| `ICONS/PAPR.000` | `PAPR` | 255 | `GEOS` | 2,208 |
+| `ICONS/GDOC.000` | `gDOC` | 255 | `GEOS` | 2,256 |
+| `ICONS/NBAT.000` | `nBAT` | 255 | `GEOS` | 1,888 |
+
+The DOS 8.3 filename stem, four-byte type/token code at offset 0x14, and manufacturer ID at offset 0x18 agree for these samples. `ICONINST.TXT` independently says the filename is the token name and the mapping uses manufacturer ID 255.
+
+## Contrast with actual data files
+
+Two files under `GEOWORKS/DOCUMENT` have:
+- type at 0x14: `Icon`;
+- manufacturer ID at 0x18: 255;
+- creator at 0x1A: `GEOS`;
+- long name at 0x20: `Testicon` / `testicon`.
+
+These are data files with GEOS type `Icon`, not icon-provider programs whose four-character provider token is the filename stem. This distinction is essential: a file-type token mapping and a GEOS data-file type are related by GeoManager's file association mechanism, but are not interchangeable concepts.
+
+## Important correction to the proposed GEOTEST design
+
+The earlier idea to introduce `GTD1` as a document token and `.GTD` as a new document extension is not supported by the evidence examined so far. The original mechanism documented in `ICONINST.TXT` is a small icon-provider application with its own four-character token and manufacturer ID 255, then an explicit `filenameTokens` mapping in `GEOS.INI`.
+
+Therefore:
+- keep GEOTEST application token `GTS1` (manufacturer 0) separate;
+- do not yet adopt `GTD1` or `.GTD`;
+- first build a disposable provider test application using a distinct four-character token and manufacturer ID 255;
+- use the original provider file pattern as the reference, not the data-file type `Icon`.
+
+## Hashes
+
+| File | SHA-256 |
+|---|---|
+| `PAPR.000` | `30b08761294ccd7762c686ca3d477e509cb454f56b6c7db5aa2b1497efbabfbe` |
+| `GDOC.000` | `fe19cbcb46c2a92cf02da64c963facb8decb95d7e60bca34eb0d1c5e00b01733` |
+| `NBAT.000` | `1071e86b13b73a6032764e410474a4aec28727169a99a7f127ba8c246c6a210f` |
+| `DOCUMENT/TESTICON.000` | `58fac1222f12b31744ff62a189b339b084f5bf5076a76e06a888c20e8f988fdb` |
+| `DOCUMENT/TEST/TESTICON.000` | `20aeae7719c9175f2b9d4938d487499668a27fb065ab80650ddb454b3fec85f3` |
+
+## Limits
+
+This is a header-level comparison only. It does not yet decode the GEODE resources, prove the exact token-registration behavior at runtime, or validate a new GEOTEST icon provider. No original file was modified; no GEO was built; no TOKEN.DB was changed.
