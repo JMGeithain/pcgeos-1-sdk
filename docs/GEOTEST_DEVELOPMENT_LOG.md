@@ -2241,3 +2241,19 @@ GEOTEST_EGA.PCX ist mit 8 bpp / einer Plane anders aufgebaut und hat keine einhe
 Details: [GEOTEST_ICON_INPUT_AUDIT_2364.TXT](GEOTEST_ICON_INPUT_AUDIT_2364.TXT).
 
 **Status:** Nur Eingabedateien gelesen und dekodiert. Keine PCX-/GEO-/Token-/TOKEN.DB-Änderung, kein ICONMAKE-Lauf, kein GeoWorks-Laufzeittest. Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+
+## 44. Untersuchung 2365 – Widerspruch beim Transparenzindex
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.
+
+Die erneute PCX-RLE-Dekodierung ergab für `GTS1ICON.PCX` an allen vier Ecken den Palettenindex 13. Die Batchdatei ruft jedoch `ICONMAKE M14` auf; die zugehörige README behauptet zugleich, Index 13 werde transparent behandelt, während M14 Index 14 auswähle. Diese Angaben sind nicht widerspruchsfrei.
+
+Die beiden Dokument-PCX-Dateien aus dem Paket 2305 haben an allen vier Ecken Index 14. Sie sind damit auf Dateiebene konsistent mit dem M14-Aufruf, was die tatsächliche Transparenzwirkung in ICONMAKE oder GeoManager aber noch nicht beweist. `GEOTEST_EGA.PCX` ist ein separates 8-bpp-/1-Plane-Format und wird laut Batchdatei mit M0 verarbeitet.
+
+Original `ICONMAKE.EXE` liegt weiterhin nicht vor. Es wurde kein ICONMAKE-Lauf und kein GeoWorks-Laufzeittest durchgeführt. Keine PCX-, GEO-, Token- oder TOKEN.DB-Datei wurde verändert.
+
+Details: [GEOTEST_ICON_TRANSPARENZ_WIDERSPRUCH_2365.TXT](GEOTEST_ICON_TRANSPARENZ_WIDERSPRUCH_2365.TXT).
+
+**Nächster Schritt:** Original `ICONMAKE.EXE` aus der GeoWorks-1.x-Installation bereitstellen und M14/M0 an Kopien testen. Bis dahin keine Korrektur der Quelldatei oder Batchdatei vornehmen.
