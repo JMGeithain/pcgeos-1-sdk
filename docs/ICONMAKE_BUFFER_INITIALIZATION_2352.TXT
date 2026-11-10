@@ -1,0 +1,74 @@
+ICONMAKE – Untersuchung 2352
+Pufferinitialisierung bei 3AB8h
+Stand: 10.11.2026
+
+Untersuchungsgrundlage
+Untersucht wurde das aus GEOWORKS.zip extrahierte Programm:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+
+MZ-Datei: 19.477 Bytes
+Geladenes Modul: 18.965 Bytes
+SHA-256 der EXE:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Alle nachfolgenden Offsets sind Offsets im geladenen MZ-Modul.
+
+1. Eintritt in 3AB8h
+Die beiden direkten CALL-Stellen liegen bei:
+- 2D2Ch: CALL 3AB8h
+- 2E12h: CALL 3AB8h
+
+Der Eintritt 3AB8h beginnt mit PUSH BP (Bytefolge ab 3AB8h: 55 8B EC). Die lineare Disassemblierung zeigt wegen eines überlappenden vorhergehenden Bytes eine irreführende Instruktion ab 3AB7h; der Aufruf selbst zielt ausdrücklich auf 3AB8h.
+
+2. Parameter und Speicheranforderung
+Die Routine liest den übergebenen Zeiger aus [BP+04h] nach SI:
+3ABCh: MOV SI,[BP+04h]
+
+Danach fordert sie 0200h Bytes an:
+3ABFh: MOV AX,0200h
+3AC2h: PUSH AX
+3AC3h: CALL 212Ch
+
+Der Aufruf 212Ch verzweigt über einen kurzen JMP zu 38D0h. Die Speicherverwaltung liegt damit außerhalb der eigentlichen 3AB8h-Routine. Die Rückgabe in AX wird auf null/nicht null geprüft.
+
+3. Erfolgs- und Fehlerpfad
+Nach der Speicheranforderung wird aus SI ein zugehöriger Kontextzeiger berechnet:
+BX = SI - 02DAh + 037Ah
+
+Bei erfolgreicher Reservierung (AX ungleich null):
+- Deskriptorbyte [SI+06h] erhält Bit 08h.
+- Kontextwort [BX+02h] wird auf 0200h gesetzt.
+- Der zurückgegebene Pufferzeiger AX wird in [SI] und [SI+04h] eingetragen.
+
+Bei fehlgeschlagener Reservierung (AX gleich null):
+- Deskriptorbyte [SI+06h] erhält Bit 04h.
+- Kontextwort [BX+02h] wird auf 0001h gesetzt.
+- Als Pufferadresse wird BX+1 verwendet; diese Adresse wird in [SI] und [SI+04h] eingetragen.
+
+In beiden Fällen wird [SI+02h] auf 0000h gesetzt. Die Routine stellt anschließend SI/BP wieder her und kehrt zurück.
+
+4. Interpretation – gesicherte und offene Punkte
+Gesichert durch die Instruktionen:
+- 3AB8h initialisiert einen Pufferzustand eines Deskriptors.
+- Die angeforderte Größe beträgt 512 Bytes.
+- Bei Erfolg wird eine 512-Byte-Kapazität im zugehörigen Kontext eingetragen.
+- Bei Fehlschlag wird ein Ein-Byte-Fallback eingerichtet.
+- Die Statusbits 08h und 04h unterscheiden die beiden Fälle.
+
+Noch nicht gesichert:
+- Die symbolische Bedeutung aller Deskriptorbits.
+- Ob der 512-Byte-Puffer ausschließlich für Icon-Pixeldaten oder für einen allgemeineren Ausgabestrom verwendet wird.
+- Ob die durch 3AB8h eingerichtete Ausgabe am Ende eine vollständige Icon-Ressource, einen Zwischenstrom oder einen Teil davon darstellt.
+
+5. Zusammenhang mit der Ausgabekette
+Die Aufrufstellen liegen innerhalb der zuvor untersuchten Routine 2D90h:
+- Bei 2D2Ch wird 3AB8h aufgerufen, wenn die Statusbedingungen den Neuaufbau des Puffers erlauben.
+- Bei 2E12h wird 3AB8h in einem weiteren Statuspfad aufgerufen.
+Die umgebende Routine 2D90h arbeitet anschließend mit dem Deskriptor, dessen Pufferzeiger, Füllstand und Kontextkapazität.
+
+Damit ist 3AB8h als Pufferinitialisierung einzuordnen, nicht als nachgewiesener Icon-Serializer oder Pixel-Encoder.
+
+6. Konsequenz für die weitere Untersuchung
+Als Nächstes sind die Datenbewegungen zwischen dem Pufferzustand und den Schreibfunktionen 3792h/3843h zu verfolgen. Besonders wichtig ist, welche Bytes in den 512-Byte-Puffer gelangen und wann der Puffer tatsächlich auf ein DOS-Handle geschrieben wird. Erst die Identifikation des konkreten Datenstroms kann klären, ob dieser Pfad die endgültige Icon-Datei oder nur einen Zwischenpuffer erzeugt.
+
+Ende Untersuchung 2352.
