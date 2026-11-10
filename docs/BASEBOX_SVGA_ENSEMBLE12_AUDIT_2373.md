@@ -85,6 +85,21 @@ Die Probe meldet für beide Modi Status `004Fh`, Attribute `009Bh`, 64-KiB-Fenst
 
 Die statische Renderer-Prüfung des Pakets nennt für den enthaltenen **16-bpp-RGB565-Renderer** Obergrenzen von 2040×1536, maximal 4080 Bytes Pitch und ein 64-KiB-Bankfenster. Diese Analyse beweist nicht dieselben Grenzen für einen anderen 4-bpp-Renderer wie den früheren `SVGA8004.GEO`. Dessen eigene Puffer, Zeilenadressierung, Bankumschaltung und Modustabellen müssen separat geprüft werden.
 
+## Abgleich mit dem ursprünglichen 16-Farben-Treiber
+
+Zusätzlich wurde das bereits bereitgestellte `GEOWORKS.zip` read-only geprüft. Darin liegt `GEOWORKS/SYSTEM/SVGA8004.GEO`:
+
+- Größe: 18.950 Bytes
+- SHA-256: `476bb8e84bc80f1922e0cb11540aa2e61869e44cf577f6c92adcc062b066cf2c`
+- GEOS-1.x-Geode, Release 1.2.8.2
+- Kernel-Protokoll 622.3, Geode-Protokoll 1.0
+- drei Ressourcen, keine Imports oder Exports
+- Ressource 2 enthält 19 lesbare Gerätebezeichnungen; alle bezeichnen den Modus 800×600 mit 16 Farben. Darunter sind der generische VESA-kompatible Eintrag und herstellerspezifische Varianten wie Everex, Headland/Video 7, Oak, ATI, SOTA, Genoa, Paradise, Cirrus Logic und Trident.
+
+Damit ist `SVGA8004.GEO` – nicht der 16-bpp-`S16_1280.GEO`-Renderer aus dem Basebox-Paket – das passende originale 1.x-Ausgangsartefakt für die Untersuchung des früheren 16-Farben-Ziels. Die 19 Namen sind zunächst nur nachgewiesene Geräte-/Modusbezeichnungen; welche Erkennungs- und Setup-Pfade dahinter liegen und welche davon auf Basebox funktionieren, muss durch Disassemblierung und Laufzeittests getrennt festgestellt werden.
+
+Die Basebox-Probe zeigt für 1024×768×16 Farben den VBE-Modus `0104h` und für 1280×1024×16 Farben den VBE-Modus `0106h`. Das sind genau die beiden 4-bpp-Modi, die in der obigen Tabelle stehen. Die 16-bpp-Modi `0117h` und `011Ah` gehören dagegen zum anderen RGB565-Treiberpfad.
+
 ## Wichtige Abweichung vom ursprünglichen Ein-Treiber-Ziel
 
 Das Paket liefert vier getrennte GEO-Dateien. Jede Datei enthält nur einen Geräte-/Moduseintrag. Es erfüllt daher noch nicht das frühere Ziel, **einen einzigen SVGA-Treiber mit drei auswählbaren festen Auflösungen** bereitzustellen.
