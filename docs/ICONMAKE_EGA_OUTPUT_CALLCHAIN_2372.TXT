@@ -1,0 +1,78 @@
+ICONMAKE / GEOTEST – Untersuchung 2372
+Aufruferkette und Übergänge des EGA-Ausgabepfads
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Adressumrechnung
+-------------------
+ICONMAKE.EXE hat einen MZ-Header von 0200h Byte. Alle nachfolgend
+genannten Dateioffsets beziehen sich auf das vollständige EXE.
+Geladener Codeoffset = Dateioffset - 0200h.
+
+Dateioffset | Codeoffset | Rolle
+1894h       | 1694h      | zustandsbehafteter Byte-Encoder
+197Ah       | 177Ah      | Ausgabepuffer-/Flushroutine
+1B22h       | 1922h      | EGA-Datenaufbereitung und Ausgabe
+1CB6h       | 1AB6h      | weiterer Pixel-/Bitplane-Ausgabepfad
+
+2. Direkter Aufrufnachweis
+--------------------------
+Im Codeoffsetbereich 1AB6h ff. (Dateioffset 1CB6h ff.) befinden sich
+mehrere CALLs zum Codeoffset 1694h, also zur Routine am Dateioffset
+1894h.
+
+Nachgewiesene CALL-Stellen (Codeoffset -> Ziel):
+1B03h -> 1694h
+1C1Bh -> 1694h
+1C4Ch -> 1694h
+1C96h -> 1694h
+1CBFh -> 1694h
+1CFFh -> 1694h
+1D18h -> 1694h
+
+Die CALLs liegen innerhalb des Verarbeitungszweigs, der Eingabewerte
+aus Routine 173Eh bezieht und sie in den Ausgabepfad übergibt.
+Der Encoder ist somit nicht bloß eine unbenutzte Hilfsroutine: Er wird
+vom Bildverarbeitungspfad tatsächlich aufgerufen.
+
+3. Zusammenhang mit der Pufferverwaltung
+----------------------------------------
+Die Routine am Dateioffset 197Ah (Codeoffset 177Ah) wird aus dem
+Aufbereitungspfad am Codeoffset 1922h (Dateioffset 1B22h) aufgerufen.
+Sie übergibt Daten und Grenzwerte an die nachgelagerte Schreibfunktion
+am Codeoffset 20E2h.
+
+Damit sind zwei unterscheidbare Ausgabepfade belegt:
+- 1894h: byteweiser Encoder mit Wiederholungs-/Steuerzustand.
+- 197Ah: Pufferverwaltung und Übergabe vollständiger Datenbereiche.
+
+Diese Funktionen dürfen nicht zu einer einzigen Routine
+zusammengezogen werden.
+
+4. Konsequenz für den Rückwärtsdecoder
+--------------------------------------
+Für einen Rückwärtsdecoder müssen mindestens zwei Ebenen getrennt
+behandelt werden:
+A. Der Steuer-/Wiederholungsstrom, den 1894h erzeugt.
+B. Die Block-/Pufferübergabe über 197Ah und die Schreibfunktion 20E2h.
+
+Der direkte CALL-Nachweis beweist die Verwendung des Encoders im
+Bildverarbeitungspfad, aber noch nicht die vollständige Grammatik
+seiner Ausgabe. Insbesondere müssen FEh-Marker, Zählerzustände,
+00h-Steuerbytes, FFFFh-Abschlussaufrufe und die Grenzen der
+Ausgabeblöcke zusammen mit realen M13-/M14-Bytes modelliert werden.
+
+5. Status
+---------
+- MZ-Headergröße 0200h berücksichtigt.
+- Dateioffset-/Codeoffset-Paare für vier Routinen dokumentiert.
+- Sieben CALL-Stellen zum Encoderziel 1694h im relevanten Codebereich
+  gefunden.
+- Aufrufpfad zu Routine 197Ah und Schreibziel 20E2h bestätigt.
+- Keine vollständige Dekodierung behauptet.
+- Keine Token-, GEO-, PCX-, BAT-, README- oder TOKEN.DB-Datei
+  verändert.
+- Kein GeoWorks-1.2-Laufzeittest.
+- Ausschließlich PC/GEOS 1.x.
+
+Ende Untersuchung 2372.
