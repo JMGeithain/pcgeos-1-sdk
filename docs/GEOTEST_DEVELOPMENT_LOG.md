@@ -2152,3 +2152,56 @@ Nach Erzeugung der `.000`-Datei sind folgende Tests erforderlich:
 5. GEOTEST starten und prüfen, dass die Anwendung weiterhin unverändert funktioniert.
 
 **Ergebnis:** Das Icon ist für das richtige GEOTEST-Token vorbereitet. Die abschließende Token-Erzeugung und der sichtbare GeoWorks-1.2-Nachweis stehen noch aus.
+
+
+## 41. Untersuchungen 2360–2362 – ICONMAKE-Lookup und GEOTEST-LMem-Ressourcen
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.  
+**Eingabedatei:** Nutzerbereitgestellte `GEOTEST.GEO`, 70.794 Byte, SHA-256 `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b`. Der Hash stimmt mit dem Buildbericht des Entwicklungspakets überein.
+
+### 41.1 Untersuchung 2360 – ICONMAKE-Ressourcenblock-Lookup
+
+Die Untersuchung der ICONMAKE-Seite ist bereits separat dokumentiert in [ICONMAKE_RESOURCE_BLOCK_LOOKUP_2360.TXT](ICONMAKE_RESOURCE_BLOCK_LOOKUP_2360.TXT). Sie belegt die Steuerkette aus den sechs Byte langen Datensätzen über Index und Zusatzoffset zur Lookup-Routine 1558h. Die konkreten 32-Bit-Tabelleneinträge und die daraus geladenen Bilddaten waren in dieser Untersuchung noch nicht vollständig aufgelöst.
+
+### 41.2 Untersuchung 2361 – GEOTEST-Ressourcentabelle und Moniker-Kandidaten
+
+Die GEOTEST-Ressourcentabelle enthält 12 Ressourcen. Für die Tabellenbereiche wurden folgende Startpositionen verifiziert:
+- Größen: WORD-Feld ab 0x12E;
+- Positionen: DWORD-Feld ab 0x146;
+- Relokationsgrößen: WORD-Feld ab 0x176;
+- Flags: WORD-Feld ab 0x18E.
+
+Die Ressourcen 5–10 besitzen jeweils zwei LMem-Chunks. Ihre längeren Chunks beginnen mit:
+- R5: `61 30 00 0E 00 1A`
+- R6: `61 40 00 12 00 1A`
+- R7: `41 30 00 1E 00 1A`
+- R8: `46 30 00 1E 00 1A`
+- R9: `41 40 00 28 00 1A`
+- R10: `46 40 00 28 00 1A`
+
+R7/R8 und R9/R10 bilden jeweils Paare mit gleichen dimensionartigen Zahlenfeldern. Die Zuordnung der Typbytes 0x41 und 0x46 zu Farbe bzw. Monochrom ist ausdrücklich noch nicht bewiesen. Details: [GEOTEST_UNTERSUCHUNG_2361.TXT](GEOTEST_UNTERSUCHUNG_2361.TXT).
+
+### 41.3 Untersuchung 2362 – fünf LMem-Chunks in Ressource 4
+
+Ressource 4 liegt bei Dateioffset 0x0D2E, ist 336 Byte groß und hat die Flags 0x145A. Ihre Handle-Tabelle enthält fünf Einträge:
+- Handle 0x20 → Chunkoffset 0x2E, Länge 7;
+- Handle 0x22 → Chunkoffset 0x36, Länge 200;
+- Handle 0x24 → Chunkoffset 0xFE, Länge 44;
+- Handle 0x26 → Chunkoffset 0x12A, Länge 10;
+- Handle 0x28 → Chunkoffset 0x136, Länge 26.
+
+Der letzte Chunk enthält den Text `GeoWorks 1.x Test`. Der 44-Byte-Chunk bei Handle 0x24 enthält sechs Vorkommen des WORD-Wertes 0x0022. Diese Werte sind lokale LMem-Chunk-Handles innerhalb von Ressource 4; Handle 0x22 verweist dort auf den 200-Byte-Chunk bei Offset 0x36. Sie sind keine Ressourcen-IDs 5–10.
+
+Damit ist keine bytebelegte Referenzkette von Ressource 4 zu den sechs separaten Ressourcen 5–10 nachgewiesen. Die weiteren Felder des 44-Byte-Chunks bleiben semantisch unbenannt, bis eine passende GeoWorks-1.x-Strukturdefinition oder ein kontrollierter Vergleich vorliegt. Vollständige Bytebefunde: [GEOTEST_UNTERSUCHUNG_2362.TXT](GEOTEST_UNTERSUCHUNG_2362.TXT).
+
+### 41.4 Status, Änderungen und nächste Schritte
+
+- GEOTEST.GEO und die Originalarchive wurden nicht verändert.
+- Quellcode und SDK-Generator wurden nicht geändert.
+- Kein neuer Build und kein Laufzeittest im Rahmen dieser drei statischen Untersuchungen.
+- TOKEN.DB blieb unangetastet.
+- Die proprietäre GEOTEST.GEO-Binärdatei wird nicht in das öffentliche Repository übernommen.
+- Die Untersuchungsprotokolle und die Zusammenfassung in `docs/GEOTEST_ICON.md` sind im Repository dokumentiert.
+
+**Nächster Schritt 2363:** Die tatsächlichen ICONMAKE-Tabelleneinträge und die geladenen Datenblöcke vollständig rekonstruieren. Danach die native Moniker-Struktur der GEOTEST-Ressourcen 5–10 mit verifizierten GeoWorks-1.x-Referenzressourcen vergleichen. Erst auf dieser Grundlage die Farb-/Monochrom-Zuordnung und den tatsächlichen Auswahlpfad festlegen.
