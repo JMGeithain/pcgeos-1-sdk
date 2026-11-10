@@ -53,6 +53,8 @@ Die dokumentierten Laufzeitergebnisse gelten für die konkrete mitgelieferte Bas
 
 Die früher festgelegten Zielmodi für den SVGA16.GEO-Treiber (16 Farben = 4 Bit pro Pixel, nicht 16 Bit pro Pixel) waren 1024×768, 1280×1024 und 1280×720.
 
+**Wichtige Formatabgrenzung:** Das Archiv baut 16-Bit-RGB565-Treiber mit 65.536 möglichen Farbwerten. Das ist nicht dasselbe wie das frühere Ziel `SVGA16.GEO` mit 16 Farben (4 bpp). Die folgenden VBE-Auflösungsbefunde sind für Moduserkennung, VBE-Prüfung und Geometrie nützlich, beweisen aber keine 4-bpp-Farbpfade und keinen fertigen 16-Farben-Treiber.
+
 Die BIOS-Probe `probe01/probe-results.json` enthält bereits konkrete VBE-Modusbeschreibungen für zwei der drei Zielauflösungen:
 
 | Auflösung | VBE-Modus | Pitch | Modell / Maske |
