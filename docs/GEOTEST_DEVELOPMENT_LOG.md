@@ -2331,3 +2331,23 @@ Die beiden Längenfelder sind getrennt zu behandeln. Der Payload wurde noch nich
 **Status:** Nur statische Byteprüfung. Keine Token-/GEO-/PCX-/BAT-/README-/TOKEN.DB-Datei geändert. Kein GeoWorks-Laufzeittest. Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
 
 Details: [ICONMAKE_EGA_BLOCK_FIELDS_2369.TXT](ICONMAKE_EGA_BLOCK_FIELDS_2369.TXT).
+
+
+## 49. Untersuchung 2370 – statischer EGA-Pixelverarbeitungspfad
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.
+
+Die Disassemblierung des Original-ICONMAKE.EXE hat den Verarbeitungsweg für die EGA-Variante weiter eingegrenzt:
+- 1838h: PCX-RLE-Eingabedekodierung.
+- 19F0h: Farbzuordnung; Mappingtabelle ab 2FD6h.
+- 1B22h: Bildung von vier Ausgabekomponenten und Zwischenpuffer ab 30E8h.
+- 1894h: separater Ausgabepfad mit Behandlung gleicher aufeinanderfolgender Bytes sowie Kontrollwerten FEh und 00h.
+- 197Ah: Ausgabepufferverwaltung.
+- 055Ah: Aufbau des Ressourcen-/Bitmapkontexts.
+
+Die inverse Dekodierregel für 1894h ist noch nicht vollständig rekonstruiert. Deshalb erfolgt weiterhin keine pixelgenaue Dekodierung und keine Behauptung über die konkrete Transparenzdarstellung. Der nächste Schritt ist die vollständige Modellierung des Encoders und eines dazu passenden Rückwärtsdecoders anhand beider M13-/M14-Ausgaben.
+
+**Status:** Nur Disassemblierung und statische Prüfung. Keine GEO-, PCX-, BAT-, README-, Token- oder TOKEN.DB-Datei geändert. Kein GeoWorks-1.2-Laufzeittest. Keine PC/GEOS-2.x- oder FreeGEOS-Bitmapdefinitionen als Beleg verwendet.
+
+Details: [ICONMAKE_EGA_PIXEL_PIPELINE_2370.TXT](ICONMAKE_EGA_PIXEL_PIPELINE_2370.TXT).
