@@ -192,3 +192,12 @@ The routine at file offset `0x1894` (code offset `0x1694`) uses:
 It writes the `0xFE` marker during a repeated-byte path, initializes new control regions with `0x00`, and treats argument `0xFFFF` as a state-reset/control call. Positive and negative control-byte paths update counters and may rewind the output cursor. This is strong evidence for a stateful repeat/literal encoder, but not yet a complete formal byte-stream grammar. No inverse decoder or pixel reconstruction is claimed yet.
 
 See [investigation 2371](ICONMAKE_OUTPUT_ENCODER_2371.TXT).
+
+
+## EGA encoder call-chain confirmation (investigation 2372)
+
+The MZ-adjusted disassembly confirms direct calls from the pixel/output path to the encoder at file offset `0x1894` (loaded code offset `0x1694`). Seven call sites were identified in the relevant caller range: code offsets `0x1B03`, `0x1C1B`, `0x1C4C`, `0x1C96`, `0x1CBF`, `0x1CFF`, and `0x1D18`.
+
+The routine at file offset `0x197A` (code offset `0x177A`) is a distinct buffer/flush path, called by the preparation routine at file offset `0x1B22` (code offset `0x1922`); it passes data onward to code offset `0x20E2`. Thus byte-level encoding and block/buffer writing are separate layers. The encoder is demonstrably used by the image-processing path, but its complete inverse grammar is still open.
+
+See [investigation 2372](ICONMAKE_EGA_OUTPUT_CALLCHAIN_2372.TXT).
