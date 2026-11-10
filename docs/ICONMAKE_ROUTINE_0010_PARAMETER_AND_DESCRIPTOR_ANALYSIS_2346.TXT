@@ -1,0 +1,83 @@
+ICONMAKE.EXE – Untersuchung 2346
+Routine 0010h: Parameterfluss, Descriptor-Prüfung und Vorbereitung der Ausgabe
+Stand: 2026-11-10
+Projektgrenze: ausschließlich GeoWorks / PC/GEOS 1.x.
+
+1. Untersuchungsgrundlage
+Untersucht wurde erneut die aus GEOWORKS.zip extrahierte
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE.
+Dateigröße: 19.477 Byte; SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933.
+Alle Offsets in diesem Bericht beziehen sich auf den Beginn des MZ-Lademoduls (Dateioffset 0200h).
+
+2. Eintritt und Stack-Parameter von Routine 0010h
+Routine 0010h beginnt bei Moduloffset 0010h:
+PUSH BP / MOV BP,SP / SUB SP,0110h / PUSH DI / PUSH SI.
+Der Aufruf in Untersuchung 2345 bei 0BF7h legt drei Wörter auf den Stack. Beim Eintritt gelten deshalb:
+- [BP+4] = drittes übergebenes Argument: Zeiger auf den ersten Puffer + 1Eh.
+- [BP+6] = zweites Argument: Wort aus Record +4, nachdem AH mit 0Fh maskiert wurde; AL bleibt erhalten.
+- [BP+8] = erstes Argument: Wort aus Record +2.
+Die Zuordnung folgt aus der Push-Reihenfolge am Aufrufer und dem üblichen BP-Stackframe der Routine.
+
+3. Kopie des vier Byte langen Kennzeichens
+0019h–0027h:
+- PUSH 4
+- PUSH WORD [BP+4]
+- LEA AX,[BP-0Ch]; PUSH AX
+- CALL 2134h
+- ADD SP,6
+Die Routine bei 2134h kopiert maximal vier Bytes von der Quelle [BP+4] in den lokalen Puffer BP-0Ch. Sie beendet die Kopie bei einem Nullbyte und füllt den Rest des angeforderten Zielbereichs mit Nullbytes. Die Routine 2134h arbeitet als begrenzte Stringkopie; eine fachliche Bedeutung des vier Byte langen Kennzeichens ist damit noch nicht festgelegt.
+Bei 002Ah wird zusätzlich BYTE [BP-8] auf 0 gesetzt. Das ist das fünfte Byte des lokalen Bereichs BP-0Ch..BP-08h und stellt eine abschließende Null sicher.
+
+4. Zweiter Aufruf von 1558h und Descriptor-Prüfung
+0030h–003Eh bereitet einen weiteren Aufruf von 1558h vor:
+- erstes Stackargument: 0
+- nächstes Argument: [BP+8] (Record-Wort +2)
+- nächstes Argument: [BP+6] (maskiertes Record-Wort +4)
+- letztes Argument: DS:[40E8h] (Kontextzeiger)
+Der Rückgabewert AX wird als Descriptorzeiger in BX und [BP-2] gespeichert.
+Anschließend prüft 0046h:
+CMP BYTE [BX+5],1Ah
+Nur bei Gleichheit wird fortgefahren; andernfalls springt die Routine zum gemeinsamen Ende bei 01A4h.
+Damit ist Byte +5 des zurückgegebenen Descriptors ein notwendiges Kennzeichen für diesen Verarbeitungspfad. Seine symbolische Bedeutung ist nicht bewiesen.
+
+5. Auswahl eines internen String-Anfangs anhand des ersten Kennzeichenbytes
+Nach erfolgreicher Descriptor-Prüfung wird BYTE [BX] vorzeichenlos erweitert und verglichen:
+- Wert 61h ('a'): DI erhält 42h.
+- Wert 41h ('A'): DI erhält 47h.
+- Wert 46h ('F'): DI erhält 4Ch.
+- andere Werte: lokaler Kennzeichenpuffer wird auf leer gesetzt; der Pfad endet.
+Bei den drei akzeptierten Fällen wird ab der jeweiligen Moduladresse 0042h, 0047h oder 004Ch nach einem Nullbyte gesucht. Anschließend wird der ausgewählte interne String in den lokalen Puffer kopiert. Der Code belegt damit eine Auswahl zwischen drei eingebetteten, nullterminierten Strings. Die tatsächlichen Stringinhalte und ihre fachliche Bedeutung müssen separat geprüft werden; aus den Anfangsadressen allein wird keine Bedeutung abgeleitet.
+
+6. Nachfolgende Initialisierung
+Ab 00A4h setzt die Routine DS:[2FE6h] auf Descriptorzeiger +0Eh.
+Danach wird der Bereich DS:1D48h..DS:1DC7h mit 80h gefüllt (128 Bytes), Byte 1D48h auf 0Ah gesetzt und Bytes 1D4Ah sowie 1D4Bh auf 1 gesetzt.
+Aus dem Descriptor werden außerdem gelesen:
+- WORD [BX+8] -> DS:1D54h; Wert minus 1 -> DS:1D50h.
+- WORD [BX+0Ah] -> DS:1D56h; Wert minus 1 -> DS:1D52h.
+- (DS:1D54h + 7) >> 3 -> DS:1D8Ah.
+- BYTE [BX+0Dh] Bit 0 beeinflusst DS:1D89h und einen späteren Zweig, der DS:1D49h auf 5 setzt und 24 Wörter ab Moduladresse 021Eh nach DS:1D58h kopiert.
+Diese Werte werden hier nur als Datenfluss dokumentiert; eine Interpretation als Bildbreite/-höhe oder Pixelformat ist ohne weitere Verbraucheranalyse nicht gesichert.
+
+7. Weitere Verarbeitung und Abschluss
+Die Routine ruft danach unter anderem 2720h, 1EE4h, 1FD8h, 17F0h, wiederholt 1922h und schließlich 1E0Eh auf. Der Rückgabewert von 1EE4h wird in DS:2FCAh gespeichert und an 1FD8h übergeben. Der Descriptorzeiger [BP-2] wird am Ende an 2130h übergeben; 2130h springt unmittelbar zu 38D0h.
+Eine vollständige semantische Deutung dieser nachgelagerten Funktionen ist nicht Gegenstand dieses Berichts und bleibt offen.
+
+8. Ergebnis und offene Fragen
+Gesichert:
+- Routine 0010h verwendet die drei Record-Argumente in der oben beschriebenen Stackzuordnung.
+- Das dritte Argument liefert ein vier Byte langes Kennzeichen aus dem Puffer bei +1Eh.
+- Ein zweiter 1558h-Aufruf erzeugt einen Descriptor, dessen Byte +5 gleich 1Ah sein muss.
+- Das erste Kennzeichenbyte wählt einen von drei internen String-Anfängen aus.
+- Descriptorfelder +08h, +0Ah und +0Dh beeinflussen die Initialisierung des nachfolgenden Ausgabe-/Bildverarbeitungspfads.
+
+Nicht gesichert:
+- Namen und Bedeutung der drei internen Strings.
+- Bedeutung der Descriptorfelder +08h, +0Ah, +0Ch und +0Dh im ICONMAKE-Dateiformat.
+- Ob der Descriptor unmittelbar einer PAPR-, GDOC- oder einer anderen Ressource entspricht.
+
+Nächster Schritt 2347:
+Die drei internen Strings ab Moduloffset 0042h, 0047h und 004Ch bytegenau auslesen und die Verbraucher der Descriptorfelder +08h/+0Ah sowie der globalen Variablen 1D50h–1D8Ah verfolgen. Dabei ist besonders zu prüfen, ob die Felder tatsächlich Rasterabmessungen oder nur interne Grenzen/Schrittweiten darstellen.
+
+9. Methodik
+Statische 8086-Disassemblierung der unveränderten EXE. Keine Laufzeitmessung, kein Patch und keine Änderung der Quelldatei. Interpretationen sind ausdrücklich von nachgewiesenen Datenflüssen getrennt.
