@@ -107,3 +107,14 @@ Important number-space distinction:
 - These values must not be equated based only on similar numbers.
 
 The provider mapping does not by itself classify GEOTEST resources 5–10. Those GEOTEST payloads require their own GeoWorks 1.x VisMoniker decoding or a verified native comparison. Absolute ICONMAKE offsets, full native pixel decoding, and GeoWorks 1.2 runtime validation remain open.
+
+
+## PCX input audit and transparency-index finding (investigation 2364)
+
+A byte/pixel-level audit of the supplied icon input archives found that both new document-icon PCX files (GTS1DOC_COLOR_48x30_M14_4PLANE.PCX and GTS1DOC_MONO_48x30_M14_4PLANE.PCX) are 48×30, 1 bit per plane, four planes, and all four corner pixels use palette index 14. Their input pixels are therefore consistent with the documented ICONMAKE M14 choice, although actual ICONMAKE and GeoManager behavior has not yet been tested.
+
+A discrepancy exists in the older GTS1ICON.PCX: its four corner pixels are palette index 13, while ERZEUGE.BAT invokes ICONMAKE M14. The README describes the exterior as palette index 13 and says it becomes transparent. The PCX bytes therefore do not support that explanation: index 13 and index 14 are distinct palette entries. Do not modify the original asset automatically; verify the exact M14 behavior with ICONMAKE 1.x on a backed-up test copy first.
+
+The separate GEOTEST_EGA.PCX is 8 bpp / one plane, unlike the four-plane assets, and has non-uniform corner indices (7 and 9). It is described as an opaque M0 input and must not be conflated with the M14 assets.
+
+See [investigation 2364](GEOTEST_ICON_INPUT_AUDIT_2364.TXT) for hashes, header fields, pixel counts, and test boundaries. No token was generated, no GEO or PCX file was modified, and no runtime test was performed.
