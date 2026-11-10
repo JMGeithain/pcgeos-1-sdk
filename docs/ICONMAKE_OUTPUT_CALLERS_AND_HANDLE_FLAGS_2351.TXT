@@ -1,0 +1,117 @@
+ICONMAKE – Untersuchung 2351
+==============================
+
+Thema
+-----
+Direkte Aufrufer von 2D90h und Aufbau der DOS-Handle-Flagtabelle DS:[BX+029Bh].
+
+Untersuchungsbasis
+------------------
+Datei: GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Extrahiertes MZ-Modul: 18,965 Bytes
+EXE-Dateigröße: 19,477 Bytes
+SHA-256 der EXE:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Disassemblierung: objdump -D -b binary -m i8086 --adjust-vma=0
+Alle Adressen in diesem Bericht sind Offsets relativ zum Beginn des geladenen MZ-Moduls.
+
+1. Direkte Aufrufstellen von 2D90h
+----------------------------------
+Im Modul wurden fünf direkte CALL-Aufrufstellen gefunden:
+
+  20A2h
+  20FFh
+  23B7h
+  2424h
+  3558h
+
+Die Aufrufstellen liegen in unterschiedlichen Routinen bzw. Ausgabepfaden. 2D90h ist deshalb nicht als ausschließlich ikonbezogene Schreibfunktion einzuordnen.
+
+Beobachtete Kontexte:
+- 20A2h: Byte wird aus einer Quelle gelesen und zusammen mit einem Puffer-/Deskriptor-Kontext an 2D90h übergeben.
+- 20FFh: Aufruf beim Überlaufen eines Byte-Ausgabepuffers; der Bytewert wird aus dem Stackparameter übernommen.
+- 23B7h: Aufruf aus einem weiteren gepufferten Datenpfad.
+- 2424h: Aufruf aus einer Routine, die zuvor über 3104h Daten in einen begrenzten Puffer schreibt.
+- 3558h: Aufruf aus einer Routine, die Bytes aus ES:DI in einen Ausgabepuffer überführt und bei Bedarf 2D90h aufruft.
+
+Diese Kontexte stützen die Einordnung als generische, zustandsabhängige Ausgabeschicht. Sie beweisen nicht, dass jeder über diese Wege ausgegebene Byte-Strom ein Icon-Bild oder eine finale Icon-Ressource ist.
+
+2. Handle-Index im Ausgabedeskriptor
+------------------------------------
+2D90h lädt SI aus [BP+06h]. Das Byte [SI+07h] wird als Index in die Handle-Tabelle verwendet:
+
+  2DCAh: BX = zero-extended byte [SI+07h]
+
+Anschließend greifen mehrere Pfade auf DS:[BX+029Bh] zu. Damit ist die Verbindung zwischen dem Ausgabedeskriptor und den DOS-Handle-Metadaten direkt belegt.
+
+3. Aufbau der Handle-Flags
+--------------------------
+Bei 3C97h wird das zusammengesetzte Byte CL in DS:[BX+029Bh] gespeichert:
+
+  3C91h: OR CL,[BP-04h]
+  3C94h: OR CL,01h
+  3C97h: MOV [BX+029Bh],CL
+
+Vorherige Schritte in derselben Routine:
+- 3C64h–3C75h: DOS-Funktion 4300h liest Dateiattribute; aus Bit 0 des Attributworts wird gegebenenfalls Bit 10h in CL gesetzt.
+- 3C77h–3C7Eh: Bit 20h in CL wird gesetzt, wenn das Eingabeparameterwort [BP+06h] Bit 08h enthält.
+- 3C91h–3C97h: zusätzliche Flags aus [BP-04h] werden kombiniert; Bit 01h wird immer gesetzt.
+
+Die vollständige Semantik aller Bits von [BP-04h] ist an dieser Stelle noch nicht geklärt. Deshalb wird hier keine vollständige symbolische Flagdefinition behauptet.
+
+4. Geräteerkennung
+------------------
+Bei 2923h–292Fh wird für die Handle-Indizes BX=4,3,2,1,0 die DOS-Funktion INT 21h/AX=4400h (IOCTL-Geräteinformation) ausgeführt.
+Wenn das zurückgegebene DX-Bit 80h gesetzt ist, wird Bit 40h in DS:[BX+029Bh] gesetzt:
+
+  2923h: AX = 4400h
+  2926h: INT 21h
+  292Ah: TEST DL,80h
+  292Fh: OR [BX+029Bh],40h
+
+Das ist ein belegter Zusammenhang zwischen DOS-Gerätehandles und Flagbit 40h. Die weitergehende interne Bedeutung dieses Bits in allen Routinen bleibt offen.
+
+5. Handle-Schließen und Zurücksetzen
+------------------------------------
+3626h setzt nach erfolgreichem DOS-Schließen (INT 21h/AH=3Eh) das zugehörige Flagbyte zurück:
+
+  3620h: AH = 3Eh
+  3622h: INT 21h
+  3626h: MOV BYTE [BX+029Bh],00h
+
+Damit ist belegt, dass 029Bh Bestandteil eines verwalteten Handle-Datensatzes ist und beim Schließen zurückgesetzt wird.
+
+6. Weitere Flagverwendung
+-------------------------
+In 3792h:
+- Bit 20h: vor dem Schreiben wird mit DOS-Funktion 4202h zum Dateiende positioniert.
+- Bit 80h: aktiviert einen Textpfad, der LF (0Ah) in CR/LF (0Dh,0Ah) umsetzt.
+- Ohne Bit 80h erfolgt der direkte DOS-Schreibpfad über INT 21h/AH=40h.
+
+In 36A8h:
+- Bit 02h verhindert den normalen Lesevorgang.
+- Bei Bit 80h wird ein gelesener Puffer nach Textregeln verarbeitet; dabei werden weitere Statusbits gesetzt (u.a. Bit 04h bei LF-Erkennung und Bit 02h bei Ctrl-Z/1Ah).
+
+In 2D90h:
+- Das Handle-Indexbyte aus [SI+07h] bestimmt, welches Handle-Flagbyte abgefragt wird.
+- Unter bestimmten Zuständen wird 3792h direkt mit diesem Handleindex aufgerufen.
+- Andere Zustände führen über 3AB8h bzw. interne Puffer-/Deskriptorlogik.
+
+7. Gesicherte Schlussfolgerungen
+--------------------------------
+A. 2D90h ist eine generische, zustandsabhängige Ausgabefunktion für einen Deskriptor.
+B. Das Deskriptorfeld +07h liefert einen Index in eine DOS-Handle-Tabelle.
+C. Das Handle-Flagbyte liegt bei DS:[BX+029Bh].
+D. Dieses Flagbyte wird beim Öffnen initialisiert, beim Schließen gelöscht und bei Geräteerkennung ergänzt.
+E. 3792h ist die nachgelagerte DOS-Schreibroutine; ihre Bits 20h und 80h steuern Dateiende-Positionierung bzw. Textumsetzung.
+F. Die Aufrufstellen und die Flagverwendung beweisen weiterhin nicht, dass 2D90h der spezifische Serializer für Icon-Bilddaten ist.
+
+8. Nächster Untersuchungsschritt
+---------------------------------
+Als Nächstes sollten die Routine 3AB8h sowie die Übergänge zwischen 2D90h, 36A8h und 3792h untersucht werden. Besonders wichtig ist, welche Deskriptoren/Handle-Indizes in den konkreten ICONMAKE-Verarbeitungspfaden verwendet werden und ob ein eigenständiger Ressourcen- oder Icon-Serializer existiert.
+
+Status
+------
+Untersuchung 2351: statisch anhand des disassemblierten ICONMAKE.EXE-Moduls durchgeführt.
+Kein Programmcode wurde verändert; keine Laufzeitbehauptung oder Icon-Dateiformatdefinition wird aus diesen Befunden abgeleitet.
