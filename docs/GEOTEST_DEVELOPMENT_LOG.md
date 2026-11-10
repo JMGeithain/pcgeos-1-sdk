@@ -2257,3 +2257,28 @@ Original `ICONMAKE.EXE` liegt weiterhin nicht vor. Es wurde kein ICONMAKE-Lauf u
 Details: [GEOTEST_ICON_TRANSPARENZ_WIDERSPRUCH_2365.TXT](GEOTEST_ICON_TRANSPARENZ_WIDERSPRUCH_2365.TXT).
 
 **Nächster Schritt:** Original `ICONMAKE.EXE` aus der GeoWorks-1.x-Installation bereitstellen und M14/M0 an Kopien testen. Bis dahin keine Korrektur der Quelldatei oder Batchdatei vornehmen.
+
+
+## 45. Untersuchung 2366 – exakte ICONMAKE-Providerblöcke und Transparenzparameter
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.
+
+Das erneut hochgeladene `GEOWORKS.zip` enthält die Originaldateien `ICONMAKE.EXE`, `PAPR.000` und `GDOC.000`. Der SHA-256-Wert von `ICONMAKE.EXE` stimmt mit dem zuvor analysierten Exemplar überein.
+
+Die Disassemblierung bestätigt den Tabellenpfad: Routine 164Ch baut den Provider-Kontext und liest die Tabelle ab 012Eh; Routine 1758h löst den DWORD-Positionseintrag für den angeforderten Index auf, addiert den Zusatzoffset 0022h, liest den internen Offset 002Ah, die Blocklänge bei Basis+0028h und anschließend die Nutzdaten ab Basis+002Ah.
+
+Exakte Tabellenbasen:
+- PAPR.000: Index 4 = 03F4h, Index 5 = 0498h, Index 6 = 05ACh.
+- GDOC.000: Index 4 = 03F4h, Index 5 = 0498h, Index 6 = 059Ch.
+
+Die extrahierten Nutzdaten bestätigen:
+- Index 4: CGA, Präfix 61h.
+- Index 5: HGC, Präfix 41h.
+- Index 6: EGA, Präfix 46h.
+
+Damit ist die in Untersuchung 2363 noch offene absolute Offset-/Längenkette nun geschlossen. Die vollständigen sechs Blockpositionen, Längen und SHA-256-Werte stehen in [ICONMAKE_PROVIDER_EXACT_BLOCKS_2366.TXT](ICONMAKE_PROVIDER_EXACT_BLOCKS_2366.TXT).
+
+Zusätzlich wurde der M-Modus untersucht: ICONMAKE liest den Dezimalwert hinter `M`; ohne Zahl wird 14 verwendet. Der Wert wird an die Iconvarianten-Erzeugung übergeben. Die vorhandene `GTS1ICON.PCX` hat jedoch Eckpixelindex 13, während `ERZEUGE.BAT` `M14` verwendet. Damit wählt der Batchaufruf nicht den tatsächlichen Randindex; für diese PCX-Eingabe wäre `M13` passend. Dies ist statisch aus Programmcode und PCX-Daten abgeleitet. Ein echter ICONMAKE-Lauf sowie die Anzeigeprüfung in GeoWorks 1.2 stehen noch aus. Batchdatei und README wurden deshalb nicht verändert.
+
+**Status:** Originaldateien extrahiert und gehasht; sechs Providerblöcke positions- und längengenau aufgelöst. Keine PCX-, BAT-, README-, GEO- oder TOKEN.DB-Datei verändert. Kein ICONMAKE-Lauf und kein GeoWorks-Laufzeittest. Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
