@@ -2298,3 +2298,22 @@ Die Datei enthält keinen erkannten eindeutigen Vermerk, ob sie mit M13 oder M14
 Details: [ICONMAKE_TOKEN_OUTPUT_AUDIT_2367.TXT](ICONMAKE_TOKEN_OUTPUT_AUDIT_2367.TXT).
 
 **Status:** Datei nur gelesen und gehasht. Keine Quelldatei, Token-Datei oder TOKEN.DB verändert. Kein Laufzeittest in GeoWorks 1.2.
+
+
+## 47. Untersuchung 2368 – kontrollierter M13/M14-Tokenvergleich
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.
+
+Der Nutzer hat die Herkunft der beiden Token-Ausgaben bestätigt: `GTS10000(1).000` stammt aus dem M13-Testordner, `GTS10000(2).000` aus dem M14-Testordner.
+
+Beide Dateien enthalten GTS1, Manufacturer ID 0, Creator GEOS und sieben Ressourcen. Die Ressourcen 1 bis 5 sind bytegenau identisch. Ausschließlich Ressource 6 (EGA-Payload) unterscheidet sich:
+- M13: 0280h = 640 Byte
+- M14: 02D0h = 720 Byte
+- Differenz: M14 erzeugt 80 Byte mehr EGA-Payload.
+
+Damit ist direkt belegt, dass der M-Parameter in diesen beiden Läufen den EGA-Ressourcenblock verändert. Zusammen mit dem zuvor statisch ermittelten Randindex 13 der Quelldatei ist M13 der passende Parameterkandidat für den transparenten Rand. Eine pixelgenaue Dekodierung und die sichtbare Transparenz in GeoManager sind damit noch nicht bestätigt.
+
+**Status:** Beide Token-Dateien nur gelesen und verglichen. Keine PCX-, BAT-, README-, GEO- oder TOKEN.DB-Datei geändert. GeoWorks-1.2-Laufzeittest steht aus. Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+Details: [ICONMAKE_M13_M14_TOKEN_COMPARISON_2368.TXT](ICONMAKE_M13_M14_TOKEN_COMPARISON_2368.TXT).
