@@ -1,0 +1,83 @@
+ICONMAKE / GEOTEST – Untersuchung 2368
+Kontrollierter M13/M14-Vergleich zweier GTS1-Tokenausgaben
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Eindeutige Zuordnung durch Nutzerangabe
+------------------------------------------
+GTS10000(1).000 = ICONMAKE M13
+GTS10000(2).000 = ICONMAKE M14
+
+Die Zuordnung stammt ausdrücklich vom Nutzer und ist damit für diesen
+Vergleich die bestätigte Testprovenienz.
+
+2. Dateiidentitäten
+-------------------
+M13: 1.760 Byte
+SHA-256:
+7ea8625f66868038b3c1e7c99cc11c5134b8fa2b211b9b84c23767dd6e03b54f
+
+M14: 1.840 Byte
+SHA-256:
+a99afabed9acaa96029eefaa1589803404f2036d69045762475ff5baf8b75422
+
+Beide Dateien besitzen:
+- Tokenkennung GTS1
+- Manufacturer ID 0
+- Creator GEOS
+- sieben Ressourcen
+
+3. Ressourcenvergleich
+----------------------
+Ressourcen 1 bis 5 sind bytegenau identisch. Ihre Größen:
+R1 0060h, R2 00D0h, R3 0140h, R4 0030h, R5 0030h.
+
+Ressource 6 ist die einzige inhaltlich abweichende Ressource:
+- M13: 0280h = 640 Byte, Position 03F4h
+- M14: 02D0h = 720 Byte, Position 03F4h
+
+Die Ressourcen 1 bis 5 besitzen in beiden Dateien identische SHA-256-
+Werte. Ressource 6 hat unterschiedliche SHA-256-Werte:
+M13:
+1c8df32dc53fd7a139f93ec1d6366ee5b3a8388d7465d410302f9aa75fbd8229
+M14:
+cc8277d753be3a66bc9c770e9fb8dd143e9eec6a8347493b3e1071099332222b
+
+Der EGA-Payload wächst beim Wechsel M13 -> M14 um 80 Byte. Die
+Header-/Längenfelder innerhalb des Ressourcenblocks ändern sich
+entsprechend. Die Unterschiede betreffen somit nicht die Tokenkennung
+oder die übrigen Iconvarianten, sondern ausschließlich den EGA-
+Ressourcenblock.
+
+4. Interpretation und Grenzen
+------------------------------
+Der kontrollierte Vergleich belegt, dass der M-Parameter bei diesen
+beiden ICONMAKE-Läufen den erzeugten EGA-Payload verändert. Da die
+beiden Eingaben derselbe GTS1-Tokenaufbau sind und R1 bis R5 identisch
+bleiben, ist die Änderung klar auf Ressource 6 begrenzt.
+
+Zusammen mit der zuvor statisch untersuchten ICONMAKE-Parameter-
+Weitergabe und den PCX-Eckpixeln (GTS1ICON.PCX: alle vier Ecken Index
+13) ist M13 der passende Kandidat für den transparenten Rand dieser
+konkreten Eingabedatei. Der M14-Lauf erzeugt einen um 80 Byte größeren
+EGA-Payload.
+
+Nicht belegt ist allein durch den Binärvergleich:
+- die pixelgenaue dekodierte Bedeutung jeder geänderten Bytefolge;
+- die tatsächliche Darstellung/Transparenz in GeoManager;
+- ob M13 visuell in jedem unterstützten Anzeigeadapter korrekt ist.
+
+Dafür ist weiterhin ein Laufzeittest mit beiden Token-Dateien in einer
+isolierten GeoWorks-1.2-Testumgebung erforderlich.
+
+5. Sicherheits- und Änderungsstatus
+------------------------------------
+- Beide hochgeladenen Token-Dateien wurden nur gelesen.
+- Keine Original-PCX-, BAT-, README-, GEO- oder TOKEN.DB-Datei wurde
+  verändert.
+- Kein Original-ICONMAKE-Lauf wurde in dieser Analyseumgebung ausgeführt;
+  die beiden Token-Dateien stammen aus den vom Nutzer ausgeführten
+  M13-/M14-Testläufen.
+- Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+Ende Untersuchung 2368.
