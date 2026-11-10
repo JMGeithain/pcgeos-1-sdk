@@ -2317,3 +2317,17 @@ Damit ist direkt belegt, dass der M-Parameter in diesen beiden Läufen den EGA-R
 **Status:** Beide Token-Dateien nur gelesen und verglichen. Keine PCX-, BAT-, README-, GEO- oder TOKEN.DB-Datei geändert. GeoWorks-1.2-Laufzeittest steht aus. Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
 
 Details: [ICONMAKE_M13_M14_TOKEN_COMPARISON_2368.TXT](ICONMAKE_M13_M14_TOKEN_COMPARISON_2368.TXT).
+
+
+## 48. Untersuchung 2369 – Feldprüfung des EGA-Blocks
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.
+
+Ressource 6 beginnt in beiden Token-Dateien bei 03F4h; der EGA-Block beginnt ressourcenrelativ bei 002Ah. Die ersten sechs Blockbytes sind in M13 und M14 identisch (46 30 00 1E 00 1A). Das WORD bei Blockoffset +06h lautet bei M13 023Eh und bei M14 0290h (Differenz 82 Byte). Die äußeren Ressourcengrößen betragen 0280h bzw. 02D0h (Differenz 80 Byte).
+
+Die beiden Längenfelder sind getrennt zu behandeln. Der Payload wurde noch nicht pixelgenau dekodiert; einzelne Bytes werden keiner Farb- oder Transparenzbedeutung zugeordnet. Dafür ist zunächst eine gesicherte PC/GEOS-1.x-Formatdefinition oder eine bestätigte Dekodierungsroutine erforderlich.
+
+**Status:** Nur statische Byteprüfung. Keine Token-/GEO-/PCX-/BAT-/README-/TOKEN.DB-Datei geändert. Kein GeoWorks-Laufzeittest. Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+Details: [ICONMAKE_EGA_BLOCK_FIELDS_2369.TXT](ICONMAKE_EGA_BLOCK_FIELDS_2369.TXT).
