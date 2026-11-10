@@ -85,3 +85,25 @@ The final chunk (handle `0x28`) contains the ASCII text `GeoWorks 1.x Test`. The
 - No proven chain yet connects the ICONMAKE provider lookup indices to GEOTEST resources 5–10.
 - The color/monochrome meaning of the leading bytes, actual icon-selection path, and runtime display context remain open.
 - GEOTEST.GEO, source files, TOKEN.DB, and the original GeoWorks installation were not modified by these static investigations. The proprietary GEO binary is not stored in this public repository.
+
+
+## ICONMAKE provider variant mapping (investigation 2363)
+
+The previously extracted PAPR and GDOC providers provide an independent correlation between the leading payload bytes and the three classic icon variants:
+
+| Provider resource | Payload prefix | Dimensions | Extracted PCX format | Correlated variant |
+|---|---|---:|---|---|
+| R4 | `0x61` | 48×14 | 1-bit monochrome | CGA |
+| R5 | `0x41` | 48×30 | 1-bit monochrome | HGC |
+| R6 | `0x46` | 48×30 | 4-bit paletted | EGA |
+
+The PAPR and GDOC extraction reports independently agree on these dimensions and formats. Thus, within the examined GeoWorks 1.x provider payloads, the correlation `0x61=CGA`, `0x41=HGC`, and `0x46=EGA` is now strongly supported. This is still a header/format correlation, not a complete pixel-for-pixel native payload decode.
+
+ICONMAKE's six-byte records pass table indices 6, 5, and 4 (with additional offset `0x0022`) to its block loader. The mapping of those indices to CGA/HGC/EGA is consistent with provider resources R4/R5/R6, but the absolute 32-bit table entries and exact loaded file offsets have not yet been recalculated in this step. See [investigation 2363](ICONMAKE_PROVIDER_VARIANT_MAPPING_2363.TXT).
+
+Important number-space distinction:
+- GEODE resource indices are not ICONMAKE context-table indices.
+- LMem chunk handles (for example `0x22`) are local to one resource.
+- These values must not be equated based only on similar numbers.
+
+The provider mapping does not by itself classify GEOTEST resources 5–10. Those GEOTEST payloads require their own GeoWorks 1.x VisMoniker decoding or a verified native comparison. Absolute ICONMAKE offsets, full native pixel decoding, and GeoWorks 1.2 runtime validation remain open.
