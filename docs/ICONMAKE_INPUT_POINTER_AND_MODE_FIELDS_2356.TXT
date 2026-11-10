@@ -1,0 +1,82 @@
+ICONMAKE – Untersuchung 2356
+Herkunft und Initialisierung von DS:2FD4h und DS:2FE6h
+Stand: 10.11.2026
+
+Untersuchungsgrundlage
+Programm: GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße: 19.477 Bytes
+Geladenes MZ-Modul: 18.965 Bytes
+SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Offsets beziehen sich auf den Anfang des geladenen MZ-Moduls.
+
+1. Initialisierung des Eingabezeigers DS:2FE6h
+Im Hauptverarbeitungspfad wird der von 1558h gelieferte Descriptorzeiger aus [BP-02h] geladen:
+00A4h: MOV AX,[BP-02h]
+00A7h: ADD AX,000Eh
+00AAh: MOV [2FE6h],AX
+
+Damit zeigt DS:2FE6h zunächst auf Descriptoradresse +0Eh. Der Zeiger wird danach durch 161Eh bei jedem Byteabruf inkrementiert:
+161Eh: MOV BX,[2FE6h]
+1622h: INC WORD [2FE6h]
+1626h: MOV AL,[BX]
+
+Die Datenquelle ist somit der Bereich ab Offset +0Eh des von 1558h bereitgestellten Datenblocks – nicht ein beliebiger separater DOS-Dateipuffer. 1558h wurde in früheren Untersuchungen als Routine identifiziert, die anhand des Ressourcenkontexts einen Block allokiert und aus der Eingabedatei liest.
+
+2. Herkunft von DS:2FD4h
+17F0h übernimmt den ersten Stackparameter [BP+04h] und speichert ihn bei 1822h:
+1822h: MOV [2FD4h],AX
+
+Der Hauptaufruf bei 017Bh bereitet diesen Parameter aus dem Descriptorbyte +0Ch vor:
+0176h: MOV AL,[BX+0Ch]
+0179h: CBW
+017Ah: PUSH AX
+017Bh: CALL 17F0h
+
+Damit wird Descriptorbyte +0Ch vorzeichenrichtig auf 16 Bit erweitert und als Moduswert an 17F0h übergeben. Der Wert landet unverändert in DS:2FD4h.
+
+1638h prüft diesen Wert:
+- 2FD4h = 0: direkter Byteabruf über 161Eh.
+- 2FD4h ungleich 0: Steuerbyte-basierter Entpackpfad.
+
+Die technische Umschaltung aus Untersuchung 2355 ist damit direkt an Descriptorbyte +0Ch gebunden. Die semantische Bezeichnung dieses Descriptorfeldes ist weiterhin offen; es darf noch nicht pauschal als Kompressionsflag benannt werden.
+
+3. Weitere von 17F0h gesetzte Zustände
+17F0h setzt außerdem:
+- DS:06C0h aus dem Rückgabewert eines vorangehenden Zustands-Reset-Aufrufs; bei [BP+06h]=FFFFh wird stattdessen 00FFh verwendet.
+- DS:2FCC h auf 1, wenn der Parameter [BP+06h] gleich 1 ist, sonst 0.
+- DS:1C46h aus [BP+08h].
+- Der Parameter [BP+0Ah] steuert, ob die weitere Initialisierung bei 1841h übersprungen wird.
+
+Im Hauptaufruf werden [BP+06h] und [BP+08h] aus Bits von Descriptorbyte +0Dh abgeleitet:
+- Bit 0 bestimmt den übergebenen Wert 0 oder 1.
+- Bit 4 bestimmt den übergebenen Wert 0 oder 0Eh.
+Der Parameter [BP+0Ah] wird dort als 0 übergeben.
+
+17F0h setzt außerdem den Entpackzustand zurück, indem es 1638h mit FFFFh aufruft. Damit wird der Zähler DS:06A6h vor Beginn des neuen Datenstroms gelöscht.
+
+4. Zusammenhang mit dem zuvor untersuchten Descriptor
+Der Hauptpfad bei 00A4h initialisiert den Lesepointer aus Descriptor +0Eh.
+Bei 0176h–017Bh wird Descriptor +0Ch als Moduswert an 17F0h übergeben.
+Die Bits 0 und 4 von Descriptor +0Dh steuern weitere Verarbeitungsparameter.
+
+Somit sind die drei Descriptorbytes +0Ch, +0Dh und +0Eh in der Datenverarbeitung unmittelbar beteiligt:
+- +0Ch: Auswahl des direkten oder entpackenden Eingabepfads.
+- +0Dh: zwei weitere Steuerparameter für 17F0h.
+- +0Eh: Startposition des Eingabedatenstroms innerhalb des von 1558h gelieferten Blocks.
+
+5. Grenzen der Aussage
+Gesichert sind die Register-/Speicherbewegungen und die konkreten Aufrufparameter.
+Noch nicht gesichert sind:
+- die symbolischen Namen und vollständige Bedeutung der Descriptorfelder,
+- ob +0Eh in allen Descriptorformaten stets auf denselben Datentyp zeigt,
+- ob der Block ab +0Eh ausschließlich komprimierte Pixelwerte oder zusätzliche Metadaten enthält,
+- die vollständige Länge und das Ende des Datenstroms.
+
+Insbesondere ist die Aussage „+0Ch ist das Kompressionsflag“ eine mögliche Kurzbeschreibung der beobachteten Wirkung, aber noch keine bewiesene historische Feldbezeichnung.
+
+6. Nächster Untersuchungsschritt
+Als Nächstes sind die von 1558h gelieferten Blockgrenzen und der Resource-Index zu verfolgen. Dabei soll ermittelt werden, wie lang der Datenbereich ab +0Eh ist und ob die Descriptorfelder +08h/+0Ah sowie die Datenstromlänge miteinander korrespondieren. Anschließend kann die entpackte Bytefolge mit dem in 1922h aufgebauten Arbeitsbereich verglichen werden.
+
+Ende Untersuchung 2356.
