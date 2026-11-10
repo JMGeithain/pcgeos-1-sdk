@@ -1,0 +1,111 @@
+GEOTEST / ICONMAKE – Untersuchung 2364
+Prüfung der bereitgestellten PCX-Eingabegrafiken und Transparenzindizes
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Ziel und Methode
+-------------------
+Die aktuell bereitgestellten GEOTEST-Archive wurden unabhängig von ICONMAKE
+auf PCX-Header, Bildgeometrie, dekodierte Palettenindizes und Eckpixel geprüft.
+Die PCX-Dateien wurden mit Pillow geöffnet und vollständig dekodiert. Die
+Prüfung betrifft ausschließlich die Eingabegrafiken; es wurde kein Token
+erzeugt und kein GeoWorks-Laufzeittest ausgeführt.
+
+2. Dokumenticon-Paket (Untersuchung 2305)
+-----------------------------------------
+Dateien:
+- GTS1DOC_COLOR_48x30_M14_4PLANE.PCX
+  Größe 1099 Bytes
+  SHA-256 cf6c7916d660bb2338a32a97ec8963590025b847d5f890ea36fce53a18fa7d9d
+- GTS1DOC_MONO_48x30_M14_4PLANE.PCX
+  Größe 1092 Bytes
+  SHA-256 1d8d210cf49b5940cd4d4983f01718eaa717773681e0e6f42bd40762490c8ea8
+
+Beide PCX-Dateien:
+- Manufacturer 10, Version 5, RLE-Encoding 1
+- BitsPerPixel 1, Planes 4
+- Bildgrenzen (0,0) bis (47,29), also 48 x 30 Pixel
+- BytesPerLine 6 je Plane
+- PaletteInfo 1
+- Alle vier Eckpixel haben Palettenindex 14.
+
+Damit ist für beide Dokumenticon-Eingabedateien der äußere Eckbereich
+tatsächlich mit Index 14 codiert. Der vorgesehene Aufruf ICONMAKE M14 ist
+auf Ebene der PCX-Pixelindizes konsistent mit dem Entwurf, sofern M14 in
+ICONMAKE 1.x wie in der vorhandenen Dokumentation als Transparenzindex 14
+wirkt. Die tatsächliche ICONMAKE-/GeoManager-Wirkung ist damit noch nicht
+bewiesen.
+
+3. Bestehendes Programmicon GTS1ICON.PCX
+----------------------------------------
+Datei:
+- GTS1ICON.PCX, 858 Bytes
+- SHA-256 23d2278b5a16c2a29e6f1a0f4bfd05e0fa3d69ecf66268df25ec0df90fbc322b
+
+Header:
+- Manufacturer 10, Version 5, RLE-Encoding 1
+- BitsPerPixel 1, Planes 4
+- 48 x 30 Pixel, BytesPerLine 6, PaletteInfo 1
+
+Wichtiger Befund:
+- Alle vier Eckpixel haben Palettenindex 13, nicht 14.
+- Index 13 hat in der eingebetteten 16-Farben-Palette RGB (255,85,85).
+- Index 14 hat RGB (255,85,255).
+- Die Datei enthält 384 Pixel mit Index 13 und 51 Pixel mit Index 14.
+
+Die mitgelieferte ERZEUGE.BAT ruft ICONMAKE M14 auf. Die README.TXT behauptet,
+der äußere Bereich sei hellmagenta (Palettenindex 13) und werde dadurch
+transparent. Das ist intern widersprüchlich: Der tatsächliche Index 13 ist
+nicht Index 14, und der Aufruf M14 benennt Index 14. Ohne einen echten
+ICONMAKE-Lauf lässt sich nicht behaupten, dass der Außenbereich dieser
+Datei transparent wird. Die dokumentierte Annahme ist auf Byte-/Pixel-Ebene
+nicht bestätigt.
+
+4. Separates EGA-Icon GEOTEST_EGA.PCX
+-------------------------------------
+Datei:
+- GEOTEST_EGA.PCX, 1994 Bytes
+- SHA-256 c3857a1c560a73918dc65acf211902f84059d3ab1bd3678a1594642e3fc61c0d
+
+Header:
+- Manufacturer 10, Version 5, RLE-Encoding 1
+- BitsPerPixel 8, Planes 1
+- 48 x 30 Pixel, BytesPerLine 48, PaletteInfo 1
+
+Dies ist eine 8-Bit-Einplane-PCX-Datei und strukturell nicht gleich aufgebaut
+wie die drei 4-Plane-Dateien oben. Die dekodierten Eckpixel haben Index 7
+(oben links, oben rechts, unten rechts) bzw. Index 9 (unten links).
+Die Paletteinträge 7 und 9 sind nicht identisch. Ein M0-Aufruf deaktiviert
+Transparenz laut dem mitgelieferten README_ICON_DE; die Datei ist damit als
+opake 16-Farben-Eingabe gedacht. Eine ICONMAKE-Verarbeitung wurde hier nicht
+ausgeführt.
+
+5. Ergebnis und Korrekturhinweis
+--------------------------------
+- Die beiden neuen Dokumenticons sind auf Eingabeebene konsistent mit M14:
+  ihre vier Eckpixel tragen Index 14.
+- Beim älteren GTS1ICON.PCX passt der reale Außenpixelindex 13 nicht zum
+  dokumentierten Aufruf M14. README und tatsächliche PCX-Pixelwerte sind
+  widersprüchlich.
+- GEOTEST_EGA.PCX ist eine andere PCX-Struktur (8 bpp, 1 Plane) und hat
+  keine einheitliche Eckfarbe; sie darf nicht ungeprüft mit dem 4-Plane-
+  M14-Verfahren gleichgesetzt werden.
+
+Empfohlene nächste Aktion:
+Die GTS1ICON.PCX nicht stillschweigend verändern. Zuerst anhand von ICONMAKE
+1.x und einer gesicherten Testkopie verifizieren, welche PCX-Indizes die
+Option M14 tatsächlich transparent macht. Danach entweder die PCX-Randpixel
+oder den ICONMAKE-Aufruf und die README kontrolliert korrigieren. Für die
+Dokumenticons ist der nächste Test ein echter ICONMAKE-Lauf mit M14 und
+anschließende Sichtprüfung in GeoManager.
+
+6. Änderungs- und Teststatus
+----------------------------
+- Keine PCX-Datei verändert.
+- Keine GEO-Datei verändert.
+- Keine Token- oder TOKEN.DB-Datei erzeugt/verändert.
+- Kein ICONMAKE-Lauf.
+- Kein GeoWorks-Laufzeittest.
+- Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+Ende Untersuchung 2364.
