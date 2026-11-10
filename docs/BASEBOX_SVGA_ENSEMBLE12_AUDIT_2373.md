@@ -100,6 +100,21 @@ Damit ist `SVGA8004.GEO` – nicht der 16-bpp-`S16_1280.GEO`-Renderer aus dem Ba
 
 Die Basebox-Probe zeigt für 1024×768×16 Farben den VBE-Modus `0104h` und für 1280×1024×16 Farben den VBE-Modus `0106h`. Das sind genau die beiden 4-bpp-Modi, die in der obigen Tabelle stehen. Die 16-bpp-Modi `0117h` und `011Ah` gehören dagegen zum anderen RGB565-Treiberpfad.
 
+## Statische Erstaufnahme von SVGA8004.GEO
+
+Die Ressource 1 der originalen `SVGA8004.GEO` beginnt bei Datei-Offset `013Eh` und ist 17.504 Bytes lang. In dieser Ressource wurden zwei Tabellen mit je 19 WORD-Einträgen identifiziert:
+
+- Ressourcen-relative `013Fh`: 19 Probe-/Erkennungs-Callbacks
+- Ressourcen-relative `0165h`: 19 Setup-Callbacks
+
+Die Reihenfolge stimmt mit den 19 Geräte-Strings in Ressource 2 überein. Der erste Eintrag ist `VESA Kompatible Super VGA: 800x600 16 Farben`; seine Callback-Paare lauten Probe `2C40h` und Setup `2C96h`. Die zugehörigen Datei-Offsets sind `027Dh`, `02A3h`, `2D7Eh` und `2DD4h` für die genannten Ressourcenpositionen, wobei die letzten beiden Werte die Callback-Ziele innerhalb der Datei bezeichnen.
+
+Der Probe-Callback bei Ressourcen-Offset `2C40h` führt BIOS `INT 10h`, Funktion `4F00h`, aus, prüft den Rückgabewert `004Fh` und die Signatur `VESA`. Danach durchsucht er die VBE-Modusliste ausdrücklich nach Modus `0102h` (800×600×16 Farben).
+
+**Noch offene und wichtige Abweichung:** Der zugehörige Setup-Callback `2C96h` setzt `AH=00h`, liest `AL` aus einer Tabelle ab `2CA8h` und ruft anschließend `INT 10h` auf. Der erste Tabellenwert an `2CA8h` ist `6Ah`, nicht `02h`. Der Probe-Code sucht also VBE-Modus `0102h`, während der Setup-Code für den ersten Geräte-Eintrag den BIOS-Moduswert `006Ah` anfordert. Ob dies ein vom BIOS unterstützter OEM-Alias ist oder ob weitere Vorbedingungen die Interpretation verändern, ist noch nicht verifiziert. Diese Differenz darf beim Umbau nicht übergangen werden.
+
+Die Einträge 2 und 3 verwenden eigene Setup-Routinen (`2D1Eh` bzw. `2D50h`); zahlreiche weitere Einträge teilen sich den generischen Setup-Callback `2C96h`. Das bestätigt, dass die Geräteliste nicht bloß eine Liste von Auflösungen ist: Sie verknüpft die auswählbaren Geräte mit jeweils eigenen Erkennungs- und Initialisierungsroutinen.
+
 ## Wichtige Abweichung vom ursprünglichen Ein-Treiber-Ziel
 
 Das Paket liefert vier getrennte GEO-Dateien. Jede Datei enthält nur einen Geräte-/Moduseintrag. Es erfüllt daher noch nicht das frühere Ziel, **einen einzigen SVGA-Treiber mit drei auswählbaren festen Auflösungen** bereitzustellen.
