@@ -1,0 +1,95 @@
+ICONMAKE.EXE – Untersuchung 2345
+Korrektur der Aufrufadressen und Rekonstruktion der 6-Byte-Record-Schleife
+Stand: 2026-11-10
+Projektgrenze: GeoWorks / PC/GEOS 1.x; keine Übertragung von PC/GEOS 2.x oder FreeGEOS.
+
+1. Untersuchungsgrundlage
+Quelle ist GEOWORKS.zip, Archivpfad:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße der extrahierten EXE: 19.477 Byte.
+SHA-256 der extrahierten EXE:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+MZ-Headergröße: 0x20 Paragraphen = 0x200 Byte.
+Geladener EXE-Modulbereich: 18.965 Byte (Dateioffset 0x200 bis Dateiende).
+Disassemblierung des Moduls als 8086-Code; die hier genannten Offsets beziehen sich auf den Beginn dieses geladenen Moduls, nicht auf Dateioffsets.
+
+2. Korrektur zu Bericht 2344: tatsächliche CALL-Adressen
+Die frühere Kurzbeschreibung nannte 0B86h und 0B9Dh als CALL-Stellen. Das ist ungenau und wird hier korrigiert:
+- 0B86h: PUSH AX (AX wurde unmittelbar zuvor auf 0 gesetzt); kein CALL.
+- 0B94h: erster CALL 1558h.
+- 0B9Dh: LEA AX,[BP-0Ch]; kein CALL.
+- 0BB0h: zweiter CALL 1558h.
+Die zugehörigen Instruktionsfolgen:
+0B84  SUB AX,AX
+0B86  PUSH AX
+0B87  MOV BX,[DS:40E8h]
+0B8B  PUSH WORD [BX+00EAh]
+0B8F  PUSH WORD [BX+00ECh]
+0B93  PUSH BX
+0B94  CALL 1558h
+0B97  ADD SP,8
+0B9A  MOV [BP-02h],AX
+
+0B9D  LEA AX,[BP-0Ch]
+0BA0  PUSH AX
+0BA1  MOV BX,[BP-02h]
+0BA4  PUSH WORD [BX+14h]
+0BA7  MOV BX,[DS:40E8h]
+0BAB  PUSH WORD [BX+00ECh]
+0BAF  PUSH BX
+0BB0  CALL 1558h
+0BB3  ADD SP,8
+0BB6  MOV [BP-06h],AX
+
+3. Rückwärtsdurchlauf über 6-Byte-Einträge
+0BB9  MOV AX,[BP-0Ch]
+0BBC  MOV CX,6
+0BBF  SUB DX,DX
+0BC1  DIV CX
+0BC3  MOV DI,AX
+0BC5  OR DI,DI
+0BC7  JE 0C03h
+0BC9  MOV SI,AX
+0BCB  SHL SI,1
+0BCD  ADD SI,AX
+0BCF  SHL SI,1
+0BD1  ADD SI,[BP-06h]
+
+Damit wird SI = Tabellenbasis + 6*N gebildet, wobei N = WORD [BP-0Ch] / 6 (Ganzzahldivision) ist. Anschließend werden genau N Record-Positionen in absteigender Richtung geprüft:
+- aktueller Record bei SI
+- nach der Prüfung SUB SI,6
+- DI wird dekrementiert
+- Wiederholung, solange DI ungleich 0 ist.
+
+Wichtige, rein rechnerische Beobachtung: Die geprüften Offsets relativ zur von 1558h zurückgegebenen Tabellenbasis sind 6*N, 6*(N-1), ..., 6. Offset 0 wird in dieser Schleife nicht geprüft. Das ist ein belastbarer Befund des Adressverlaufs. Ob der 6-Byte-Bereich an Offset 0 ein Header, Sentinel, Sonderrecord oder etwas anderes enthält, ist aus dieser Schleife allein nicht bestimmbar.
+
+4. Record-Filter und Argumente des Aufrufs bei 0BF7h
+Für jeden geprüften Record:
+0BD4  CMP WORD [SI],10C6h
+0BDA  CMP WORD [SI],10C1h
+0BE0  CMP WORD [SI],10E1h
+Nur bei einem dieser drei Werte wird der folgende Pfad ausgeführt.
+
+Argumentaufbau:
+0BE6  PUSH WORD [SI+2]
+0BE9  MOV AX,[SI+4]
+0BEC  AND AH,0Fh
+0BEF  PUSH AX
+0BF0  MOV AX,[BP-02h]
+0BF3  ADD AX,1Eh
+0BF6  PUSH AX
+0BF7  CALL 0010h
+0BFA  ADD SP,6
+
+Somit erhält die Routine 0010h drei 16-Bit-Argumente in Pascal-/cdecl-unabhängig hier nur als Stack-Reihenfolge dokumentierter Form:
+- Record-Wort bei +2
+- Wort bei +4, dessen oberes Byte auf das untere Nibble maskiert wird (AH := AH AND 0Fh); AL bleibt unverändert
+- Zeiger auf den ersten von 1558h gelieferten Puffer plus 1Eh
+
+Die symbolische Bedeutung der Konstanten 10C6h, 10C1h und 10E1h sowie der Record-Felder ist weiterhin nicht bewiesen. Es wird insbesondere keine Gleichsetzung mit PAPR- oder GDOC-Resource-IDs behauptet.
+
+5. Bedeutung für die weitere Untersuchung
+Der Rückwärtslauf beginnt bei Tabellenbasis + 6*N und endet bei Tabellenbasis + 6. Das grenzt die Struktur weiter ein: Der erste 6-Byte-Slot an Offset 0 gehört nicht zu den N in diesem Codepfad geprüften Records. Als nächster Schritt sind die Herkunft und die genaue Struktur der von 1558h gelieferten zweiten Tabelle sowie die Verwendung der drei Argumente in Routine 0010h weiter zu verfolgen. Erst danach lässt sich eine Zuordnung zu konkreten Dokument-/Icon-Ressourcen belastbar formulieren.
+
+6. Beleggrenzen
+Dieser Bericht dokumentiert statische Instruktionsbefunde aus der erneut extrahierten ICONMAKE.EXE. Er behauptet keine Laufzeitbeobachtung und keine abschließende Interpretation der Record-Felder. Die Adresskorrektur ersetzt für die CALL-Stellen die ungenauen Angaben in der Kurzbeschreibung von Untersuchung 2344; die übrigen dort dokumentierten Datenflussbeobachtungen bleiben davon unberührt, soweit sie mit den hier aufgeführten Instruktionen übereinstimmen.
