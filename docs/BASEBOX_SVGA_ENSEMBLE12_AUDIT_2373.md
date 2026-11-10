@@ -53,20 +53,37 @@ Die dokumentierten Laufzeitergebnisse gelten für die konkrete mitgelieferte Bas
 
 Die früher festgelegten Zielmodi für den SVGA16.GEO-Treiber (16 Farben = 4 Bit pro Pixel, nicht 16 Bit pro Pixel) waren 1024×768, 1280×1024 und 1280×720.
 
-**Wichtige Formatabgrenzung:** Das Archiv baut 16-Bit-RGB565-Treiber mit 65.536 möglichen Farbwerten. Das ist nicht dasselbe wie das frühere Ziel `SVGA16.GEO` mit 16 Farben (4 bpp). Die folgenden VBE-Auflösungsbefunde sind für Moduserkennung, VBE-Prüfung und Geometrie nützlich, beweisen aber keine 4-bpp-Farbpfade und keinen fertigen 16-Farben-Treiber.
+**Wichtige Formatabgrenzung:** Das Archiv baut 16-Bit-RGB565-Treiber mit 65.536 möglichen Farbwerten. Das ist nicht dasselbe wie das frühere Ziel `SVGA16.GEO` mit 16 Farben (4 bpp). Die BIOS-Probe ist dennoch besonders wertvoll, weil sie sowohl passende 4-bpp-Modi als auch getrennte 16-bpp-Modi ausweist.
 
-Die BIOS-Probe `probe01/probe-results.json` enthält bereits konkrete VBE-Modusbeschreibungen für zwei der drei Zielauflösungen:
+### VBE-Modi für das frühere 16-Farben-Ziel (4 bpp)
+
+Die BIOS-Probe `probe01/probe-results.json` enthält diese beiden passenden 4-bpp-Modi:
+
+| Auflösung | VBE-Modus | Pitch | VBE-Speichermodell | Status / Attribute |
+|---|---:|---:|---|---|
+| 1024×768×16 Farben | `0104h` | 128 Bytes | Planar, 4 bpp, Modell 3 | `004Fh` / `001Bh` |
+| 1280×1024×16 Farben | `0106h` | 160 Bytes | Planar, 4 bpp, Modell 3 | `004Fh` / `001Bh` |
+
+Beide Modi werden auch in der erweiterten `vesa_modes=all`-Probe aufgeführt. Die Probe meldet für beide 64-KiB-Fenster und 64-KiB-Granularität. Das ist ein positiver BIOS-Probe-Befund für die bereitgestellte Basebox-Konfiguration, aber noch kein Laufzeittest mit einem angepassten 4-bpp-GeoWorks-Treiber.
+
+Ein Standard-VBE-Modus 1280×720×4 bpp ist in den dokumentierten normalen und erweiterten Moduslisten nicht enthalten. Der im Paket verwendete Basebox-Modus `089Ah` ist dagegen 16-bpp-RGB565; er ist deshalb kein Ersatz für einen 1280×720-Modus mit 16 Farben. Eine Lösung für 1280×720×4 bpp benötigt eine separate VBE-/Emulator- oder Hardware-Unterstützung.
+
+### Getrennte 16-bpp-RGB565-Modi des gelieferten Pakets
+
+Die Probe führt außerdem folgende Modi auf, die für den 64K-Farb-Treiber aus diesem Archiv relevant sind:
 
 | Auflösung | VBE-Modus | Pitch | Modell / Maske |
 |---|---:|---:|---|
-| 1024×768, Probe mit 16 bpp | `0117h` | 2.048 Bytes | Direct Color, 5:6:5, Positionen 11/5/0 |
-| 1280×1024, Probe mit 16 bpp | `011Ah` | 2.560 Bytes | Direct Color, 5:6:5, Positionen 11/5/0 |
+| 1024×768, 16 bpp | `0117h` | 2.048 Bytes | Direct Color, 5:6:5, Positionen 11/5/0 |
+| 1280×1024, 16 bpp | `011Ah` | 2.560 Bytes | Direct Color, 5:6:5, Positionen 11/5/0 |
 
-Die Probe meldet für beide Modi Status `004Fh`, Attribute `009Bh`, 64-KiB-Fenster und 64-KiB-Granularität. Das ist ein positiver BIOS-Probe-Befund für die bereitgestellte Basebox-Konfiguration. Es ist noch kein Laufzeittest dieser beiden Modi mit einem angepassten GEOS-Treiber.
+Die Probe meldet für beide Modi Status `004Fh`, Attribute `009Bh`, 64-KiB-Fenster und 64-KiB-Granularität. Auch das ist zunächst ein BIOS-Probe-Befund und kein Laufzeittest dieser beiden Modi mit einem angepassten GEOS-Treiber.
 
-1280×720×16 wird in den dokumentierten normalen VBE-Moduslisten nicht als Standardmodus gefunden. Der Paketadapter löst genau diesen Fall über die Basebox-HostIf-API und prüft danach die tatsächlichen VBE-Daten des vom Host bereitgestellten Modus `089Ah`.
+1280×720×16 bpp wird in den dokumentierten normalen VBE-Moduslisten nicht als Standardmodus gefunden. Der Paketadapter löst genau diesen Fall über die Basebox-HostIf-API und prüft danach die tatsächlichen VBE-Daten des vom Host bereitgestellten Modus `089Ah`.
 
-Die statische Renderer-Prüfung des Pakets nennt Obergrenzen von 2040×1536, maximal 4080 Bytes Pitch und ein 64-KiB-Bankfenster. Diese Grenzen lassen 1024×768 und 1280×1024 grundsätzlich innerhalb der geprüften festen Array-Grenzen liegen. Vor einer Freigabe sind trotzdem die vollständigen Modusdaten, der verfügbare Videospeicher, Bankgrenzen und tatsächliche GEOS-Laufzeit zu prüfen.
+### Grenzen der Übertragbarkeit
+
+Die statische Renderer-Prüfung des Pakets nennt für den enthaltenen **16-bpp-RGB565-Renderer** Obergrenzen von 2040×1536, maximal 4080 Bytes Pitch und ein 64-KiB-Bankfenster. Diese Analyse beweist nicht dieselben Grenzen für einen anderen 4-bpp-Renderer wie den früheren `SVGA8004.GEO`. Dessen eigene Puffer, Zeilenadressierung, Bankumschaltung und Modustabellen müssen separat geprüft werden.
 
 ## Wichtige Abweichung vom ursprünglichen Ein-Treiber-Ziel
 
