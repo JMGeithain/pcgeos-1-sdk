@@ -51,3 +51,37 @@ The actual sample headers confirm that `PAPR.000`, `GDOC.000`, and `NBAT.000` ar
 4. Convert the new color and monochrome artwork using the actual GeoWorks 1.x ICONMAKE utility and inspect its output.
 5. Test only in a disposable GeoWorks 1.2 environment with a separate TOKEN.DB.
 6. Record the exact test setup, token mapping, and GeoManager result before calling the document icon complete.
+
+
+## Static analysis of the GEOTEST.GEO resources (2026-11-10)
+
+The supplied GEOTEST.GEO was checked against the build report:
+- Size: 70,794 bytes
+- SHA-256: `9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b`
+
+The resource table has 12 entries. Its table start is `0x12E`; the resource positions are DWORD entries beginning at `0x146`. Resource 4 is a 336-byte LMem resource with five local chunks. Resources 5–10 are separate resource-table entries, each with two local chunks.
+
+The 48×30 candidate pair is resource 7 / resource 8:
+- R7 starts `41 30 00 1E 00 1A`
+- R8 starts `46 30 00 1E 00 1A`
+
+The 64×40 candidate pair is resource 9 / resource 10:
+- R9 starts `41 40 00 28 00 1A`
+- R10 starts `46 40 00 28 00 1A`
+
+Resources 5 and 6 start with `61 30 00 0E 00 1A` and `61 40 00 12 00 1A`, respectively. These byte prefixes and dimension-like values are measurements only. The semantic VisMoniker field definitions are not yet independently established for this exact GeoWorks 1.x target. In particular, the interpretation `0x41 = color` and `0x46 = monochrome` remains unproven.
+
+### Resource 4: local LMem references
+
+Resource 4 has chunk handles `0x20`, `0x22`, `0x24`, `0x26`, and `0x28`. Its 44-byte chunk at handle `0x24` contains six little-endian occurrences of `0x0022`. These are local LMem chunk handles in resource 4: handle `0x22` points to that same resource's 200-byte chunk at resource-relative offset `0x36`. They are not resource IDs 5–10 and do not establish a cross-resource icon-selection chain.
+
+The final chunk (handle `0x28`) contains the ASCII text `GeoWorks 1.x Test`. The remaining fields in the 44-byte chunk are kept uninterpreted pending a matching GeoWorks 1.x structure definition or controlled native comparison.
+
+### Current evidence boundary
+
+- Resource 4's five chunks and their offsets/lengths are recorded in [investigation 2362](GEOTEST_UNTERSUCHUNG_2362.TXT).
+- Resource table and moniker-candidate comparisons are recorded in [investigation 2361](GEOTEST_UNTERSUCHUNG_2361.TXT).
+- The ICONMAKE-side lookup chain is recorded in [investigation 2360](ICONMAKE_RESOURCE_BLOCK_LOOKUP_2360.TXT).
+- No proven chain yet connects the ICONMAKE provider lookup indices to GEOTEST resources 5–10.
+- The color/monochrome meaning of the leading bytes, actual icon-selection path, and runtime display context remain open.
+- GEOTEST.GEO, source files, TOKEN.DB, and the original GeoWorks installation were not modified by these static investigations. The proprietary GEO binary is not stored in this public repository.
