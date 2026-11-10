@@ -149,3 +149,14 @@ The user supplied `GTS10000.000` (1,760 bytes; SHA-256 `7ea8625f66868038b3c1e7c9
 The file does not contain an identified explicit marker stating whether it was generated with M13 or M14. A single output therefore cannot establish which transparency parameter was used or prove the rendered transparency. The second output from the other test folder and confirmation of this file's origin (M13 or M14) are required for a controlled byte comparison. Resources 4 and 5 are only 0x30 bytes each; do not describe them as fully decoded pixel bitmaps based on their signatures alone.
 
 See [investigation 2367](ICONMAKE_TOKEN_OUTPUT_AUDIT_2367.TXT). No source or generated file was modified.
+
+
+## Controlled M13/M14 token comparison (investigation 2368)
+
+The user confirmed the provenance of the two generated token files: `GTS10000(1).000` was produced with M13 and `GTS10000(2).000` with M14. The files are 1,760 and 1,840 bytes respectively. Their token headers both identify GTS1 / manufacturer 0 / GEOS and seven resources.
+
+Resources 1–5 are byte-for-byte identical. Only resource 6 (the EGA payload) differs: M13 has 0x280 (640) bytes, M14 has 0x2D0 (720) bytes. Thus the M14 EGA payload is 80 bytes larger. This is direct evidence that the selected M value changes the generated EGA resource for these inputs; it is not yet a pixel-level explanation of every changed byte or proof of on-screen transparency.
+
+Because the source `GTS1ICON.PCX` has palette index 13 at all four corners, M13 is the parameter consistent with the intended transparent border, based on the earlier static analysis of ICONMAKE's M-parameter handling. A GeoWorks 1.2 / GeoManager visual test is still required before declaring the display behavior verified.
+
+See [investigation 2368](ICONMAKE_M13_M14_TOKEN_COMPARISON_2368.TXT). Both generated token files were only read; no source asset, batch file, GEO, or TOKEN.DB was changed.
