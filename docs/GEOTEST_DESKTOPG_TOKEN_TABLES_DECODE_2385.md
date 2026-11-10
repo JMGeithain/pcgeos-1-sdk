@@ -29,7 +29,7 @@ Die beiden Zeichenarrays bei `0538h` und `0544h` lassen sich paarweise zusammens
 | 4 | `gD` | `AT` | `gDAT` |
 | 5 | `gD` | `OS` | `gDOS` |
 
-Die Bytes sind in der Ressource tatsächlich als sechs Zweiergruppen hintereinander gespeichert. Die Reihenfolge im Code lädt je Datensatz zwei 16-Bit-Werte und übergibt sie an den Far-Call bei Offset `050Fh` (numerischer Zieloffset `0072h`).
+Die Bytes sind in der Ressource tatsächlich als sechs Zweiergruppen hintereinander gespeichert. Die Reihenfolge im Code lädt je Datensatz zwei 16-Bit-Werte und übergibt sie an den Far-Call bei Offset `0516h` (numerischer Zieloffset `0072h`).
 
 Die beiden weiteren Arrays enthalten:
 - bei `0550h`: sechsmal den 16-Bit-Wert `0026h`;
@@ -39,7 +39,7 @@ Nach einem bedingten Sprung lädt der Code die beiden Werte des zweiten Arraysat
 
 ## 2. Zweite Tabelle: acht Token-Datensätze
 
-Der Code ab Ressourcenoffset `056Ch` greift auf:
+Der Code ab Ressourcenoffset `0569h` greift auf:
 - `CS:[DI+059Ah]`
 - `CS:[DI+05AAh]`
 - `CS:[DI+05BAh]`
@@ -66,7 +66,7 @@ Das zugehörige Wortarray bei `05BAh` lautet:
 Das weitere Wortarray bei `05CAh` enthält acht Werte:
 `09A4h, 09A8h, 099Ch, 09A0h, 09ACh, 09B0h, 09B4h, 09B8h`.
 
-Der Code übergibt die Tokenhälften und das jeweilige Flagwort an einen Far-Call bei Ressourcenoffset `0580h` (numerischer Zieloffset `0073h`). Anschließend schreibt er zurückgegebene Registerwerte in die durch das letzte Array adressierten Speicherstellen. Die genaue Semantik des Aufrufs und der Zielstruktur ist noch nicht entschlüsselt.
+Der Code übergibt die Tokenhälften und das jeweilige Flagwort an einen Far-Call bei Ressourcenoffset `057Eh` (numerischer Zieloffset `0073h`). Anschließend schreibt er zurückgegebene Registerwerte in die durch das letzte Array adressierten Speicherstellen. Die genaue Semantik des Aufrufs und der Zielstruktur ist noch nicht entschlüsselt.
 
 ## 3. Bedeutung für die Dokumenterkennung
 
