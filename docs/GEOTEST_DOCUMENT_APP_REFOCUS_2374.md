@@ -22,27 +22,33 @@ Das Archiv enthält zusätzlich `colour-test/BCOLTEST.GEO`, eine kleine native G
 
 Die mitgelieferte `colour-test/README.txt` sagt ausdrücklich, dass die Anwendung unmittelbar ihr natives Fenster öffnet und **kein Dokument und keinen Dateiauswahldialog** verwendet. Sie ist deshalb ein weiterer nativer App-/Fenster-Test, aber keine Vorlage für die Dokumenterzeugung. Ihre dokumentierte RGB565-Funktionalität ist für das aktuelle GEOTEST-Dokumentziel nicht erforderlich.
 
-## Relevante vorhandene 1.x-Dokumentanwendung
+## Korrektur: NOTEPAD.GEO ist keine native GEOS-Dokumentvorlage
 
-In der bereitgestellten deutschen GeoWorks-Installation liegt `GEOWORKS/WORLD/NOTEPAD.GEO` (byteidentische Kopie auch unter `GEOWORKS/DOCUMENT/NOTEPAD.GEO`).
+Der Nutzer hat klargestellt, dass `NOTEPAD.GEO` keine eigenen PC/GEOS-Dokumentdateien wie GeoWrite erzeugt oder verwaltet, sondern DOS-ASCII-Dateien bearbeitet. Diese Einordnung ist für das Projekt maßgeblich.
 
-- Dateigröße: 8.070 Bytes
-- SHA-256: `a1ebd0cb84712a126b1f67f5fd1ca6b57f8bda2e9038e9224ba16ebc008f9ea9`
+Die zuvor notierten Fakten zu `NOTEPAD.GEO` bleiben als Geode-Befunde gültig (8.070 Bytes, Kernel-Protokoll 622.3, 15 Ressourcen, Imports `ui` und `spool`, Dateiname `notiz.txt)). Sie belegen jedoch gerade keinen nativen GEOS-Dokument-Lifecycle. NOTEPAD darf daher nicht als Vorlage für das eigene GEOTEST-Dokumentformat oder dessen Icon-Registrierung verwendet werden. Allenfalls kann die Anwendung später als Referenz für allgemeine UI-/Dateiauswahlabläufe dienen.
+
+## Neuer Referenzkandidat: GeoWrite
+
+In der Installation liegt `GEOWORKS/WORLD/WRITE.GEO`, die native GeoWrite-Anwendung:
+
+- Dateigröße: 73.110 Bytes
+- SHA-256: `0d2958b810948603d15e412a61598623b9a4ccb73cfeb9fbe08d50ee718a6fd0`
 - GEOS-1.x-Geode, Kernel-Protokoll 622.3
-- Geode-Protokoll 504.0
-- 15 Ressourcen
-- zwei Imports: `ui` (693.0) und `spool` (613.0)
-- Geode-Permanentname `notepad`, Extension `app`
+- Geode-Protokoll 509.0, Release 1.2.8.3
+- 36 Ressourcen
+- Imports: `ui` (693.0), `spool` (613.0), `spell` (2.0)
+- Geode-Permanentname `write`, Extension `app`
 
-Die Datei ist ein wesentlich geeigneterer Referenzkandidat als `BCOLTEST.GEO`, weil sie die native Notizblock-Anwendung repräsentiert. Der Import von `spool` und ihre zusätzlichen Ressourcen sind Befunde; die konkreten Dokument-Open-/Save-Aufrufketten müssen noch im Code nachgewiesen werden.
+Strings in WRITE.GEO belegen unter anderem die Anwendung GeoWrite und Funktionen zum Importieren bzw. Speichern von ASCII-Textdateien. Die Datei enthält viele Code- und Objektressourcen. Das macht sie zum deutlich besseren Kandidaten für die Untersuchung eines nativen Dokument-Lifecycles.
 
-Erste String-Funde:
-- Ressource 6 enthält den Text `Notiz`.
-- Ressource 7 enthält u. a. `notiz.txt` sowie Menü-/Dialogtexte.
-- Ressource 8 enthält `NPAD` und `Notizblock`.
-- Ressourcen 9 bis 14 sind sechs separate LMem-Ressourcen mit Moniker-/Grafikdaten.
+Noch nicht nachgewiesen sind:
+- das konkrete native GeoWrite-Dateiformat,
+- die Dokumentklasse und ihre Erzeugungs-/Speicheraufrufe,
+- die genaue Dateityp-/Creator-Registrierung,
+- die Referenzkette zum Dokument-Icon.
 
-Diese String- und Ressourcenbefunde reichen noch nicht aus, um das Dokument-Icon einer bestimmten Ressource oder einem konkreten Dateityp-Feld zuzuordnen. Diese Zuordnung bleibt bis zum Nachweis der Referenzkette offen.
+Auch WRITE.GEO wird deshalb zunächst nur statisch untersucht. Aus Ressourcenanzahl, Strings oder Importen allein wird keine Dokumentstruktur abgeleitet.
 
 ## Aktueller GEOTEST-Stand
 
@@ -52,9 +58,9 @@ Der bisherige Buildbericht kennzeichnet den Stand als experimentell und ohne Geo
 
 ## Nächste Untersuchungsschritte
 
-1. `NOTEPAD.GEO` Ressource 2 (Code) vollständig auf die Dokument-Lifecycle-Aufrufe untersuchen: neues Dokument, Öffnen, Speichern, Speichern unter, Schließen.
+1. `WRITE.GEO` auf die nativen Dokument-Lifecycle-Aufrufe untersuchen: neues Dokument, Öffnen, Speichern, Speichern unter, Schließen.
 2. Die dafür verwendeten Kernel-/UI-/Spool-Imports, Prozessmethoden und Objektklassen identifizieren; jeden Ordinal gegen den exakten deutschen GeoWorks-1.2-Kernel bzw. die passende Bibliothek validieren.
-3. In `NOTEPAD.GEO` die tatsächliche Dateityp-/Dokumentmoniker-Registrierung und die Referenz auf das Dokument-Icon nachweisen. Ressourcen 6 und 9–14 nicht allein anhand ihrer Strings oder Größen als Dokument-Icon deklarieren.
+3. In `WRITE.GEO` die tatsächliche Dateityp-/Dokumentmoniker-Registrierung und die Referenz auf das Dokument-Icon nachweisen. Keine Ressourcen allein anhand ihrer Strings oder Größen als Dokument-Icon deklarieren.
 4. Die minimal erforderlichen Mechanismen auf `GEOTEST.GEO` übertragen: zunächst „Neu“ und Erzeugen eines kleinen eigenen Dokumentinhalts; anschließend Speichern und erneutes Öffnen.
 5. Das eigene Dokumentformat und den Dokument-Dateinamen festlegen und das eigene Icon über einen belegten Ressourcen-/Monikerpfad anbinden.
 6. Erst danach einen neuen Build erzeugen und unter GeoWorks 1.2 testen. Erfolgskriterien: Anwendung startet, erzeugt Dokument, speichert es, GeoManager zeigt das eigene Dokument-Icon, und das Dokument lässt sich erneut öffnen.
