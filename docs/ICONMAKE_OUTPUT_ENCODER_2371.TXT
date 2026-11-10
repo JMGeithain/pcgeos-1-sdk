@@ -1,0 +1,101 @@
+ICONMAKE / GEOTEST – Untersuchung 2371
+Rekonstruktion des Ausgabepfads bei ICONMAKE (Dateioffset 1894h)
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Adresskonvention – wichtige Klarstellung
+-------------------------------------------
+ICONMAKE.EXE ist ein MZ-Executable mit e_cparhdr = 0020h
+(512 Byte DOS-Header). Die in früheren Hex-Prüfungen genannten
+Offsets wie 1894h beziehen sich auf Dateioffsets im vollständigen
+EXE. Für die Disassemblierung des geladenen MZ-Abbilds gilt daher:
+
+Codeoffset = Dateioffset - 0200h
+
+Beispiele:
+Dateioffset 1838h -> Codeoffset 1638h
+Dateioffset 1894h -> Codeoffset 1694h
+Dateioffset 197Ah -> Codeoffset 177Ah
+Dateioffset 1B22h -> Codeoffset 1922h
+
+Die frühere Bezeichnung der Routinen nach den Dateioffsets bleibt
+damit gültig; die Unterscheidung wird hier ausdrücklich festgehalten.
+
+2. Routine am Dateioffset 1894h (Codeoffset 1694h)
+-------------------------------------------------
+Die Routine beginnt mit einem Stackframe und liest ihr erstes
+Argument als WORD nach DX. Das niederwertige Byte DL wird als
+auszugebender Wert benutzt.
+
+Globale Zustände:
+- 2FD4h: Schalter für den komprimierten Ausgabepfad.
+- 06AAh: Zeiger auf den aktuellen Steuer-/Lauf-Bytebereich.
+- 2FE6h: aktuelle Ausgabeposition.
+
+Beobachteter Ablauf:
+A. Ist 2FD4h = 0 und der Parameter nicht FFFFh, wird DL direkt an
+   die aktuelle Ausgabeposition geschrieben; 2FE6h wird erhöht.
+
+B. Ist der Parameter FFFFh, wird 06AAh auf 0 gesetzt. Der Wert ist
+   damit ein Steuer-/Abschlussaufruf und kein normales Ausgabebyte.
+
+C. Im komprimierten Pfad wird bei 06AAh = 0 ein neuer Steuerbereich
+   an der aktuellen Ausgabeposition initialisiert. Anschließend wird
+   DL ausgegeben.
+
+D. Ist 06AAh ungleich 0, wird das dort referenzierte Steuerbyte
+   ausgewertet:
+   - Vorzeichen/Nullwert bestimmen unterschiedliche Pfade.
+   - Bei einem negativen Steuerbyte wird das Folgebyte mit DL
+     verglichen; bei passender Folge und einem Steuerwert oberhalb
+     80h wird der Steuerwert dekrementiert.
+   - Bei einem positiven Steuerbyte werden die letzten zwei
+     ausgegebenen Bytes mit DL verglichen.
+   - Bei passender Wiederholung wird der Ausgabepuffer zurückgesetzt
+     bzw. ein FEh-Marker an einer zurückgenommenen Position gesetzt.
+   - Andernfalls wird der positive Steuerzähler erhöht, solange er
+     nicht 7Fh erreicht; bei Grenzerreichung wird ein neuer
+     Steuerbereich begonnen.
+   - Ein Steuerbyte 00h führt ebenfalls zum Beginn eines neuen
+     Steuerbereichs.
+
+3. Sicher belegte Aussagen
+--------------------------
+- Die Routine ist ein Ausgabepfad mit Zustandsverwaltung und
+  Wiederholungserkennung.
+- FEh wird vom Encoder aktiv als Marker geschrieben.
+- 00h wird als initialer Steuerwert eines neuen Bereichs verwendet.
+- FFFFh wird als Funktions-Steuerwert zum Zurücksetzen des Zustands
+  benutzt.
+- Der Kompressionspfad wird über 2FD4h ausgewählt.
+- Die Ausgabe wird über 2FE6h fortgeschrieben bzw. bei erkannter
+  Wiederholung teilweise zurückgenommen.
+
+4. Noch nicht abschließend geklärt
+----------------------------------
+Die vollständige Grammatik des resultierenden Datenstroms ist noch
+nicht abschließend bewiesen. Insbesondere ist noch offen, wie die
+FEh-Markierung und das anschließende Byte/die folgenden Bytes bei
+der Rückwärtsdekodierung exakt zu interpretieren sind und welche
+Längen-/Grenzfälle der Decoder erwartet.
+
+Deshalb wird noch kein eigener Bilddecoder als korrekt bezeichnet.
+Der nächste Schritt ist, die Aufrufersequenz und die tatsächlich
+erzeugten M13-/M14-Bytes gemeinsam gegen diese Zustandsmaschine zu
+prüfen.
+
+5. Status
+---------
+- MZ-Headergröße 0200h berücksichtigt.
+- Dateioffset-/Codeoffset-Zuordnung explizit dokumentiert.
+- Routine 1894h als Codeoffset 1694h disassembliert und
+  zustandsbezogen untersucht.
+- Keine vollständige inverse Dekodierregel behauptet.
+- Keine Pixel- oder Transparenzbedeutung einzelner Payloadbytes
+  behauptet.
+- Keine Token-, GEO-, PCX-, BAT-, README- oder TOKEN.DB-Datei
+  verändert.
+- Kein GeoWorks-1.2-Laufzeittest.
+- Ausschließlich PC/GEOS 1.x; keine FreeGEOS-Definitionen verwendet.
+
+Ende Untersuchung 2371.
