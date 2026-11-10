@@ -4,7 +4,7 @@ Stand: 2026-11-10
 
 ## Ausgangspunkt
 
-In Untersuchung 2383/2384 wurde in `DESKTOPG.GEO`, Ressource 8, Code gefunden, der vier CS-relative Tabellenbereiche verarbeitet. Die erste Schleife beginnt bei Ressourcenoffset `0508h` und iteriert sechs Mal; die zweite beginnt bei `0569h` und iteriert acht Mal.
+In Untersuchung 2383/2384 wurde in `DESKTOPG.GEO`, Ressource 8, Code gefunden, der vier CS-relative Tabellenbereiche verarbeitet. Die erste Schleife beginnt bei Ressourcenoffset `0508h` und iteriert sechs Mal; die zweite beginnt bei `0568h` und iteriert acht Mal.
 
 Originaldatei: `GEOWORKS/SYSAPPL/DESKTOPG.GEO`, 101.524 Bytes, SHA-256 `82d547429705e9f9d838c444e9bef8faf493dada68721828dfdf2f373a6b1870`.
 
@@ -39,7 +39,7 @@ Nach einem bedingten Sprung lädt der Code die beiden Werte des zweiten Arraysat
 
 ## 2. Zweite Tabelle: acht Token-Datensätze
 
-Der Code ab Ressourcenoffset `0569h` greift auf:
+Der Code ab Ressourcenoffset `0568h` initialisiert die zweite Schleife; die Tabellenzugriffe beginnen bei `056Ah` und greifen auf:
 - `CS:[DI+059Ah]`
 - `CS:[DI+05AAh]`
 - `CS:[DI+05BAh]`
@@ -66,7 +66,7 @@ Das zugehörige Wortarray bei `05BAh` lautet:
 Das weitere Wortarray bei `05CAh` enthält acht Werte:
 `09A4h, 09A8h, 099Ch, 09A0h, 09ACh, 09B0h, 09B4h, 09B8h`.
 
-Der Code übergibt die Tokenhälften und das jeweilige Flagwort an einen Far-Call bei Ressourcenoffset `057Eh` (numerischer Zieloffset `0073h`). Anschließend schreibt er zurückgegebene Registerwerte in die durch das letzte Array adressierten Speicherstellen. Die genaue Semantik des Aufrufs und der Zielstruktur ist noch nicht entschlüsselt.
+Der Code übergibt die Tokenhälften in AX/BX, das Flagwort in BP und zusätzlich den Bytewert aus `SS:[0AC6h]` in DH an den Far-Call bei Ressourcenoffset `0581h` (numerischer Zieloffset `0073h`). Danach lädt er je Eintrag einen Zieloffset aus `CS:[DI+05CAh]` in BP und speichert CX sowie DX nach `SS:[BP]` und `SS:[BP+2]`. Die genaue Semantik des Aufrufs und der Zielstruktur ist noch nicht entschlüsselt.
 
 ## 3. Bedeutung für die Dokumenterkennung
 
@@ -86,7 +86,7 @@ Die anwendungsspezifischen Dokumenttokens `WDAT` und `DDAT` stehen **nicht** in 
 
 1. Die Schleife bei `0508h` verarbeitet sechs vierstellige Tokenwerte.
 2. Die sechs Token lassen sich aus den Bytepaar-Arrays eindeutig als `DESK/FLDR/FILE/gAPP/gDAT/gDOS` rekonstruieren.
-3. Die Schleife bei `0569h` verarbeitet acht Tokenwerte: zweimal `FLDR`, zweimal `FILE`, zweimal `gAPP`, zweimal `gDAT`.
+3. Die Schleife bei `0568h` verarbeitet acht Tokenwerte: zweimal `FLDR`, zweimal `FILE`, zweimal `gAPP`, zweimal `gDAT`.
 4. Die zweite Schleife verwendet abwechselnd die Flagwerte `0040h` und `1040h`.
 5. Die beiden Schleifen rufen drei verschiedene numerische Offsets auf: `0072h`, `0071h`, `0073h`; ihre API-Namen sind weiterhin nicht aufgelöst.
 
