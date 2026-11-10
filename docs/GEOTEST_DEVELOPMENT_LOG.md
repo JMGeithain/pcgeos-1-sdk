@@ -2282,3 +2282,19 @@ Damit ist die in Untersuchung 2363 noch offene absolute Offset-/Längenkette nun
 Zusätzlich wurde der M-Modus untersucht: ICONMAKE liest den Dezimalwert hinter `M`; ohne Zahl wird 14 verwendet. Der Wert wird an die Iconvarianten-Erzeugung übergeben. Die vorhandene `GTS1ICON.PCX` hat jedoch Eckpixelindex 13, während `ERZEUGE.BAT` `M14` verwendet. Damit wählt der Batchaufruf nicht den tatsächlichen Randindex; für diese PCX-Eingabe wäre `M13` passend. Dies ist statisch aus Programmcode und PCX-Daten abgeleitet. Ein echter ICONMAKE-Lauf sowie die Anzeigeprüfung in GeoWorks 1.2 stehen noch aus. Batchdatei und README wurden deshalb nicht verändert.
 
 **Status:** Originaldateien extrahiert und gehasht; sechs Providerblöcke positions- und längengenau aufgelöst. Keine PCX-, BAT-, README-, GEO- oder TOKEN.DB-Datei verändert. Kein ICONMAKE-Lauf und kein GeoWorks-Laufzeittest. Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+
+## 46. Untersuchung 2367 – Prüfung der erzeugten GTS1-Token-Datei
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.
+
+Die vom Nutzer hochgeladene `GTS10000.000` ist 1.760 Byte groß (SHA-256: `7ea8625f66868038b3c1e7c99cc11c5134b8fa2b211b9b84c23767dd6e03b54f`). Der Header enthält Token `GTS1`, Manufacturer ID 0 und Creator `GEOS`; die Ressourcenzahl beträgt 7. Die Ressourcentabelle liegt vollständig innerhalb der Datei.
+
+In den Ressourcen 4, 5 und 6 wurden die führenden Variantensignaturen 61h, 41h und 46h gefunden. Diese stimmen mit den in Untersuchung 2366 den Providerformaten CGA, HGC und EGA zugeordneten Signaturen überein. Ressourcen 4 und 5 sind jeweils nur 30h Byte groß; ohne vollständige Dekodierung werden sie nicht als vollständige Pixelbilder bezeichnet.
+
+Die Datei enthält keinen erkannten eindeutigen Vermerk, ob sie mit M13 oder M14 erzeugt wurde. Deshalb lässt sich aus dieser Einzeldatei die verwendete Transparenzfarbe nicht sicher bestimmen. Für den Vergleich wird die zweite Token-Ausgabe aus dem jeweils anderen Testordner benötigt; außerdem muss bekannt sein, aus welchem Ordner die vorliegende Datei stammt.
+
+Details: [ICONMAKE_TOKEN_OUTPUT_AUDIT_2367.TXT](ICONMAKE_TOKEN_OUTPUT_AUDIT_2367.TXT).
+
+**Status:** Datei nur gelesen und gehasht. Keine Quelldatei, Token-Datei oder TOKEN.DB verändert. Kein Laufzeittest in GeoWorks 1.2.
