@@ -4,13 +4,13 @@ Stand: 2026-11-10
 
 ## Ausgangspunkt
 
-In Untersuchung 2383/2384 wurde in `DESKTOPG.GEO`, Ressource 8, Code gefunden, der vier CS-relative Tabellenbereiche verarbeitet. Die Schleife ab Ressourcenoffset `0500h` iteriert sechs Mal; die zweite Schleife ab `056Ch` iteriert acht Mal.
+In Untersuchung 2383/2384 wurde in `DESKTOPG.GEO`, Ressource 8, Code gefunden, der vier CS-relative Tabellenbereiche verarbeitet. Die erste Schleife beginnt bei Ressourcenoffset `0508h` und iteriert sechs Mal; die zweite beginnt bei `0569h` und iteriert acht Mal.
 
 Originaldatei: `GEOWORKS/SYSAPPL/DESKTOPG.GEO`, 101.524 Bytes, SHA-256 `82d547429705e9f9d838c444e9bef8faf493dada68721828dfdf2f373a6b1870`.
 
 ## 1. Erste Tabelle: sechs vierstellige Tokens
 
-Der Code ab Ressourcenoffset `0500h` liest wortweise aus:
+Der Code ab Ressourcenoffset `0508h` liest wortweise aus:
 - `CS:[DI+0538h]`
 - `CS:[DI+0544h]`
 - `CS:[DI+0550h]`
@@ -35,7 +35,7 @@ Die beiden weiteren Arrays enthalten:
 - bei `0550h`: sechsmal den 16-Bit-Wert `0026h`;
 - bei `055Ch`: die sechs 16-Bit-Werte `0018h, 0010h, 0012h, 001Ah, 001Ch, 0014h`.
 
-Nach einem bedingten Sprung lädt der Code die beiden Werte des zweiten Arraysatzes und ruft den Far-Call bei `0523h` (numerischer Zieloffset `0071h`) auf. Die Bedeutung der Werte `0026h` und der sechs unterschiedlichen Werte ist noch nicht geklärt.
+Nach einem bedingten Sprung lädt der Code die beiden Werte des zweiten Arraysatzes und ruft den Far-Call bei `052Ah` (numerischer Zieloffset `0071h`) auf. Die Bedeutung der Werte `0026h` und der sechs unterschiedlichen Werte ist noch nicht geklärt.
 
 ## 2. Zweite Tabelle: acht Token-Datensätze
 
@@ -84,9 +84,9 @@ Die anwendungsspezifischen Dokumenttokens `WDAT` und `DDAT` stehen **nicht** in 
 
 ## 4. Was jetzt belegt ist
 
-1. Die Schleife bei `0500h` verarbeitet sechs vierstellige Tokenwerte.
+1. Die Schleife bei `0508h` verarbeitet sechs vierstellige Tokenwerte.
 2. Die sechs Token lassen sich aus den Bytepaar-Arrays eindeutig als `DESK/FLDR/FILE/gAPP/gDAT/gDOS` rekonstruieren.
-3. Die Schleife bei `056Ch` verarbeitet acht Tokenwerte: zweimal `FLDR`, zweimal `FILE`, zweimal `gAPP`, zweimal `gDAT`.
+3. Die Schleife bei `0569h` verarbeitet acht Tokenwerte: zweimal `FLDR`, zweimal `FILE`, zweimal `gAPP`, zweimal `gDAT`.
 4. Die zweite Schleife verwendet abwechselnd die Flagwerte `0040h` und `1040h`.
 5. Die beiden Schleifen rufen drei verschiedene numerische Offsets auf: `0072h`, `0071h`, `0073h`; ihre API-Namen sind weiterhin nicht aufgelöst.
 
