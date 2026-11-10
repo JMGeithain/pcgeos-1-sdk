@@ -127,3 +127,16 @@ A fresh RLE decode of the uploaded PCX files found that all four corner pixels o
 This is not proof of ICONMAKE's actual transparency behavior. The original ICONMAKE executable is still unavailable in the current workspace, so no native output or GeoManager test was performed. Do not alter the PCX, batch file, or README until the original GeoWorks 1.x ICONMAKE test resolves the discrepancy.
 
 See [investigation 2365](GEOTEST_ICON_TRANSPARENZ_WIDERSPRUCH_2365.TXT). No GEO, PCX, token, or TOKEN.DB file was modified.
+
+
+## Exact ICONMAKE provider blocks and transparency parameter (investigation 2366)
+
+The original `ICONMAKE.EXE`, `PAPR.000`, and `GDOC.000` were extracted again from the user's `GEOWORKS.zip`. The executable hash matches the previously analyzed binary. Its context builder at 164Ch reads the provider resource count and table; its block loader at 1758h resolves the DWORD resource position, adds offset `0x22`, reads the pointer `0x2A`, obtains the block length at base+`0x28`, and reads the block from base+`0x2A`.
+
+The exact provider table bases are:
+- PAPR indices 4/5/6: `0x3F4`, `0x498`, `0x5AC`.
+- GDOC indices 4/5/6: `0x3F4`, `0x498`, `0x59C`.
+
+The six extracted blocks confirm the mapping index 4 = CGA (prefix `0x61`), index 5 = HGC (prefix `0x41`), and index 6 = EGA (prefix `0x46`). Exact offsets, lengths, and block hashes are in [investigation 2366](ICONMAKE_PROVIDER_EXACT_BLOCKS_2366.TXT).
+
+The same disassembly confirms that the `m[<transp_color>]` mode parses the decimal suffix, defaults to 14 when omitted, and passes the selected value into icon-variant creation. The uploaded `GTS1ICON.PCX` has corner pixels at index 13, while `ERZEUGE.BAT` calls `ICONMAKE M14`. Therefore that command does not select the actual corner index. `M13` is the matching parameter for this input file. This is a static conclusion; no ICONMAKE execution or GeoWorks 1.2 display test has yet been performed. The batch file and README have deliberately not been changed.
