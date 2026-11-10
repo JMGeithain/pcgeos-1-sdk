@@ -1,0 +1,190 @@
+ICONMAKE / GEOTEST – Untersuchung 2366
+Exakte Auflösung der Provider-Tabellen und Transparenzparameter
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Originaldateien aus GEOWORKS.zip
+-----------------------------------
+Das vom Nutzer erneut bereitgestellte Archiv GEOWORKS.zip wurde geöffnet.
+Archivgröße: 22.190.788 Byte
+SHA-256: e04aba52742e6e8da62a02f08ec7dd4d058b1c08cf3ead8e0eb89a9c39ebcb91
+
+Die Originaldateien stammen aus:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/
+
+ICONMAKE.EXE:
+- 19.477 Byte
+- SHA-256: 72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+PAPR.000:
+- 2.208 Byte
+- SHA-256: 30b08761294ccd7762c686ca3d477e509cb454f56b6c7db5aa2b1497efbabfbe
+
+GDOC.000:
+- 2.256 Byte
+- SHA-256: fe19cbcb46c2a92cf02da64c963facb8decb95d7e60bca34eb0d1c5e00b01733
+
+Die zusätzlich unter GEOWORKS/ICONS/ vorhandenen PAPR.000 und GDOC.000
+sind byteidentisch mit den Dateien aus ICONEDIT.OR (gleiche SHA-256-Werte).
+
+2. ICONMAKE-Codepfad: Aufbau des Provider-Kontexts
+--------------------------------------------------
+Die Disassemblierung wurde auf der unveränderten ICONMAKE.EXE durchgeführt.
+Relevante 8086-Codepositionen (Dateioffset = Disassemblierungsadresse):
+
+Routine 164Ch:
+- öffnet den angegebenen Provider.
+- liest den Header und bestimmt die drei Tabellenparameter:
+  Importzahl L aus Providerdatei +0112h,
+  Exportzahl E aus Providerdatei +0114h,
+  Ressourcenzahl N aus Providerdatei +0118h.
+- Für PAPR.000 und GDOC.000: L=1, E=0, N=7.
+- liest die Ressourcentabelle ab Dateioffset 012Eh.
+- Tabellenumfang: 10*N + 4*L + 14*E = 74 Byte = 004Ah.
+- der Kontextzeiger bei [Kontext+08h] wird auf das DWORD-Positionsarray
+  gesetzt. Dieses beginnt bei 012Eh + 2*N = 013Ch.
+
+Routine 1758h:
+- liest das DWORD an Positionsarray + 4*Index.
+- addiert den übergebenen Zusatzoffset 0022h.
+- liest dort ein WORD (bei den drei Datensätzen jeweils 002Ah).
+- liest anschließend das Längen-WORD bei Basis + 002Ah - 2.
+- liest danach genau diese Länge ab Basis + 002Ah.
+
+Damit ist die zuvor offene Dateioffset-/Längen-Kette nun direkt aus dem
+Originalprogramm und den Providerbytes reproduzierbar.
+
+3. Tatsächliche Tabellenwerte und geladene Blöcke
+-------------------------------------------------
+PAPR.000 – Positionsarray ab 013Ch:
+Index 4: Basis 03F4h
+Index 5: Basis 0498h
+Index 6: Basis 05ACh
+
+GDOC.000 – Positionsarray ab 013Ch:
+Index 4: Basis 03F4h
+Index 5: Basis 0498h
+Index 6: Basis 059Ch
+
+Alle sechs Ladevorgänge:
+- Zusatzoffset an Basis+0022h: 002Ah
+- Datenbeginn: Basis+002Ah
+- Längenfeld: WORD bei Basis+0028h
+
+Exakte Extraktion:
+
+PAPR.000
+Index 4:
+  Tabellenbasis 03F4h
+  Längenfeld bei 041Ch = 0070h (112 Byte)
+  Nutzdaten ab 041Eh
+  Präfix: 61 30 00 0E 00 1A
+  SHA-256: 6a94822b64dff9f123ae9f313160429537263de49d0461bb0f4f34f59b3d40a2
+
+Index 5:
+  Tabellenbasis 0498h
+  Längenfeld bei 04C0h = 00E1h (225 Byte)
+  Nutzdaten ab 04C2h
+  Präfix: 41 30 00 1E 00 1A
+  SHA-256: bf2f77fb9ab10abf02a1c14567f1b69d7f12a5bd068cc4c3bcf124042f921d83
+
+Index 6:
+  Tabellenbasis 05ACh
+  Längenfeld bei 05D4h = 02C8h (712 Byte)
+  Nutzdaten ab 05D6h
+  Präfix: 46 30 00 1E 00 1A
+  SHA-256: 27f333796defa551d9432ce07f68ad158b5b08e52ef880ee519be1773de1ed95
+
+GDOC.000
+Index 4:
+  Tabellenbasis 03F4h
+  Längenfeld bei 041Ch = 006Ch (108 Byte)
+  Nutzdaten ab 041Eh
+  Präfix: 61 30 00 0E 00 1A
+  SHA-256: 03135e58d8363f4695f548bab3b742bcf62c1a79a26fe96ae58893bc0ab82e26
+
+Index 5:
+  Tabellenbasis 0498h
+  Längenfeld bei 04C0h = 00CAh (202 Byte)
+  Nutzdaten ab 04C2h
+  Präfix: 41 30 00 1E 00 1A
+  SHA-256: c76df2449a851057949b050de04838588bf2a0bf5a0b81cfeb13bfd6322a01cf
+
+Index 6:
+  Tabellenbasis 059Ch
+  Längenfeld bei 05C4h = 0306h (774 Byte)
+  Nutzdaten ab 05C6h
+  Präfix: 46 30 00 1E 00 1A
+  SHA-256: 80819bd4e4889330e5a51392cd35c7eecaa4bcf0b8f62752373f3596b05db036
+
+4. Zuordnung der ICONMAKE-Datensätze
+------------------------------------
+Die sechs Byte langen Datensätze in PAPR.000 und GDOC.000 beginnen bei:
+03B4h: C6 10 22 00 06 10
+03BAh: C1 10 22 00 05 10
+03C0h: E1 10 22 00 04 10
+
+ICONMAKE-Code bei 0DCAh–0DFAh prüft die Tokens 10C6h, 10C1h und 10E1h,
+entnimmt den Tabellenindex aus dem letzten WORD (unter Maskierung der
+oberen Flags) und übergibt Zusatzoffset 0022h sowie Index 6, 5 oder 4 an
+die Laderoutine.
+
+Damit ist die vollständige Zuordnung belegt:
+- Token 10E1h -> Index 4 -> CGA-Block, Präfixbyte 61h
+- Token 10C1h -> Index 5 -> HGC-Block, Präfixbyte 41h
+- Token 10C6h -> Index 6 -> EGA-Block, Präfixbyte 46h
+
+Die früheren PCX-Extraktionsbefunde passen dazu:
+- CGA: 48x14, 1-Bit monochrom
+- HGC: 48x30, 1-Bit monochrom
+- EGA: 48x30, 4-Bit palettiert
+
+5. Transparenzparameter M<n>
+----------------------------
+Der Programmtext von ICONMAKE.EXE nennt die Syntax:
+  ICONMAKE m[<transp_color>] [<path>]<tokn>[,<num>] {<PCX_file(s)>...}
+
+Der Disassemblierungspfad im Modus 'm' (Einstieg/Dispatcher ab 08B6h)
+liest die Dezimalzahl hinter 'm'. Ist kein Zahlenwert vorhanden, setzt
+er den Default 14. Der Wert wird als Parameter an die Routinen zur
+Erzeugung der Iconvarianten weitergereicht. M0 ist der dokumentierte
+Weg ohne Transparenz; M14 wählt den Quellfarbindex 14.
+
+Abgleich mit dem hochgeladenen GEOTEST-Paket:
+- ERZEUGE.BAT ruft ICONMAKE M14 auf.
+- README.TXT behauptet, der PCX-Außenbereich habe Index 13 und werde
+  durch M14 transparent.
+- Die RLE-dekodierten vier Eckpixel von GTS1ICON.PCX sind tatsächlich
+  alle Index 13 (siehe Untersuchung 2365).
+- Daher bezeichnet M14 nicht die im Rand vorhandene Farbe 13. Der
+  bisherige Batch-Aufruf wählt einen anderen Index als den tatsächlichen
+  PCX-Randindex. Die README-Aussage ist damit sachlich falsch.
+
+Für diese PCX-Datei wäre M13 der zum Randindex passende Parameter.
+Das ist eine statische, datei- und codegestützte Schlussfolgerung.
+Ein tatsächlicher ICONMAKE-Lauf und die visuelle Kontrolle des erzeugten
+Tokens in GeoWorks 1.2 wurden in dieser Umgebung noch nicht durchgeführt.
+Deshalb wird ERZEUGE.BAT/README.TXT in dieser Untersuchung nicht geändert.
+
+Die beiden neuen Dokument-PCX-Dateien haben dagegen an allen vier Ecken
+Index 14 und sind damit auf Eingabedatenebene passend zu M14. Auch hier
+ist die tatsächliche Laufzeitdarstellung noch separat zu testen.
+
+6. Status / Grenzen
+-------------------
+- Originaldateien aus GEOWORKS.zip extrahiert und gehasht.
+- ICONMAKE.EXE disassembliert; Tabellenaufbau und Laderoutine bytegenau
+  mit PAPR.000/GDOC.000 abgeglichen.
+- Sechs Providerblöcke exakt extrahiert und gehasht.
+- Keine PCX-Datei, Batchdatei, README, GEO-Datei oder TOKEN.DB verändert.
+- Kein ICONMAKE-Lauf, da in dieser Umgebung kein DOS-Emulator verfügbar ist.
+- Kein GeoWorks-1.2-Laufzeittest.
+- Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+Nächster Schritt:
+1. Auf einer DOS-/GeoWorks-Testumgebung ICONMAKE M13 und M14 mit einer
+   Kopie von GTS1ICON.PCX erzeugen.
+2. Die beiden Token-Ausgaben vergleichen und in GeoManager kontrollieren.
+3. Danach ERZEUGE.BAT und README erst nach dem Testergebnis korrigieren.
+
+Ende Untersuchung 2366.
