@@ -1,0 +1,120 @@
+ICONMAKE – Untersuchung 2358
+Vergleich aller direkten Aufrufe von 1558h
+Stand: 10.11.2026
+
+Untersuchungsgrundlage
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße: 19.477 Bytes
+Geladenes MZ-Modul: 18.965 Bytes
+SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Disassemblierung: objdump -D -b binary -m i8086 --adjust-vma=0
+Offsets beziehen sich auf den Anfang des geladenen MZ-Moduls.
+
+1. Vollständige Menge der direkten CALL-Stellen
+Die Disassemblierung enthält drei direkte Aufrufe:
+- 003Bh: CALL 1558h
+- 0B94h: CALL 1558h
+- 0BB0h: CALL 1558h
+
+Damit sind alle statisch direkten CALL-Stellen im geladenen Modul erfasst. Indirekte Sprünge in 1558h wurden nicht als weitere Aufrufstellen gefunden.
+
+2. Aufruf 003Bh – initialer Resource-Block
+Die Argumente werden unmittelbar vor dem Aufruf in folgender Reihenfolge auf den Stack gelegt:
+0030h: PUSH AX, wobei AX zuvor auf 0000h gesetzt wurde
+0031h: PUSH [BP+08h]
+0034h: PUSH [BP+06h]
+0037h: PUSH DS:[40E8h]
+003Bh: CALL 1558h
+
+Nach dem Aufruf:
+003Eh: ADD SP,8
+0041h: MOV BX,AX
+0043h: MOV [BP-02h],BX
+
+Gemäß dem Stacklayout der Routine 1558h:
+- [BP+04h] = Resource-Kontext DS:40E8h
+- [BP+06h] = Index aus dem äußeren Parameter [BP+06h]
+- [BP+08h] = äußerer Parameter [BP+08h]
+- [BP+0Ah] = 0 (kein Größen-Ausgabezeiger)
+
+Dies ist der initiale Blockabruf. Sein Rückgabezeiger wird als Basis für die weitere Descriptorverarbeitung verwendet.
+
+3. Aufruf 0B94h – Resource-Descriptorblock
+Vor dem Aufruf:
+0B86h: PUSH 0000h
+0B8Bh: PUSH WORD [BX+00EAh]
+0B8Fh: PUSH WORD [BX+00ECh]
+0B93h: PUSH BX
+0B94h: CALL 1558h
+
+BX enthält hier DS:40E8h, den Resource-Kontext.
+Daraus folgt:
+- [BP+04h] = DS:40E8h
+- [BP+06h] = WORD [DS:40E8h+00ECh]
+- [BP+08h] = WORD [DS:40E8h+00EAh]
+- [BP+0Ah] = 0
+
+Der zurückgegebene Blockzeiger wird bei 0B9Ah in [BP-02h] gespeichert und anschließend als Basis des Descriptorblocks benutzt.
+
+4. Aufruf 0BB0h – weiterer Block mit Größenrückgabe
+Vor dem Aufruf:
+0B9Dh: LEA AX,[BP-0Ch]
+0BA0h: PUSH AX
+0BA1h: MOV BX,[BP-02h]
+0BA4h: PUSH WORD [BX+14h]
+0BA7h: MOV BX,DS:[40E8h]
+0BABh: PUSH WORD [BX+00ECh]
+0BAFh: PUSH BX
+0BB0h: CALL 1558h
+
+Daraus folgt:
+- [BP+04h] = DS:40E8h
+- [BP+06h] = WORD [DS:40E8h+00ECh]
+- [BP+08h] = WORD [Descriptorbasis+14h]
+- [BP+0Ah] = Adresse [BP-0Ch] als optionaler Größen-Ausgabezeiger
+
+Nach dem Aufruf:
+0BB6h: MOV [BP-06h],AX
+0BB9h: MOV AX,[BP-0Ch]
+0BBC h: MOV CX,0006h
+0BBFh: XOR DX,DX
+0BC1h: DIV CX
+
+Der durch [BP-0Ch] zurückgelieferte Größenwert wird durch 6 geteilt. Der Quotient wird anschließend als Anzahl von sechs Byte breiten Datensätzen verwendet. Das ist ein starker Beleg dafür, dass der durch den dritten Aufruf geladene Block eine Folge von 6-Byte-Einträgen enthält.
+
+5. Vergleich der drei Aufrufe
+Aufruf 003Bh:
+- Index: äußerer Parameter [BP+06h]
+- Zusatzoffset: äußerer Parameter [BP+08h]
+- Größen-Ausgabe: keine
+
+Aufruf 0B94h:
+- Index: Resource-Kontextfeld +0ECh
+- Zusatzoffset: Resource-Kontextfeld +0EAh
+- Größen-Ausgabe: keine
+
+Aufruf 0BB0h:
+- Index: Resource-Kontextfeld +0ECh
+- Zusatzoffset: Descriptorfeld +14h
+- Größen-Ausgabe: lokale Variable [BP-0Ch]
+
+Die beiden späteren Aufrufe verwenden also denselben Index, aber unterschiedliche Zusatzoffsets. Der dritte Aufruf erfragt zusätzlich die geladene Blockgröße und verwendet sie unmittelbar danach als Datensatzbereich, dessen Länge durch sechs geteilt wird.
+
+6. Präzisierung der bisherigen Interpretation
+Die Routine 1558h liest nicht einfach einen „Resource-Block“ mit einer einzigen universellen Bedeutung. Sie wird mit unterschiedlichen Index-/Offsetkombinationen aufgerufen:
+- initialer Block gemäß äußeren Parametern,
+- Descriptor-/Resource-Block über Kontextfelder +0EAh/+0ECh,
+- nachgelagerter Block mit Descriptoroffset +14h und expliziter Größenrückgabe.
+
+Die frühere Feststellung, dass 1558h eine 4-Byte-Tabelle verwendet und anhand des Index einen Dateioffset auswählt, bleibt bestehen. Die Bedeutung der einzelnen Kontextfelder +0EAh/+0ECh sowie des Descriptorfeldes +14h ist damit noch nicht abschließend benannt.
+
+7. Nächster Untersuchungsschritt
+Die sechs Byte breiten Einträge des durch 0BB0h geladenen Blocks sind einzeln zu verfolgen:
+- Welche der drei bekannten Kennungen 10C6h, 10C1h und 10E1h werden akzeptiert?
+- Welche Werte stehen in den übrigen vier Bytes?
+- Wie werden diese Werte an 0010h weitergereicht?
+Danach kann die Rolle des Descriptorfeldes +14h und die Beziehung der sechs Byte breiten Datensätze zu den Icon-/Resource-Varianten präziser bestimmt werden.
+
+Ende Untersuchung 2358.
