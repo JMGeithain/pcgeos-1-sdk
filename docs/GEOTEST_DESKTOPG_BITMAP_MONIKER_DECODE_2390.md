@@ -16,8 +16,8 @@ Original:
 Ressource 40:
 - Dateioffset: `14FD0h`
 - Dateigröße: 4.180 Bytes
-- Ressource-relative Chunk-Payload: `0042h`
-- Längenwort unmittelbar davor bei `0040h`: `00BCh` = 188 Bytes
+- Ressource-relative Chunk-Payload: `0056h` (zweiter Chunk)
+- Längenwort unmittelbar davor bei `0054h`: `00BCh` = 188 Bytes
 
 Die ersten acht Payload-Bytes sind:
 
@@ -39,8 +39,8 @@ Damit ist die Payload-Länge exakt konsistent mit einer 48×30-Bitmap mit einem 
 Ressource 41:
 - Dateioffset: `16024h`
 - Dateigröße: 2.068 Bytes
-- Ressource-relative Chunk-Payload: `0032h`
-- Längenwort unmittelbar davor bei `0030h`: `005Ch` = 92 Bytes
+- Ressource-relative Chunk-Payload: `0056h` (zweiter Chunk)
+- Längenwort unmittelbar davor bei `0054h`: `005Ch` = 92 Bytes
 
 Die ersten acht Payload-Bytes:
 
@@ -71,7 +71,7 @@ Noch nicht bestätigt:
 - welche der Bildressourcen dem Token `FILE`, `FLDR`, `gAPP` oder `gDAT` zugeordnet wird;
 - ob ein Dokumenttyp-Icon für `WDAT/WP00` oder `DDAT/DP00` denselben Pfad verwendet.
 
-Die ersten gerenderten Raster zeigen nur einen Ausschnitt bzw. eine Form, deren fachliche Zuordnung ohne vollständige Moniker-/Maskeninterpretation nicht sicher ist. Es wird deshalb kein Bildmotiv behauptet.
+Die ersten gerenderten Raster zeigen nur eine Form, deren fachliche Zuordnung ohne vollständige Moniker-/Maskeninterpretation nicht sicher ist. Es wird deshalb kein Bildmotiv behauptet.
 
 ## 4. Bedeutung für GEOTEST
 
@@ -93,7 +93,12 @@ Es reicht jedoch nicht, die 48×30-Bitmapdaten zu kopieren. GEOTEST benötigt:
 
 ## Status
 
-- Erste 48×30-Payload in Ressource 40 strukturell als 1-bpp-Raster bestätigt.
-- Erste 48×14-Payload in Ressource 41 strukturell als 1-bpp-Raster bestätigt.
+- Zweiter Chunk in Ressource 40 (Payload ab `0056h`) strukturell als 48×30-/1-bpp-Raster bestätigt.
+- Zweiter Chunk in Ressource 41 (Payload ab `0056h`) strukturell als 48×14-/1-bpp-Raster bestätigt.
 - Bildmotiv und Dateitypzuordnung offen.
 - Keine Originaldatei geändert; kein GEOTEST-Build erstellt; kein Laufzeiterfolg behauptet.
+
+
+## Korrektur der Chunkpositionen
+
+Die ursprüngliche Fassung hatte die Längenwörter bei `0040h` bzw. `0030h` fälschlich dem Bildchunk zugeordnet. Die Chunk-Verzeichnisse zeigen, dass der jeweilige Bildpayload der zweite Chunk ist und in beiden Ressourcen bei `0056h` beginnt. Die Längenwörter stehen deshalb in beiden Fällen bei `0054h`. Die Größen-/Rasterrechnung bleibt unverändert; korrigiert wurden die relativen Offsets und die Bezeichnung als zweiter Chunk.
