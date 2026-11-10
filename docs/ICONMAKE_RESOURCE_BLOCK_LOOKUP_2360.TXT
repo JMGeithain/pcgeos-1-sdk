@@ -1,0 +1,109 @@
+ICONMAKE – Untersuchung 2360
+=============================
+
+Thema
+-----
+Nachgeladene Ressourcenblöcke für die drei sechs Byte langen Einträge mit den Kennungen 10C6h, 10C1h und 10E1h.
+
+Untersuchungsbasis
+------------------
+Archiv: /mnt/data/GEOWORKS.zip
+ICONMAKE.EXE:
+  GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+PAPR.000:
+  GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/PAPR.000
+GDOC.000:
+  GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/GDOC.000
+
+Dateigrößen:
+  ICONMAKE.EXE  19,477 Bytes
+  PAPR.000       2,208 Bytes
+  GDOC.000       2,256 Bytes
+
+SHA-256 ICONMAKE.EXE:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+1. Verifikation der sechs Byte langen Einträge
+----------------------------------------------
+In beiden .000-Dateien sind die Bytes an den folgenden Datei-Offsets identisch:
+
+Datei-Offset  Bytes                 WORD-Felder
+03B4h         C6 10 22 00 06 10    10C6h | 0022h | 1006h
+03BAh         C1 10 22 00 05 10    10C1h | 0022h | 1005h
+03C0h         E1 10 22 00 04 10    10E1h | 0022h | 1004h
+
+2. Exakte Übergabe an 1558h
+---------------------------
+Die Routine 0010h liegt im geladenen ICONMAKE-Modul ab Offset 0010h. Der erste Aufruf von 1558h erfolgt bei 003Bh.
+
+Disassembly 0010h:
+  0019  MOV AX,0004h
+  001C  PUSH AX
+  001D  PUSH [BP+04h]
+  0020  LEA AX,[BP-0Ch]
+  0023  PUSH AX
+  0024  CALL 2134h
+  ...
+  0030  PUSH 0000h
+  0031  PUSH [BP+08h]
+  0034  PUSH [BP+06h]
+  0037  PUSH WORD [40E8h]
+  003B  CALL 1558h
+
+Somit erhält 1558h aus 0010h:
+  Kontext       = DS:[40E8h]
+  Tabellenindex = [BP+06h]
+  Zusatzoffset  = [BP+08h]
+  Größenzeiger  = 0
+
+Für die drei realen Datensätze sind die Argumente damit:
+  Kennung 10C6h: Index 6, Zusatzoffset 0022h
+  Kennung 10C1h: Index 5, Zusatzoffset 0022h
+  Kennung 10E1h: Index 4, Zusatzoffset 0022h
+
+3. Verhalten von 1558h
+---------------------
+Die Routine 1558h liest aus dem Kontext bei [BP+04h] den Zeiger auf die Tabelle:
+  1563  MOV SI,[BP+04h]
+  1565  MOV BX,[SI+08h]
+
+Der Tabellenindex wird mit vier multipliziert:
+  1567  MOV DI,[BP+06h]
+  1569  SHL DI,1
+  156B  SHL DI,1
+
+Dann wird der 32-Bit-Tabelleneintrag aus BX+DI gelesen:
+  156D  MOV AX,[BX+DI]
+  156F  MOV DX,[BX+DI+2]
+
+Der Zusatzoffset [BP+08h] wird auf diesen 32-Bit-Wert addiert:
+  157B  ADD AX,[BP+08h]
+  157E  ADC DX,CX
+
+Der resultierende Dateioffset wird über 217Eh angesprungen. Danach liest die Routine ein Wort, berechnet daraus eine zweite Position relativ zum ursprünglichen Tabelleneintrag (Eintragsoffset + gelesenes Wort - 2), liest dort die Blockgröße, reserviert Speicher und liest den Block ein.
+
+Daraus folgt:
+- Index 4/5/6 wählt jeweils einen 4-Byte-Eintrag aus der Kontexttabelle.
+- Der Wert 0022h wird als Zusatzoffset zum dort gespeicherten 32-Bit-Offset addiert.
+- Die Funktion liefert einen separat allokierten und eingelesenen Block zurück.
+
+4. Was noch nicht bytegenau rekonstruiert ist
+--------------------------------------------
+Die Tabellenpositionen selbst sind im aktuellen Nachweis noch nicht als konkrete Dateioffsets aus PAPR.000 bzw. GDOC.000 aufgelöst. Der Grund: Die von 1558h verwendete Tabelle wird über den zur Laufzeit aufgebauten Dateikontext adressiert ([40E8h] und dessen Feld +08h). Die bloßen sechs Byte langen Datensätze enthalten nicht die vollständigen 32-Bit-Tabelleneinträge.
+
+Es wäre deshalb nicht belastbar, an dieser Stelle Blockbytes, Blocklängen oder Iconvarianten zu behaupten. Auch eine Zuordnung der Indizes 4, 5 und 6 zu EGA/HGC/CGA ist noch nicht bewiesen.
+
+5. Nächster notwendiger Schritt (2361)
+--------------------------------------
+Den Aufbau des Dateikontexts in 144Ch / 2340h weiter auflösen und daraus die tatsächliche Laufzeitadresse des Tabellenbereichs [context+08h] in den .000-Dateien rekonstruieren.
+
+Danach:
+- 4-Byte-Tabelleneinträge für Index 4, 5 und 6 auslesen.
+- Jeweils 0022h addieren.
+- Die von 1558h verwendete erste Längen-/Positionsinformation nachvollziehen.
+- Die tatsächlichen Ressourcenblöcke extrahieren und ihre Header vergleichen.
+- Erst dann die drei Iconvarianten benennen.
+
+Fazit
+-----
+Die Steuerkette Datensatz -> Index/Zusatzoffset -> 1558h -> 4-Byte-Tabelleneintrag ist durch Disassembly und reale Datensatzbytes belegt. Die konkrete Zuordnung der drei Tabellenindizes zu den Iconformaten bleibt offen und ist Gegenstand von Untersuchung 2361.
