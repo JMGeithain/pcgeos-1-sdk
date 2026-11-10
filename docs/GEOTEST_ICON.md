@@ -169,3 +169,12 @@ A closer inspection of resource 6 found the EGA block beginning at resource-rela
 The encoded payload still has not been decoded into pixels. No color or transparency meaning is assigned to individual differing bytes. A PC/GEOS 1.x format definition, confirmed ICONMAKE routine, or suitable known reference block is needed before making pixel-level claims.
 
 See [investigation 2369](ICONMAKE_EGA_BLOCK_FIELDS_2369.TXT).
+
+
+## Static EGA pixel-processing path (investigation 2370)
+
+A static disassembly of the supplied GeoWorks 1.x `ICONMAKE.EXE` identified a processing chain for the EGA variant: PCX RLE input handling at `0x1838`, color mapping in `0x19F0` (mapping table at `0x2FD6`), four-component output formation in `0x1B22` (staging buffer at `0x30E8`), and a separate output path involving `0x1894` plus buffer management at `0x197A`. The resource context is prepared by `0x055A`.
+
+The routine at `0x1894` handles repeated adjacent output bytes and control values including `0xFE` and `0x00`, but its complete inverse decoding rule has not yet been reconstructed. Therefore the M13/M14 payloads are not yet claimed to be pixel-decoded. This narrows the next task to reconstructing that output encoding and validating it against the two supplied token files.
+
+See [investigation 2370](ICONMAKE_EGA_PIXEL_PIPELINE_2370.TXT). This analysis uses the original GeoWorks 1.x ICONMAKE binary only; no PC/GEOS 2.x or FreeGEOS bitmap definitions were used as evidence.
