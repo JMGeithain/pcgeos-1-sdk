@@ -59,7 +59,7 @@ Er enthält zwei unmittelbare Far-Call-Operanden:
 
 Zwischen diesen Aufrufen liegen bedingte Sprünge und die Schleifensteuerung über `DI`; der Code erhöht `DI` um zwei und vergleicht es mit `000Ch`. Die Tabellen werden damit in einer Schleife verarbeitet.
 
-Die Rohdatei enthält an diesen Stellen Segment-Nullwerte, wie sie bei relocierbaren Far-Aufrufen vor dem Laden auftreten können. Ohne den Relocationeintrag und die Import-/Exportauflösung darf `0071h` bzw. `0072h` nicht als Name einer bestimmten API-Funktion ausgegeben werden. Die beiden Aufrufe sind deshalb vorerst nur als Codepositionen und numerische Offsets dokumentiert.
+Die Rohdatei enthält an diesen Stellen Segment-Nullwerte; die Segmentwortpositionen `0519h` und `052Dh` besitzen keinen Eintrag in der Relocation-Liste dieser Ressource. Ein dritter Aufruf `CALL FAR 0000:0073h` steht bei Ressourcenoffset `0581h` (Dateioffset `5C7Dh`); auch dessen Segmentwort bei `0584h` ist nicht relociert. Ohne die Auflösung dieser Low-Memory-Aufrufziele darf keiner der numerischen Offsets als Name einer bestimmten API-Funktion ausgegeben werden.
 
 ## 5. Tabelleninhalt
 
@@ -102,8 +102,8 @@ Er steht zusammen mit UI-Texten wie `Executable`, `Benennt ... um` und `Kopie vo
 
 ## 9. Nächster Schritt
 
-1. Für Ressource 8 die Relocationpositionen zu den beiden Far-Calls `5C0Bh` und `5C1Fh` exakt aus der Ressourcentabelle auslesen.
-2. Die Importtabelle von DESKTOPG.GEO vollständig dekodieren und die Calls gegen die UI-Bibliotheks-Exports/Ordinale der passenden GeoWorks-1.2-Version auflösen.
+1. Für Ressource 8 die Relocationpositionen zu den drei Far-Calls `5C12h`, `5C26h` und `5C7Dh` exakt aus der Ressourcentabelle auslesen.
+2. Die Aufrufkonventionen der Ziele `0000:0071h` bis `0000:0073h` anhand des Kernels und der Initialisierung rekonstruieren; erst dann prüfen, ob es UI-Bibliotheks-Exports, Kernelvektoren oder andere Low-Memory-Einsprünge sind.
 3. Die Tabellen ab Ressourcenoffset `0538h` und `059Ah` strukturell dekodieren und die Schleife mit den konkreten Einträgen verbinden.
 4. Danach den Codepfad verfolgen, der die Dateikopf-Typ-/Creator-Felder prüft und einen Moniker auswählt.
 
