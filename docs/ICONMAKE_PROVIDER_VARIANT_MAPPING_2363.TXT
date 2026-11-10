@@ -1,0 +1,183 @@
+ICONMAKE / GEOTEST – Untersuchung 2363
+Abgleich der ICONMAKE-Indizes 4/5/6 mit den bekannten PAPR-/GDOC-Iconvarianten
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Ziel und Untersuchungsgrenze
+-------------------------------
+Ziel ist, die in ICONMAKE nachgewiesenen Tabellenindizes 6, 5 und 4 mit
+den bekannten Provider-Iconvarianten CGA, HGC und EGA abzugleichen.
+
+Verwendete bereits dokumentierte Befunde:
+- ICONMAKE-Datensatz- und Parameteranalyse 2359/2360;
+- PAPR-Provider-Headervergleich 2317;
+- PAPR-Extraktionsergebnisse 2316;
+- GDOC-Extraktionsergebnisse 2318;
+- GEOTEST-Ressourcenvergleiche 2361/2362.
+
+Die Originaldateien PAPR.000 und GDOC.000 sowie ICONMAKE.EXE wurden in den
+früheren Untersuchungen aus dem Nutzerarchiv GEOWORKS.zip extrahiert und
+gehasht bzw. vermessen. In der aktuellen Arbeitsumgebung liegen diese
+Originaldateien nicht erneut als separate Dateien vor. Deshalb werden hier
+keine neuen Dateioffsets oder 32-Bit-Tabellenwerte behauptet. Der Bericht
+trennt die bereits dokumentierten Messungen von der daraus möglichen
+Zuordnung.
+
+2. ICONMAKE-Parameterfluss
+--------------------------
+Die realen sechs Byte langen Datensätze in PAPR.000 und GDOC.000 lauten:
+
+Dateioffset  Bytes                 WORD-Felder
+03B4h        C6 10 22 00 06 10    10C6h | 0022h | 1006h
+03BAh        C1 10 22 00 05 10    10C1h | 0022h | 1005h
+03C0h        E1 10 22 00 04 10    10E1h | 0022h | 1004h
+
+ICONMAKE maskiert im dritten WORD das hohe Byte mit 0Fh. Daraus entstehen
+die Tabellenindizes 6, 5 und 4. Das zweite WORD 0022h wird als zusätzlicher
+Offset an Routine 1558h übergeben.
+
+Damit ist der Aufrufparameterfluss gesichert:
+- Kennung 10C6h -> Index 6, Zusatzoffset 0022h
+- Kennung 10C1h -> Index 5, Zusatzoffset 0022h
+- Kennung 10E1h -> Index 4, Zusatzoffset 0022h
+
+Routine 1558h liest über Kontext +08h einen 4-Byte-Eintrag an Index*4,
+addiert den Zusatzoffset und lädt anschließend einen längenbegrenzten Block.
+Die konkreten 32-Bit-Werte dieser Tabelleneinträge sind in den bisherigen
+Protokollen noch nicht als absolute Dateioffsets ausgeschrieben.
+
+3. Unabhängiger PAPR-Headervergleich
+------------------------------------
+Die früher extrahierten Providerressourcen R4-R6 enthalten folgende
+Moniker-/Grafikpräfixe (jeweils aus dem langen zweiten LMem-Chunk):
+
+PAPR R4:
+61 30 00 0E 00 1A 65 00 30 00 0E 00 01 00 00 7F
+
+PAPR R5:
+41 30 00 1E 00 1A D6 00 30 00 1E 00 01 00 00 7F
+
+PAPR R6:
+46 30 00 1E 00 1A BD 02 30 00 1E 00 01 11 00 7F
+
+Die dimensionartigen WORD-Felder an +8/+10 sind:
+- R4: 48 × 14
+- R5: 48 × 30
+- R6: 48 × 30
+
+Die getrennt extrahierten PAPR-PCX-Dateien stimmen damit überein:
+- PAPR_CGA.PCX: 48 × 14, ein Bit pro Pixel, eine Ebene;
+- PAPR_HGC.PCX: 48 × 30, ein Bit pro Pixel, eine Ebene;
+- PAPR_EGA.PCX: 48 × 30, vier Bit pro Pixel in einer Ebene, palettiert.
+
+Daraus ergibt sich die starke Zuordnung:
+- Provider-R4 / Präfix 0x61 -> CGA-Icon;
+- Provider-R5 / Präfix 0x41 -> HGC-Icon;
+- Provider-R6 / Präfix 0x46 -> EGA-Icon.
+
+Der Befund ist durch die übereinstimmenden Abmessungen und PCX-Pixelformate
+gestützt. Er ist ein Header-/Formatabgleich; ein vollständiger pixelgenauer
+Decodervergleich der nativen LMem-Payloads ist damit noch nicht erbracht.
+
+4. Unabhängige Gegenprobe GDOC
+------------------------------
+Die getrennt extrahierten GDOC-PCX-Dateien ergeben dieselben Standardmaße:
+- GDOC_CGA.PCX: 48 × 14, monochrom;
+- GDOC_HGC.PCX: 48 × 30, monochrom;
+- GDOC_EGA.PCX: 48 × 30, 4-Bit-palettiert.
+
+Die bereits dokumentierte Headerprüfung von GDOC.000 meldet:
+- GDOC R4 beginnt mit 61 30 00 0E 00 1A ...;
+- GDOC R5 beginnt mit 41 30 00 1E 00 1A ...;
+- GDOC R6 beginnt mit 46 30 00 1E 00 1A ....
+
+Damit bestätigt ein zweiter unabhängiger Provider dieselbe Ressourcen-
+zuordnung. Die tatsächlichen Pixelpaletten unterscheiden sich zwischen
+PAPR und GDOC, was für providerabhängige Bildinhalte erwartbar ist und die
+gemeinsame Formatzuordnung nicht widerlegt.
+
+5. Was für die Indexzuordnung bereits stark gestützt ist
+--------------------------------------------------------
+Die ICONMAKE-Datensätze verwenden die Indizes 6, 5 und 4 in der Reihenfolge
+der Kennungen 10C6h, 10C1h und 10E1h. Die Provider-Extraktionsberichte
+identifizieren die standardisierten drei Iconklassen CGA, HGC und EGA
+und ordnen sie den Providerressourcen R4, R5 und R6 zu.
+
+Die natürliche Reihenfolge der drei Einträge und der Providerressourcen
+ist konsistent mit:
+- Index 4 / Kennung 10E1h -> CGA / R4;
+- Index 5 / Kennung 10C1h -> HGC / R5;
+- Index 6 / Kennung 10C6h -> EGA / R6.
+
+Wichtige Beweisgrenze:
+Diese Index-zu-Klasse-Zuordnung ist durch die übereinstimmenden realen
+Providerdaten und den ICONMAKE-Parameterfluss stark gestützt. Die
+unmittelbare 32-Bit-Offsetauflösung des dynamischen Kontext-Tabellenfeldes
+für genau diese drei Aufrufe wurde in diesem Schritt jedoch nicht erneut
+ausgeführt, da die Original-.000-Dateien hier nicht verfügbar sind.
+Deshalb wird sie als starke, noch nicht vollständig positionsgenau
+rekonstruierte Zuordnung geführt – nicht als neu berechnete Dateioffset-
+Tabelle.
+
+6. Korrektur zum GEOTEST-Ressourcenvergleich
+--------------------------------------------
+Die Ressourcennummern innerhalb einer GEODE-Datei und die Indizes der
+ICONMAKE-internen Kontext-Tabelle sind unterschiedliche Nummernräume.
+Ebenso sind LMem-Chunk-Handles (z.B. 0x22) lokale Handles innerhalb einer
+einzelnen Ressource. Diese Werte dürfen nicht gleichgesetzt werden.
+
+Die in GEOTEST.GEO untersuchten Ressourcen 5–10 können deshalb nicht
+allein aufgrund ähnlicher Nummern oder eines lokalen Chunk-Handles den
+ICONMAKE-Indizes 4/5/6 zugeordnet werden. Für eine Übertragung der
+CGA/HGC/EGA-Klassifikation auf GEOTEST muss die jeweilige native
+VisMoniker-Payload unabhängig dekodiert bzw. mit einem verifizierten
+GeoWorks-1.x-Referenzformat verglichen werden.
+
+7. Belastbare Ergebnisse
+------------------------
+Gesichert aus den vorherigen Byte- und Extraktionsprotokollen:
+- ICONMAKE extrahiert bzw. lädt über die Datensätze die Tabellenindizes
+  6, 5 und 4 mit Zusatzoffset 0022h.
+- PAPR R4/R5/R6 entsprechen in Abmessungen und Pixelformat CGA/HGC/EGA.
+- GDOC R4/R5/R6 bestätigen dieselbe Klassifikation unabhängig.
+- Die Headerbytes 0x61, 0x41 und 0x46 sind nun mit den drei Klassen
+  korreliert: 0x61=CGA, 0x41=HGC, 0x46=EGA – innerhalb der untersuchten
+  Provider-Payloads und des dokumentierten GeoWorks-1.x-ICONMAKE-Wegs.
+- Die Nummernräume GEODE-Ressourcenindex, ICONMAKE-Kontextindex und
+  LMem-Chunk-Handle bleiben getrennt.
+
+Noch offen:
+- absolute 32-Bit-Tabelleneinträge und exakte Dateipositionen für jeden
+  der drei ICONMAKE-Aufrufe;
+- vollständiger Pixel-für-Pixel-Decodervergleich der nativen Payloads;
+- Übertragung der Formatzuordnung auf GEOTEST-Ressourcen 5–10;
+- Laufzeitprüfung der Dokumenticons in GeoWorks 1.2.
+
+8. Nächster Schritt 2364
+------------------------
+Die Originaldateien PAPR.000 und GDOC.000 erneut aus GEOWORKS.zip bereitstellen
+oder im Arbeitsverzeichnis materialisieren. Dann für jeden Kontextindex
+4, 5 und 6:
+1. die 32-Bit-Tabelleneinträge aus dem von 144Ch aufgebauten Kontext
+   bzw. dessen Quelldaten auslesen;
+2. Zusatzoffset 0022h addieren;
+3. die beiden Positions-/Längenwörter gemäß Routine 1558h verfolgen;
+4. den exakten geladenen Block extrahieren;
+5. dessen Header und Nutzdaten mit R4/R5/R6 sowie den extrahierten PCX-
+   Bildern vergleichen.
+
+Erst dieser Schritt macht die Dateioffset-/Blockkette vollständig
+reproduzierbar.
+
+9. Änderungs- und Teststatus
+----------------------------
+- ICONMAKE.EXE, PAPR.000 und GDOC.000 wurden in dieser Untersuchung nicht
+  erneut verändert oder neu extrahiert.
+- GEOTEST.GEO und TOKEN.DB unverändert.
+- Kein neuer Build.
+- Kein GeoWorks-Laufzeittest.
+- Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+- Dieses Protokoll ist eine Auswertung bereits dokumentierter Messungen;
+  es behauptet keine nicht erneut ausgeführten Bytezugriffe.
+
+Ende Untersuchung 2363.
