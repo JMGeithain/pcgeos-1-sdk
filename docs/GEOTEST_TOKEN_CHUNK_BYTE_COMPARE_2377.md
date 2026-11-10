@@ -46,6 +46,17 @@ Damit ist eine gemeinsame oder eng verwandte Objektstruktur für den Dokumentber
 
 Die vier Unterschiede am Chunk-Anfang und zwei weitere Strukturwerte zeigen zudem, dass die Chunks nicht vollständig identisch sind. Ihre Bedeutung ist noch offen.
 
+
+## Zusatzprüfung des Wortes vor dem Tokenpaar
+
+Das unmittelbar vor dem ersten Token stehende Bytepaar `18 E7` wurde zusätzlich in den vollständigen Dateien gesucht:
+
+- WRITE.GEO: genau ein Treffer, Datei-Offset `9A4Ah`.
+- DRAW.GEO: genau ein Treffer, Datei-Offset `27D8h`.
+- GEOTEST.GEO (bisheriger Build): kein Treffer.
+
+Damit ist `18 E7` in jeder der beiden Referenz-Geodes lokal auf den Token-tragenden Chunk begrenzt. Das macht es zu einem sinnvollen Feld für die weitere Objektstruktur-Analyse, legt seine Bedeutung aber nicht fest. Insbesondere wird es noch nicht als Klassenzeiger oder API-Kennung interpretiert.
+
 ## Nächster Schritt
 
 1. Die LMem-Chunk-Struktur anhand der GeoWorks-1.x-Objekt-/LMem-Definitionen dekodieren.
