@@ -1,0 +1,96 @@
+GEOTEST – Untersuchungsprotokoll 2361
+Referenzketten und Moniker-Ressourcen
+Stand: 10.11.2026
+
+Projektgrenze
+Untersucht wird ausschließlich das vorliegende GEOTEST.GEO aus dem GeoWorks-/PC/GEOS-1.x-Testprojekt. Es wurde keine Datei verändert, kein neuer Build erzeugt und kein Laufzeittest durchgeführt.
+
+1. Korrekte Ressourcentabelle
+
+Der Ressourcenzähler im GEO-Header ist 12 (Offset 0xD0).
+Die Tabellenbereiche beginnen bei 0x12E:
+
+- Größen:       12 WORD-Einträge ab 0x12E
+- Positionen:   12 DWORD-Einträge ab 0x146
+- Relokationen: 12 WORD-Einträge ab 0x176
+- Flags:        12 WORD-Einträge ab 0x18E
+
+Wichtig: Die Positionswerte sind DWORDs. Eine Interpretation als WORD-Feld verschiebt die Zuordnung und ist falsch.
+
+2. Ressourcen 4 bis 10
+
+Index | Dateioffset | Größe | Relokationsgröße | Flags
+4     | 0x0D2E      | 336   | 4                | 0x145A
+5     | 0x0E82      | 160   | 4                | 0x1C7A
+6     | 0x0F26      | 96    | 4                | 0x1C7A
+7     | 0x0F8A      | 272   | 4                | 0x1C7A
+8     | 0x109E      | 640   | 4                | 0x1C7A
+9     | 0x1322      | 144   | 4                | 0x1C7A
+10    | 0x13B6      | 224   | 4                | 0x1C7A
+
+3. LMem-Struktur
+
+Ressource 4 hat fünf Chunk-Einträge. Die Chunk-Offsets lauten:
+0x2E, 0x36, 0xFE, 0x12A, 0x136.
+
+Ressourcen 5 bis 10 haben jeweils zwei Chunk-Einträge:
+0x26 und 0x2A.
+Der Chunk mit Handle 0x22 beginnt jeweils bei 0x2A und enthält die längere Moniker-/Grafikdatenstruktur. Der Chunk mit Handle 0x20 enthält jeweils einen kurzen 2-Byte-Wert. Die Werte im kurzen Chunk lauten:
+
+R5: 0x0071
+R6: 0x0035
+R7: 0x00DC
+R8: 0x0258
+R9: 0x0061
+R10: 0x00B1
+
+Diese Werte korrespondieren größenmäßig mit den jeweiligen langen Chunks, ihre genaue semantische Funktion ist anhand der bisher untersuchten Bytes allein noch nicht abschließend bewiesen.
+
+4. Moniker-Kandidaten – direkt ablesbare Headerbytes
+
+Im langen Chunk (Handle 0x22) stehen am Anfang:
+
+R5: 61 30 00 0E 00 1A ...
+R6: 61 40 00 12 00 1A ...
+R7: 41 30 00 1E 00 1A ...
+R8: 46 30 00 1E 00 1A ...
+R9: 41 40 00 28 00 1A ...
+R10: 46 40 00 28 00 1A ...
+
+Die zwei Bytes nach dem ersten Typbyte ergeben folgende Zahlenpaare:
+R5: 0x0030 / 0x000E
+R6: 0x0040 / 0x0012
+R7/R8: 0x0030 / 0x001E
+R9/R10: 0x0040 / 0x0028
+
+Das entspricht zahlenmäßig 48×14, 64×18, 48×30 und 64×40. Die Interpretation als Breite/Höhe ist plausibel, aber ohne Abgleich mit der für genau diese GeoWorks-1.x-Version gültigen VisMoniker-Struktur noch nicht als endgültig verifiziert markiert.
+
+5. Vorläufige Einordnung
+
+- R7 und R8 bilden aufgrund gleicher Größenangaben 48×30 ein Paar.
+- R9 und R10 bilden aufgrund gleicher Größenangaben 64×40 ein Paar.
+- Die ersten Typbytes unterscheiden sich innerhalb der Paare (0x41 gegenüber 0x46).
+- R5 und R6 verwenden beide den Typbytewert 0x61 und weisen kleinere Zahlenpaare auf (48×14 beziehungsweise 64×18).
+- R4 ist strukturell eine andere Ressource mit fünf Chunks. Ihr letzter Chunk enthält den Text „GeoWorks 1.x Test“. R4 ist daher nicht einfach eine einzelne Bitmap-Ressource.
+- Die Zuordnung 0x41 = Farbe und 0x46 = Monochrom ist mit den bisher verfügbaren Bytes noch nicht bewiesen. Sie wird ausdrücklich nicht als Tatsache festgehalten.
+- Ebenso ist noch nicht bytegenau nachgewiesen, welcher dieser Moniker beim Start, im Fenstertitel, im Dateimanager oder in der Token-Datenbank verwendet wird.
+
+6. Offene nächste Schritte
+
+1. Für GeoWorks 1.x die genaue VisMoniker-Headerdefinition und die Typbyte-Bedeutung aus einer passenden 1.x-Referenz bzw. einem verifizierten 1.x-Binärvergleich sichern.
+2. Die Referenzstruktur in R4, insbesondere Chunk 0x24, vollständig als Objekt-/Monikerliste dekodieren.
+3. Relokationsziele und Ressourcenzuordnung der Einträge einzeln nachweisen.
+4. Erst danach R7/R8 und R9/R10 sicher als Farb-/Monochromvarianten benennen.
+5. Anschließend den tatsächlichen Auswahlpfad im GeoWorks-1.x-Laufzeitverhalten untersuchen.
+
+7. Änderungs- und Teststatus
+
+- GEOTEST.GEO unverändert.
+- Quellcode und SDK unverändert.
+- Kein neuer Build.
+- Kein Emulator-/Laufzeittest.
+- Kein GitHub-Commit zum Zeitpunkt der Erstellung dieses Protokolls.
+- Dieses Protokoll dokumentiert ausschließlich die statische Byteanalyse.
+
+Ergebnis
+Die Ressourcentabelle ist jetzt korrekt mit DWORD-Positionsfeldern aufgelöst. Die Ressourcen 7/8 und 9/10 bilden jeweils zwei Moniker-Kandidaten gleicher Abmessungen. Die genaue Farb-/Monochrom-Zuordnung und die Referenzkette aus Ressource 4 bleiben Gegenstand der nächsten Untersuchung.
