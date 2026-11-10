@@ -34,8 +34,8 @@ Die in Untersuchung 2383 gefundenen Instruktionen lauten:
 
 | Ressourcenoffset | Dateioffset | Bytes | Disassemblierung |
 |---:|---:|---|---|
-| `050Fh` | `5C12h` | `9A 72 00 00 00` | `CALL FAR 0000:0072h` |
-| `0523h` | `5C26h` | `9A 71 00 00 00` | `CALL FAR 0000:0071h` |
+| `0516h` | `5C12h` | `9A 72 00 00 00` | `CALL FAR 0000:0072h` |
+| `052Ah` | `5C26h` | `9A 71 00 00 00` | `CALL FAR 0000:0071h` |
 
 Beim 8086-Far-Call stehen nach dem Opcode `9A` zuerst der 16-Bit-Offset und danach das 16-Bit-Segment. Die Segmentwörter befinden sich daher an Ressourcenoffsets:
 - erster Call: `0519h`
@@ -43,12 +43,17 @@ Beim 8086-Far-Call stehen nach dem Opcode `9A` zuerst der 16-Bit-Offset und dana
 
 Die 84 Relocation-Einträge der Ressource wurden auf die tatsächlichen Segmentwortpositionen `0519h` und `052Dh` geprüft. Für keine dieser beiden Positionen ist ein Relocation-Eintrag vorhanden. Die zuvor genannten Positionen `0512h` und `0526h` waren um sieben Bytes verschoben.
 
+
+### Dritter Aufruf aus der zweiten Token-Tabelle
+
+Die zweite Schleife enthält außerdem `CALL FAR 0000:0073h` bei Ressourcenoffset `0581h` (Dateioffset `5C7Dh`). Das Segmentwort liegt bei `0584h`. Auch für `0584h` existiert kein Relocation-Eintrag in den 84 Einträgen von Ressource 8. Die Instruktionsbytes lauten `9A 73 00 00 00`.
+
 ## 3. Belastbare Aussage und Grenze
 
 Bestätigt ist:
-- Die beiden Far-Calls stehen im Code-/Datenbereich der Ressource 8.
+- Die drei Far-Calls stehen im Code-/Datenbereich der Ressource 8.
 - Ihre Segmentwörter sind in der Rohdatei Null.
-- Die beiden tatsächlichen Segmentwortpositionen sind nicht in der Relocation-Liste dieser Ressource enthalten.
+- Die drei tatsächlichen Segmentwortpositionen (`0519h`, `052Dh`, `0584h`) sind nicht in der Relocation-Liste dieser Ressource enthalten.
 - Die Calls sind daher keine gewöhnlichen, durch diese Ressourcen-Relocationstabelle zu patchenden Segmentreferenzen.
 
 Nicht bestätigt ist:
