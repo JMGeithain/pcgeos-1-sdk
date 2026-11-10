@@ -1,0 +1,97 @@
+ICONMAKE / GEOTEST – Untersuchung 2370
+Statischer Aufrufpfad der EGA-Pixelverarbeitung in ICONMAKE.EXE
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Untersuchte Datei
+--------------------
+ICONMAKE.EXE
+Dateigröße: 19.477 Byte
+SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Die folgenden Offsets sind Dateioffsets im MZ-Executable, so wie sie
+im Disassembly des vollständigen Abbilds erscheinen.
+
+2. Gesicherte Routinen und Rollen
+---------------------------------
+Routine 055Ah:
+- Wird vom Varianten-Dispatcher für eine erkannte Bildvariante aufgerufen.
+- Erzeugt den Ressourcen-/Bitmap-Kontext.
+- Setzt Breite und Höhe aus den zuvor eingelesenen Bildmetadaten.
+- Ruft 19F0h zur Farbzuordnung und anschließend 158Ah/15C6h zum Aufbau
+  bzw. Erweitern des internen Ressourcenblocks auf.
+
+Routine 19F0h:
+- Liest eine Farbzuordnung aus dem Eingabebild.
+- Berechnet für bis zu 16 Quellfarben Zuordnungen in der Tabelle ab
+  2FD6h.
+- Verwendet dazu die Distanzroutine 29B6h.
+- Diese Routine ist Farbzuordnung, nicht der eigentliche Byte-
+  Kompressor.
+
+Routine 1838h:
+- Liefert Pixel-/Eingabebytes aus dem PCX-Datenstrom.
+- Behandelt den PCX-RLE-Fall über den Status bei 2FD4h und die
+  Zähler-/Wertfelder 06A6h/06A8h.
+- Bei einem PCX-RLE-Lauf wird ein gespeicherter Wert mehrfach
+  zurückgegeben.
+- Diese Routine ist damit Teil der PCX-Eingabedekodierung.
+
+Routine 1B22h:
+- Berechnet aus der Eingabegröße die Anzahl der zu verarbeitenden
+  Quellbytes.
+- Bei aktivierter Farbumsetzung wird eine Mappingtabelle bei 06C2h
+  vorbereitet.
+- Der Hauptpfad bildet aus den eingelesenen Pixelwerten vier
+  Ausgabekomponenten und legt Zwischenbytes im Puffer ab 30E8h ab.
+- Die Schleife bei 1C73h gibt die erzeugten Komponenten byteweise
+  über 197Ah aus; zwischen den Komponenten wird jeweils FFFFh als
+  Steuer-/Abschlusswert an 197Ah übergeben.
+
+Routine 1894h:
+- Verarbeitet auszugebende Bytes abhängig vom Status bei 2FD4h.
+- Verwendet den Zustand bei 06AAh und die Ausgabeposition bei 2FE6h.
+- Der Code enthält eine Behandlung aufeinanderfolgender gleicher
+  Bytes sowie Kontrollwerte FEh und 00h.
+- Die exakte inverse Dekodierregel und die Bedeutung aller
+  Kontrollwerte sind in dieser Untersuchung noch nicht vollständig
+  rekonstruiert. Deshalb wird der Datenstrom noch nicht als vollständig
+  dekodiertes RLE-Format ausgegeben.
+
+Routine 197Ah:
+- Verwaltet die Ausgabepuffergrenzen und stößt bei Bedarf das Schreiben
+  von Datenblöcken an.
+- Sie ist nicht mit dem PCX-Eingabedekoder 1838h gleichzusetzen.
+
+3. Was damit nun belegt ist
+---------------------------
+ICONMAKE verarbeitet das EGA-Eingabebild nicht als einfachen Block
+unveränderter PCX-Bytes. Zwischen PCX-Eingabe und Tokenressource liegen
+mindestens:
+1. PCX-RLE-Eingabedekodierung (1838h),
+2. Farbzuordnung (19F0h / Tabelle 2FD6h),
+3. Umformung in vier Ausgabekomponenten (1B22h),
+4. ein separater Ausgabepfad mit Kontrollwert-/Wiederholungsbehandlung
+   (1894h) und Pufferverwaltung (197Ah).
+
+Damit ist der nächste Reverse-Engineering-Schritt klar eingegrenzt:
+Die Routine 1894h und ihr Aufruferpfad müssen vollständig als
+Encoder/Decoder-Paar modelliert werden. Erst nach einem korrekten
+Rückwärtsdecoder können die M13- und M14-Payloads pixelgenau verglichen
+werden.
+
+4. Grenzen
+----------
+- Keine vollständige Dekodierung des EGA-Payloads vorgenommen.
+- Keine Pixel- oder Transparenzbedeutung einzelner Bytes behauptet.
+- Die PC/GEOS-2.x-/FreeGEOS-Quellen und deren Bitmapdefinitionen wurden
+  nicht als Beleg für das GeoWorks-1.x-Format verwendet.
+- Kein Laufzeittest in GeoWorks 1.2.
+
+5. Änderungsstatus
+------------------
+ICONMAKE.EXE und beide Token-Dateien wurden nur gelesen.
+Keine GEO-, PCX-, BAT-, README- oder TOKEN.DB-Datei verändert.
+
+Ende Untersuchung 2370.
