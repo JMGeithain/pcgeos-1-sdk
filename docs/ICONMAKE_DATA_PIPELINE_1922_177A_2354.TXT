@@ -1,0 +1,93 @@
+ICONMAKE – Untersuchung 2354
+Datenlieferanten 1922h und 177Ah
+Stand: 10.11.2026
+
+Untersuchungsgrundlage
+Programm: GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße: 19.477 Bytes
+Geladenes MZ-Modul: 18.965 Bytes
+SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Offsets beziehen sich auf den Anfang des geladenen MZ-Moduls.
+
+1. Aufruf von 1922h
+Eine direkte CALL-Stelle liegt bei 018Dh:
+018Dh: CALL 1922h
+
+1922h erhält sein erstes Argument aus [BP+04h]. Es berechnet daraus:
+DI = (Argument + 7) >> 3
+Damit wird eine gerundete, durch acht geteilte Anzahl von Verarbeitungseinheiten gebildet.
+
+Die Routine verwendet außerdem globale Zustände:
+- DS:1C46h: ein Verarbeitungsparameter; wird als Schleifengrenze bzw. Moduswert benutzt.
+- DS:2FCCh: Schalter für einen alternativen Verarbeitungspfad.
+- DS:06C0h: Vergleichs-/XOR-Wert.
+- DS:06C2h: temporärer Bytebereich.
+- DS:30E8h: weiterer temporärer Arbeitsbereich.
+
+Die symbolischen Bedeutungen dieser globalen Variablen sind aus dem Code allein noch nicht abschließend bekannt.
+
+2. Eingangsdaten über 1638h
+1922h ruft 1638h mehrfach auf und verwendet den Rückgabewert AL als Byte:
+- Im ersten Pfad wird AL in DS:06C2h + SI abgelegt.
+- In weiteren Schleifen wird erneut 1638h aufgerufen; der Wert wird mit DS:06C0h XOR-verknüpft und an 177Ah übergeben.
+- Im komplexeren Pfad werden Rückgabewerte von 1638h in lokale Variablen übernommen und in Bit-/Byteoperationen verarbeitet, bevor Bytes in DS:30E8h entstehen.
+
+Damit ist 1638h die vorgelagerte Quelle einzelner Werte. Der konkrete Quellmodus hängt von globalem Zustand ab; 1922h selbst legt fest, wie oft Werte gelesen und wie sie anschließend transformiert werden.
+
+3. 177Ah – laufende Wertgruppierung
+177Ah nimmt einen Word-Parameter aus [BP+04h] entgegen und vergleicht ihn mit dem zuletzt gespeicherten Wert DS:021Ah.
+
+Wenn der neue Wert gleich dem gespeicherten Wert ist und der Zähler DS:021Ch kleiner als 003Fh ist, erhöht 177Ah nur diesen Zähler und kehrt zurück:
+- Vergleich [021Ah] gegen neuen Wert.
+- Zähler [021Ch] wird höchstens bis 003Fh erhöht.
+
+Bei einem Wertwechsel oder einem Sonderwert wird der vorherige Lauf verarbeitet:
+- DS:2FCAh wird als Übergabepuffer verwendet.
+- DS:021Ch bestimmt die Anzahl bzw. Länge des auszugebenden Bereichs.
+- 20E2h wird mit DS:2FCAh und einem Längenwert aufgerufen.
+- Anschließend werden gespeicherter Wert und Zähler für den neuen Lauf aktualisiert.
+
+Der Sonderwert FFFFh wird als Abschluss-/Flush-Signal verwendet. Das ist durch die Aufrufe in 1922h belegt: Nach der Wertfolge ruft 1922h 177Ah mit AX=FFFFh auf.
+
+4. 1922h erzeugt nicht nur eine einfache Wiederholungsliste
+Im alternativen Pfad von 1922h wird ein Arbeitsbereich bei DS:30E8h aufgebaut:
+- Es werden Werte über 1638h eingelesen.
+- Die Routine führt Bitoperationen und Tabellen-/Indexberechnungen aus.
+- Ergebnisse werden in DS:30E8h abgelegt.
+- Anschließend werden Bytes aus DS:30E8h einzeln an 177Ah übergeben.
+- Nach jedem Teilblock folgt erneut der Abschlusswert FFFFh.
+- Die Verarbeitung läuft über mehrere Teilbereiche; der Code setzt dafür unter anderem einen Zähler auf 4.
+
+Das belegt eine strukturierte Vorverarbeitung mit anschließender laufender Wertgruppierung. Die genaue Bedeutung der vier Teilbereiche und die Pixel-/Zeilenorganisation sind noch nicht abschließend bestimmt.
+
+5. Beziehung zu 20E2h und 2D90h
+177Ah übergibt gepufferte Daten an 20E2h. Die bereits untersuchten Pfade zeigen:
+20E2h -> 2D90h -> 3792h -> DOS INT 21h/AH=40h (im Binärpfad).
+
+Damit ist eine zusammenhängende Ausgabekette belegt:
+1638h liefert Einzelwerte
+1922h transformiert bzw. organisiert sie
+177Ah gruppiert gleiche Werte und verwaltet die Übergabe
+20E2h reicht Daten an die Ausgabeverwaltung weiter
+2D90h verwaltet den Puffer-/Deskriptorzustand
+3792h schreibt den übergebenen Bereich über DOS
+
+6. Was damit noch nicht bewiesen ist
+Die Befunde stützen eine lauflängenähnliche Kodierung, aber sie beweisen nicht:
+- die genaue Bytegrammatik der kodierten Läufe,
+- ob FFFFh nur ein interner Flush-Marker ist oder zusätzlich in einem bestimmten Sonderpfad Daten repräsentiert,
+- die genaue Pixelreihenfolge und Zeilenorientierung,
+- dass der so erzeugte Strom unmittelbar eine vollständige Icon-Datei oder GeoWorks-Ressource ist.
+
+Insbesondere darf der interne Marker FFFFh nicht als tatsächlich geschriebene Dateibyte interpretiert werden: 177Ah behandelt ihn als Steuerwert und führt damit einen Abschluss-/Flush-Pfad aus.
+
+7. Nächster Untersuchungsschritt
+Als Nächstes ist 1638h vollständig mit seinen Aufrufern und globalen Schaltern zu rekonstruieren. Dabei muss unterschieden werden zwischen:
+- direkter Bytequelle,
+- gepufferter Bytequelle,
+- Zustandswechseln und Rückgabewerten.
+Danach sind die in 1922h verwendeten Tabellen und Arbeitsbereiche zuzuordnen. Erst mit dieser Datenquellenanalyse kann das konkrete Zwischenformat belastbar beschrieben werden.
+
+Ende Untersuchung 2354.
