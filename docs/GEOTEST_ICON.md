@@ -160,3 +160,12 @@ Resources 1–5 are byte-for-byte identical. Only resource 6 (the EGA payload) d
 Because the source `GTS1ICON.PCX` has palette index 13 at all four corners, M13 is the parameter consistent with the intended transparent border, based on the earlier static analysis of ICONMAKE's M-parameter handling. A GeoWorks 1.2 / GeoManager visual test is still required before declaring the display behavior verified.
 
 See [investigation 2368](ICONMAKE_M13_M14_TOKEN_COMPARISON_2368.TXT). Both generated token files were only read; no source asset, batch file, GEO, or TOKEN.DB was changed.
+
+
+## EGA block field inspection (investigation 2369)
+
+A closer inspection of resource 6 found the EGA block beginning at resource-relative offset `0x2A). Its first six bytes are identical for M13 and M14 (`46 30 00 1E 00 1A`). The WORD at block offset +6 is `0x023E` for M13 and `0x0290` for M14, a difference of 82 bytes. The outer resource sizes differ by 80 bytes (`0x280` vs. `0x2D0`). These are distinct fields and must not be treated as interchangeable lengths.
+
+The encoded payload still has not been decoded into pixels. No color or transparency meaning is assigned to individual differing bytes. A PC/GEOS 1.x format definition, confirmed ICONMAKE routine, or suitable known reference block is needed before making pixel-level claims.
+
+See [investigation 2369](ICONMAKE_EGA_BLOCK_FIELDS_2369.TXT).
