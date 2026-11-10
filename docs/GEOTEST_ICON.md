@@ -140,3 +140,12 @@ The exact provider table bases are:
 The six extracted blocks confirm the mapping index 4 = CGA (prefix `0x61`), index 5 = HGC (prefix `0x41`), and index 6 = EGA (prefix `0x46`). Exact offsets, lengths, and block hashes are in [investigation 2366](ICONMAKE_PROVIDER_EXACT_BLOCKS_2366.TXT).
 
 The same disassembly confirms that the `m[<transp_color>]` mode parses the decimal suffix, defaults to 14 when omitted, and passes the selected value into icon-variant creation. The uploaded `GTS1ICON.PCX` has corner pixels at index 13, while `ERZEUGE.BAT` calls `ICONMAKE M14`. Therefore that command does not select the actual corner index. `M13` is the matching parameter for this input file. This is a static conclusion; no ICONMAKE execution or GeoWorks 1.2 display test has yet been performed. The batch file and README have deliberately not been changed.
+
+
+## Audit of generated GTS1 token output (investigation 2367)
+
+The user supplied `GTS10000.000` (1,760 bytes; SHA-256 `7ea8625f66868038b3c1e7c99cc11c5134b8fa2b211b9b84c23767dd6e03b54f`). Its header contains token `GTS1`, manufacturer ID 0, creator `GEOS`, and seven resources. The resource table is structurally in-bounds. Resources 4, 5, and 6 contain leading variant signatures `0x61`, `0x41`, and `0x46`, respectively, matching the CGA/HGC/EGA provider signatures established in investigation 2366.
+
+The file does not contain an identified explicit marker stating whether it was generated with M13 or M14. A single output therefore cannot establish which transparency parameter was used or prove the rendered transparency. The second output from the other test folder and confirmation of this file's origin (M13 or M14) are required for a controlled byte comparison. Resources 4 and 5 are only 0x30 bytes each; do not describe them as fully decoded pixel bitmaps based on their signatures alone.
+
+See [investigation 2367](ICONMAKE_TOKEN_OUTPUT_AUDIT_2367.TXT). No source or generated file was modified.
