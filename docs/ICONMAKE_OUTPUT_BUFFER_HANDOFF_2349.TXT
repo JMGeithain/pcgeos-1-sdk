@@ -1,0 +1,65 @@
+ICONMAKE.EXE – Untersuchung 2349
+Routine 2D90h: Pufferübergabe aus der Byteausgabe
+Stand: 2026-11-10
+Projektgrenze: ausschließlich GeoWorks / PC/GEOS 1.x.
+
+1. Grundlage
+Unveränderte ICONMAKE.EXE aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße 19.477 Byte; SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933.
+Offsets relativ zum Beginn des MZ-Lademoduls.
+
+2. Aufrufkontext
+Routine 20E2h ruft 2D90h auf, wenn der im Pufferdeskriptor adressierte Schreibpuffer erschöpft ist. Übergeben werden:
+- ein Zeiger auf den Pufferdeskriptor,
+- der gerade auszugebende Bytewert.
+2D90h verwendet [BP+6] als Zeiger auf den Deskriptor und [BP+4] als Byte-/Wortwert.
+
+3. Deskriptorfelder und Flags
+Am Anfang:
+- SI = [BP+6] (Deskriptorzeiger)
+- AL = BYTE [SI+6] (Flags)
+- geprüft werden die Bitmasken 82h und 40h.
+Wenn (Flags AND 82h) = 0 oder Bit 40h gesetzt ist, springt die Routine in den Sonder-/Fehlerpfad bei 2E07h.
+Andernfalls wird WORD [SI+2] auf 0 gesetzt.
+Bei gesetztem Bit 0 wird zusätzlich Bit 10h geprüft; bei erfüllter Bedingung wird WORD [SI+4] nach [SI] kopiert und Bit 0 in der lokalen Flagkopie gelöscht.
+Danach setzt die Routine Bit 1 und löscht Bit 10h in den zurückgeschriebenen Flags.
+
+4. Zugehöriger Pufferkontext
+Aus SI wird ein zugehöriger Kontextzeiger berechnet:
+DI = SI - 02DAh + 037Ah.
+Das Byte [SI+7] wird als Index/Nummer verwendet und in BL geladen.
+Je nach Flagbits 08h und 04h sowie dem Kontextbyte [DI] werden unterschiedliche Übergabepfade gewählt.
+Für bestimmte Deskriptoradressen (02E2h, 02EAh, 02FAh) wird zusätzlich ein Bit im Tabellenbereich [BX+029Bh] geprüft.
+Ein direkter Sonderpfad ruft 3792h mit drei Argumenten auf und setzt anschließend CX=1.
+Ein anderer Pfad ruft 3AB8h mit dem Kontext- und Deskriptorzeiger auf und prüft danach erneut Flagbit 08h.
+Die konkreten Rollen dieser Tabellen-/Kontextbytes sind noch nicht vollständig entschlüsselt.
+
+5. Hauptschreibpfad
+Ab 2E1Dh:
+- CX = WORD [SI] - WORD [SI+4].
+- DX = WORD [SI+4] + 1; dieses Ergebnis wird nach [SI] geschrieben.
+- WORD [DI+2] wird dekrementiert und nach [SI+2] geschrieben.
+Wenn CX ungleich 0 ist, ruft 3792h mit dem Index BL, dem Startwert [SI+4] und der Länge CX auf.
+Danach wird der aktuelle Ausgabewert aus [BP+4] als Byte an die Position [SI+4] geschrieben.
+Der Pfad vergleicht anschließend Rückgabewert AX mit CX. Bei Ungleichheit wird der Sonderpfad bei 2E07h ausgeführt.
+Wenn CX gleich 0 ist, wird abhängig von Bit 20h in [BX+029Bh] gegebenenfalls 362Eh mit dem Index und den Parametern 0,0,2 aufgerufen. Danach wird die Ausgabe fortgesetzt.
+Der Sonderpfad setzt AX=FFFFh, setzt Bit 20h im Deskriptorflagbyte und kehrt zurück.
+
+6. Einordnung im Gesamtablauf
+Die zuvor untersuchte Kette lautet:
+1922h -> 177Ah -> 20E2h -> 2D90h -> 3792h (und je nach Pfad 3AB8h/362Eh).
+20E2h verwaltet den aktuellen Pufferzeiger und dessen Kapazität. 2D90h behandelt den Übergang, wenn die Puffergrenze erreicht ist oder ein Sonderzustand vorliegt. 3792h erhält einen Index, eine Startposition und eine Länge und ist damit der zentrale nächste Untersuchungsgegenstand für das tatsächliche Wegschreiben eines Bytebereichs.
+
+7. Grenzen der Aussage
+Gesichert sind die beschriebenen Stackargumente, Feldzugriffe, Flagtests, Zähler-/Zeigeränderungen und Aufrufe.
+Noch nicht gesichert sind:
+- die symbolischen Bedeutungen der Bits 82h/40h/20h/10h/08h/04h/02h/01h,
+- die vollständige Struktur des Pufferdeskriptors,
+- ob 3792h in eine Datei, einen Resource-Stream oder einen temporären Speicherbereich schreibt,
+- die vollständige Kompressionskodierung.
+Die Routine wird daher nicht als abschließend bewiesener RLE-Encoder bezeichnet.
+
+8. Nächster Schritt 2350
+3792h analysieren: Parameter, Kopierlänge, Quell-/Zielzeiger, Rückgabewert und mögliche Übergabe an DOS-/GEOS-Dateioperationen. Danach kann die Ausgabe bis zur tatsächlichen Ressourcenschreibstelle verfolgt werden.
