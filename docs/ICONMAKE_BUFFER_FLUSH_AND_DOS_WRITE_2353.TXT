@@ -1,0 +1,103 @@
+ICONMAKE – Untersuchung 2353
+512-Byte-Puffer: Füllung und Übergabe an DOS-Schreibfunktion
+Stand: 10.11.2026
+
+Untersuchungsgrundlage
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße: 19.477 Bytes
+Geladenes MZ-Modul: 18.965 Bytes
+SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Offsets beziehen sich auf den Anfang des geladenen MZ-Moduls.
+
+1. Pufferinitialisierung 3AB8h
+Der Aufruf bei 2E12h führt zu 3AB8h. Die Routine fordert über 212Ch genau 0200h Bytes an:
+3AB8h: PUSH BP
+3AB9h: MOV BP,SP
+3ABBh: PUSH SI
+3ABCh: MOV SI,[BP+04h]
+3ABFh: MOV AX,0200h
+3AC2h: PUSH AX
+3AC3h: CALL 212Ch
+
+Bei Erfolg:
+- Deskriptorstatus [SI+06h] erhält Bit 08h.
+- Kontextkapazität [BX+02h] wird 0200h.
+- AX (Pufferadresse) wird in [SI] und [SI+04h] gespeichert.
+
+Bei Fehlschlag:
+- Statusbit 04h wird gesetzt.
+- Kontextkapazität [BX+02h] wird 0001h.
+- AX wird auf BX+1 gesetzt; dieser Ersatzpuffer wird in [SI] und [SI+04h] gespeichert.
+
+In beiden Fällen wird [SI+02h] auf 0000h gesetzt.
+
+2. Füllzustand und Byteeintrag in 2D90h
+2D90h erhält den Deskriptorzeiger über [BP+06h] in SI. Der zugehörige Kontext wird berechnet:
+DI = SI - 02DAh + 037Ah
+Der Handle-Tabellenindex wird aus [SI+07h] in BL geladen.
+
+Der relevante Pufferpfad beginnt bei 2E1Dh:
+2E1Dh: MOV CX,[SI]
+2E1Fh: MOV DX,[SI+04h]
+2E22h: SUB CX,DX
+2E24h: INC DX
+2E25h: MOV [SI],DX
+2E27h: MOV DX,[DI+02h]
+2E2Ah: DEC DX
+2E2Bh: MOV [SI+02h],DX
+
+Die Differenz CX beschreibt die bis dahin angesammelte Länge zwischen den beiden Pufferpositionen. DX wird um eins erhöht und als neuer Zeiger in [SI] abgelegt. Der Kontextwert [DI+02h] wird dekrementiert und in [SI+02h] übernommen.
+
+Wenn CX ungleich null ist, wird der angesammelte Bereich an 3792h übergeben:
+2E30h: PUSH CX
+2E31h: PUSH CX
+2E32h: PUSH [SI+04h]
+2E35h: PUSH BX
+2E36h: CALL 3792h
+2E39h: ADD SP,6
+
+Damit erhält 3792h:
+- Handle-Tabellenindex in seinem Parameter [BP+04h],
+- Quelladresse aus [SI+04h] als [BP+06h],
+- Länge CX als [BP+08h].
+
+Das entspricht der bereits in Untersuchung 2350 dokumentierten DOS-Schreibschnittstelle (INT 21h/AH=40h im direkten Binärpfad).
+
+3. Eintrag des aktuellen Bytes nach dem Schreibvorgang
+Nach dem Aufruf wird bei 2E3Dh CX wiederhergestellt.
+2E3Dh: POP CX
+2E3Eh: MOV DI,[SI+04h]
+2E41h: MOV DX,[BP+04h]
+2E43h: MOV [DI],DL
+
+Der aktuelle Bytewert aus dem Parameter [BP+04h] wird damit an die durch [SI+04h] bezeichnete Pufferadresse geschrieben. Der Rückgabewert von 3792h wird bei 2E45h mit CX verglichen. Bei Abweichung wird der Fehlerpfad 2E07h erreicht.
+
+Wichtig: Der Code schreibt den aktuellen Bytewert nicht einfach unmittelbar mit AH=40h. Er verwaltet zuerst einen Pufferbereich und ruft die DOS-Schreibroutine für den angesammelten Bereich auf.
+
+4. Puffer-Fallback und Sonderpfade
+Der Puffer wird bei erfolgreicher Speicherreservierung mit 512 Bytes Kapazität betrieben. Bei fehlgeschlagener Reservierung setzt 3AB8h den Kontext auf Kapazität 1 und verwendet BX+1 als Ersatzadresse. Die Statusbits 08h und 04h unterscheiden die Fälle.
+
+2D90h enthält weitere Sonderpfade:
+- Statusprüfungen auf 82h und 40h am Deskriptorbyte +06h.
+- Bei bestimmten Zuständen wird ein einzelnes Byte über 3792h ausgegeben.
+- Ein weiterer Pfad benutzt 362Eh.
+Diese Sonderpfade dürfen nicht mit dem regulären gepufferten Bytepfad gleichgesetzt werden.
+
+5. Belastbare Schlussfolgerung
+Gesichert ist:
+- 3AB8h richtet einen 512-Byte-Puffer oder einen Ein-Byte-Fallback ein.
+- 2D90h verwaltet den Pufferzustand und den aktuellen Bytewert.
+- Bei einem nichtleeren angesammelten Bereich übergibt 2D90h Quelladresse und Länge an 3792h.
+- 3792h führt im Binärpfad den DOS-Schreibaufruf INT 21h/AH=40h aus.
+
+Noch nicht bewiesen ist:
+- Dass der hier ausgegebene Strom bereits die vollständige, eigenständige Icon-Dateistruktur darstellt.
+- Welche übergeordneten Datensätze oder Ressourcenheader vor diesem Bytepfad erzeugt werden.
+- Ob mehrere unterschiedliche Ausgabeströme über dieselbe generische Pufferverwaltung laufen.
+
+6. Nächster Untersuchungsschritt
+Die Aufrufer und Datenlieferanten von 2D90h sind weiter nachzuverfolgen. Insbesondere muss der Pfad von 177Ah/1922h bis zum Deskriptor und DOS-Handle vollständig rekonstruiert werden. Parallel sind die Sonderpfade 362Eh und 3AB8h/3792h zu vergleichen, damit keine Zwischenrepräsentation irrtümlich als endgültiges Icon-Format bezeichnet wird.
+
+Ende Untersuchung 2353.
