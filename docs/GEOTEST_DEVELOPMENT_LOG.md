@@ -2225,3 +2225,19 @@ Wichtige Abgrenzung: GEODE-Ressourcenindex, ICONMAKE-Kontextindex und lokaler LM
 Details und Beweisgrenzen: [ICONMAKE_PROVIDER_VARIANT_MAPPING_2363.TXT](ICONMAKE_PROVIDER_VARIANT_MAPPING_2363.TXT).
 
 **Status:** Keine Originaldatei verändert, kein neuer Build, kein Laufzeittest, TOKEN.DB unverändert. Nächster Schritt 2364 ist die erneute Byteauflösung der absoluten Tabellenpositionen und geladenen Blöcke aus PAPR.000/GDOC.000; anschließend ist die unabhängige Dekodierung der GEOTEST-Ressourcen 5–10 fortzusetzen.
+
+
+## 43. Untersuchung 2364 – PCX-Eingabedateien und Transparenzindizes
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** GeoWorks / PC/GEOS 1.x.
+
+Die zwei vorbereiteten Dokumenticon-PCX-Dateien sind 48×30 Pixel, 1 Bit je Plane und vier Planes. Ihre vier Eckpixel tragen jeweils Palettenindex 14; damit passen die Eingabepixel zum dokumentierten Aufruf ICONMAKE M14, ohne dass die tatsächliche ICONMAKE-/GeoManager-Transparenz bereits getestet wäre.
+
+Bei der älteren GTS1ICON.PCX liegt dagegen ein konkreter Widerspruch vor: Die vier Eckpixel tragen Index 13, während ERZEUGE.BAT ICONMAKE M14 aufruft. Die README behauptet zugleich, der Außenbereich sei Index 13 und werde transparent. Index 13 und 14 sind unterschiedliche Paletteneinträge. Die Datei wird nicht automatisch verändert; zuerst muss ICONMAKE 1.x auf einer gesicherten Kopie klären, welcher Index mit M14 tatsächlich transparent wird.
+
+GEOTEST_EGA.PCX ist mit 8 bpp / einer Plane anders aufgebaut und hat keine einheitlichen Eckindizes (7 bzw. 9); laut README ist sie für den opaken M0-Weg vorgesehen.
+
+Details: [GEOTEST_ICON_INPUT_AUDIT_2364.TXT](GEOTEST_ICON_INPUT_AUDIT_2364.TXT).
+
+**Status:** Nur Eingabedateien gelesen und dekodiert. Keine PCX-/GEO-/Token-/TOKEN.DB-Änderung, kein ICONMAKE-Lauf, kein GeoWorks-Laufzeittest. Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
