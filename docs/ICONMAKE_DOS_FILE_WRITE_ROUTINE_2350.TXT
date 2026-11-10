@@ -1,0 +1,73 @@
+ICONMAKE.EXE – Untersuchung 2350
+Routine 3792h: DOS-Dateiausgabe, Zeilenumsetzung und Schreibfehlerpfad
+Stand: 2026-11-10
+Projektgrenze: ausschließlich GeoWorks / PC/GEOS 1.x.
+
+1. Untersuchungsgrundlage
+Unveränderte ICONMAKE.EXE aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße 19.477 Byte; SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933.
+Alle Offsets beziehen sich auf den Beginn des MZ-Lademoduls.
+Der Funktionsprolog bei 3792h lautet PUSH BP / MOV BP,SP; die vorangehenden Bytes ab 3791h gehören nicht zum Funktionsprolog.
+
+2. Stackparameter
+Routine 3792h liest:
+- [BP+04h] in BX: DOS-Dateihandle.
+- [BP+06h] in DX: Zeiger auf den Quellbereich im DS.
+- [BP+08h] in CX: Länge des Quellbereichs.
+Die Zuordnung ist durch die Verwendung von BX/DX/CX beim DOS-Aufruf INT 21h, AH=40h bestätigt.
+Aufruf bei 2DFCh:
+PUSH CX; LEA DI,[BP+4]; PUSH DI; PUSH BX; CALL 3792h.
+Damit ist [BP+4] beim Eintritt der Handle, [BP+6] der Zeiger auf den lokalen/übergebenen Quellbereich und [BP+8] die Länge.
+
+3. Handle-Grenze und Dateiposition
+Zu Beginn wird der Handle mit WORD [DS:0299h] verglichen. Ein Handle außerhalb des erlaubten Bereichs führt in den Fehlerpfad mit AX=0900h und gesetztem Carry.
+Wenn DS:05A4h den Marker D6D6h enthält, ruft die Routine den indirekten Funktionszeiger DS:[05A6h] auf.
+Wenn das handlebezogene Flagbyte DS:[BX+029Bh] Bit 20h gesetzt hat, führt die Routine DOS INT 21h, AX=4202h aus (Dateiposition relativ zum Dateiende, Offset 0). Bei Fehler wird der Fehlerpfad betreten.
+Damit ist belegt, dass dieser Zweig vor der Ausgabe die Dateiposition auf das Dateiende setzen kann.
+
+4. Direkter Schreibpfad
+Wenn Flagbit 80h in DS:[BX+029Bh] nicht gesetzt ist, springt die Routine zum direkten Schreibpfad bei 389Bh.
+Dort:
+- CX = [BP+08h].
+- Bei CX=0 wird ohne DOS-Schreiboperation zurückgekehrt.
+- DX = [BP+06h].
+- AH=40h; INT 21h.
+Das ist DOS-Funktion 40h „Write to file or device“: BX=Handle, CX=Byteanzahl, DS:DX=Quellpuffer.
+Bei gesetztem Carry wird ein Fehlercodepfad ausgeführt. Ein Rückgabewert AX=0 bei angeforderter positiver Länge wird ebenfalls als Fehler behandelt.
+Bei erfolgreichem Schreiben wird die geschriebene Byteanzahl in AX zurückgegeben.
+
+5. Sonderpfad mit Zeilenumsetzung
+Wenn Flagbit 80h gesetzt ist, arbeitet die Routine ab 37CDh:
+- Quellzeiger DX wird nach SI/DI übernommen.
+- Es wird ein temporärer Stackpuffer reserviert: normalerweise 0200h Byte, bei kleineren Längen 0080h Byte.
+- Die Quellbytes werden auf LF (0Ah) geprüft.
+- Bei LF wird CR (0Dh) vor dem LF in den temporären Ausgabepuffer eingefügt.
+- Der verarbeitete Pufferabschnitt wird über 3843h geschrieben.
+- Bei Puffergrenze wird der Abschnitt ebenfalls geschrieben und die Verarbeitung fortgesetzt.
+- Die Zahl der eingefügten Zeilenumbrüche wird lokal gezählt.
+Der Hilfsweg 3843h verwendet DOS INT 21h, AH=40h, schreibt den temporären Puffer und akkumuliert die tatsächlich geschriebenen Bytes. Kurze Schreibvorgänge und DOS-Fehler gehen in den Fehlerpfad.
+Dies ist eine nachgewiesene LF-zu-CRLF-Umsetzung im Textmoduspfad. Sie ist kein Nachweis für eine Icon-spezifische Kompression.
+
+6. Rolle von 2D90h im Zusammenhang
+2D90h ruft 3792h mit dem Handle aus seinem eigenen Argument, einem Quellzeiger auf den Pufferinhalt und einer Länge auf. 3792h schreibt diesen Bereich damit tatsächlich über DOS-Dateifunktion 40h.
+Die zuvor untersuchte Kette 177Ah -> 20E2h -> 2D90h erreicht somit einen DOS-Dateischreibpfad. Welche Daten in diesem Pfad landen, hängt von den übergebenen Pufferinhalten und dem zugehörigen Handle-/Flagkontext ab. Die Routine 3792h selbst ist eine generische Datei-Ausgabe mit optionaler Zeilenumsetzung; sie ist nicht als alleiniger Icon-Serializer zu verstehen.
+
+7. Ergebnis und Bedeutung
+Gesichert:
+- 3792h nimmt Handle, DS:Quellzeiger und Byteanzahl entgegen.
+- Es schreibt über DOS INT 21h/AH=40h.
+- Optional positioniert es die Datei mit INT 21h/AX=4202h am Ende.
+- Ein Flagbit schaltet einen Textmodus ein, der LF in CRLF umsetzt.
+- Die Puffer-/Icon-Datenpipeline kann über 2D90h diesen allgemeinen Schreibpfad erreichen.
+
+Nicht gesichert:
+- dass jeder Aufruf von 2D90h Icon-Ressourcen schreibt,
+- dass die von 177Ah erzeugte Folge bereits das vollständige öffentliche Iconformat ist,
+- die genaue Beziehung zwischen Pufferhandle, Resource-Stream und PAPR/GDOC-Daten.
+Die frühere Bezeichnung als mögliche RLE-Ausgabe bleibt eine Hypothese; 3792h selbst ist eine DOS-Dateiausgabe-Routine und keine nachgewiesene RLE-Codierfunktion.
+
+8. Nächster Schritt 2351
+Den Aufruferkontext von 2D90h und die Einrichtung der Handle-Flags bei DS:[BX+029Bh] untersuchen. Insbesondere klären, welcher konkrete Ausgabedateityp/Stream diesen Pfad nutzt und ob daneben ein separater Ressourcen-/Icon-Schreibpfad existiert.
+Statische 8086-Analyse; keine Laufzeitmessung und keine Änderung der EXE.
