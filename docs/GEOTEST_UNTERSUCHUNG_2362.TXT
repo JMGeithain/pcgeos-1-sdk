@@ -1,0 +1,174 @@
+PC/GEOS 1.x – GEOTEST
+Untersuchung 2362: Dekodierung der fünf LMem-Chunks von Ressource 4
+Datum: 10.11.2026
+Ziel: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Eingabedatei und Integrität
+------------------------------
+Untersucht wurde GEOTEST.GEO aus GEOTEST(1).ZIP.
+
+Dateigröße: 70.794 Byte
+SHA-256:
+9ace19da2535a1f05875f891876417bc8adafbdbce2b32540131fa85f638408b
+
+Der Wert stimmt mit dem Buildbericht im Entwicklungspaket überein.
+Die GEO-Datei wurde nicht verändert.
+
+2. Ressourcentabellen-Eintrag 4
+-------------------------------
+Ressourcenindex: 4
+Dateioffset: 0x0D2E
+Größe: 336 Byte (0x0150)
+Relokationsgröße: 4 Byte
+Ressourcenflags: 0x145A
+
+Der Ressourceninhalt beginnt mit einer LMem-Struktur. Bei resource-relative
+Offset 0x20 beginnt die Handle-Tabelle. Sie enthält fünf WORD-Offsets:
+
+Handle | gespeicherter Chunk-Offset
+0x20   | 0x002E
+0x22   | 0x0036
+0x24   | 0x00FE
+0x26   | 0x012A
+0x28   | 0x0136
+
+Die fünf Werte wurden direkt aus den Bytes bei 0x20 bis 0x29 gelesen.
+Die Chunk-Länge steht jeweils als WORD unmittelbar vor dem gespeicherten
+Chunk-Offset.
+
+3. Vollständige Chunk-Längen und Nutzdaten
+------------------------------------------
+Handle 0x20
+- Chunk-Datenoffset: 0x2E
+- Länge: 7 Byte
+- Nutzdaten:
+  00 03 02 02 02 CC C8
+
+Handle 0x22
+- Chunk-Datenoffset: 0x36
+- Länge: 200 Byte (0x00C8)
+- Anfang:
+  00 30 47 00 00 00 08 00 00 00 00 00 00 00 00 00
+  24 00 03 10 24 00 00 00 00 00 00 40 26 00 33 44
+  46 74 00 00 ...
+- Der Chunk enthält zahlreiche Nullbytes und strukturierte WORD-/BYTE-
+  Folgen. Aus den Bytes allein wird hier kein Objektklassenname abgeleitet.
+
+Handle 0x24
+- Chunk-Datenoffset: 0xFE
+- Länge: 44 Byte (0x002C)
+- Nutzdaten:
+  81 10 28 00 00 40 C6 20 22 00 0A 10
+  C1 20 22 00 09 10 C6 10 22 00 08 10
+  C1 10 22 00 07 10 E1 20 22 00 06 10
+  E1 10 22 00 05 10 0A 00
+
+Handle 0x26
+- Chunk-Datenoffset: 0x12A
+- Länge: 10 Byte
+- Nutzdaten:
+  24 00 03 10 00 00 00 00 CC CC
+
+Handle 0x28
+- Chunk-Datenoffset: 0x136
+- Länge: 26 Byte
+- Nutzdaten:
+  01 00 00 00 00 FF 47 65 6F 57 6F 72 6B 73 20 31
+  2E 78 20 54 65 73 74 00 CC CC
+- Der ASCII-Text innerhalb dieses Chunks lautet „GeoWorks 1.x Test“.
+
+4. Referenzprüfung in Chunk 0x24
+--------------------------------
+Der 44-Byte-Chunk bei Handle 0x24 enthält sechs Vorkommen des Little-
+Endian-Wertes 0x0022. Sie stehen bei Chunk-relativen Offsets:
+
+0x08, 0x0E, 0x14, 0x1A, 0x20, 0x26.
+
+0x0022 ist hier ein LMem-Chunk-Handle innerhalb derselben Ressource 4:
+Die Handle-Tabelle dieser Ressource liegt ab 0x20; ihr zweiter Tabelleneintrag
+hat die Handle-Adresse 0x22 und verweist auf den Chunk bei 0x36.
+
+Wichtige Abgrenzung:
+- 0x0022 ist in diesen Feldern kein Ressourcenindex 5, 6, 7, 8, 9 oder 10.
+- Es ist ein lokaler Chunk-Handle der LMem-Ressource 4.
+- Die sechs Vorkommen belegen damit interne Handle-Bezüge innerhalb von
+  Ressource 4.
+- Die weiteren Wörter/BYTEs in diesem Chunk (unter anderem C6 20, C1 20,
+  C6 10, C1 10, E1 20, E1 10 und 0A 10 bis 05 10) werden nicht semantisch
+  benannt, solange keine passende GeoWorks-1.x-Strukturdefinition oder ein
+  kontrollierter Vergleich vorliegt.
+
+Die Untersuchung findet somit keine bytebelegte Referenzkette von Ressource 4
+zu den getrennten Ressourcen 5 bis 10. Sie zeigt vielmehr sechs interne
+Verweise auf den lokalen Chunk 0x22. Das ist ein negatives, aber wichtiges
+Ergebnis: Die sechs Grafik-/Moniker-Kandidaten der Ressourcen 5 bis 10 können
+nicht allein über diese sechs 0x0022-Werte aus Ressource 4 zugeordnet werden.
+
+5. Abgrenzung zu Ressourcen 5 bis 10
+------------------------------------
+Ressourcen 5 bis 10 sind eigenständige Ressourceneinträge der GEODE-Datei.
+Ihre jeweiligen LMem-Blöcke enthalten je zwei Chunk-Handles (0x20 und 0x22).
+Die längeren Chunks beginnen mit diesen Bytefolgen:
+
+R5: 61 30 00 0E 00 1A ...
+R6: 61 40 00 12 00 1A ...
+R7: 41 30 00 1E 00 1A ...
+R8: 46 30 00 1E 00 1A ...
+R9: 41 40 00 28 00 1A ...
+R10: 46 40 00 28 00 1A ...
+
+Diese Präfixe und die Größenpaare sind direkt gemessen. Die genaue
+VisMoniker-Feldbedeutung und insbesondere die Zuordnung 0x41/0x46 zu Farbe
+bzw. Monochrom bleiben offen. Die aktuelle Untersuchung ordnet diese
+Ressourcen nicht durch Vermutung den sechs internen Einträgen aus Chunk 0x24
+zu.
+
+6. Relokationsdaten
+-------------------
+Für Ressource 4 sind in der Ressourcentabelle vier Relokationsbytes
+angegeben. Der vier Byte lange Datensatz lautet:
+
+23 00 00 00
+
+Er wird als ein einzelner vier Byte langer Relokationsdatensatz dokumentiert.
+Die genaue semantische Bedeutung wird nicht aus dem Bytewert allein
+abgeleitet. Aus diesem Datensatz wird keine zusätzliche Zuordnung der sechs
+Grafik-/Moniker-Kandidaten zu Ressource 4 behauptet.
+
+7. Ergebnis
+-----------
+Gesichert:
+- Ressource 4 besitzt fünf LMem-Chunks mit den oben dokumentierten Handles,
+  Offsets und Längen.
+- Chunk 0x24 ist 44 Byte lang und enthält sechs lokale Verweise auf Handle
+  0x22.
+- Handle 0x22 verweist innerhalb von Ressource 4 auf den 200-Byte-Chunk bei
+  Offset 0x36.
+- Der Text „GeoWorks 1.x Test“ liegt in Chunk 0x28.
+- Die sechs längeren Moniker-/Grafik-Kandidaten liegen als separate
+  Ressourcen 5 bis 10 vor.
+
+Nicht gesichert:
+- Die semantischen Namen der Felder im Chunk 0x24.
+- Die Bedeutung der Werte C6/C1/E1 und der folgenden WORDs.
+- Eine Verbindung der sechs Einträge aus Chunk 0x24 zu Ressourcen 5 bis 10.
+- Die Farb-/Monochrom-Bedeutung der Typbytes 0x41 und 0x46.
+- Der konkrete Laufzeit-Auswahlpfad für das Anwendungs- oder Dokumenticon.
+
+8. Nächste Untersuchung
+-----------------------
+Als nächstes wird die Objekt-/Monikerstruktur von Ressource 4 anhand einer
+nachweislich passenden GeoWorks-1.x-Referenz oder durch Bytevergleich mit
+einer bekannten 1.x-Anwendung untersucht. Parallel werden Ressourcen 5 bis
+10 mit unabhängig identifizierten VisMoniker-Ressourcen verglichen. Erst
+nach einem belegten Referenzpfad darf die Zuordnung der Iconvarianten
+festgeschrieben werden.
+
+9. Unverändert- und Teststatus
+------------------------------
+- GEOTEST.GEO unverändert.
+- Quellcode und SDK unverändert.
+- Kein neuer Build.
+- Kein GeoWorks-Laufzeittest dieser Ressourcenanalyse.
+- TOKEN.DB unverändert.
+- Keine PC/GEOS-2.x- oder FreeGEOS-Strukturdefinitionen verwendet.
