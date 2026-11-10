@@ -51,7 +51,7 @@ Die dokumentierten Laufzeitergebnisse gelten für die konkrete mitgelieferte Bas
 
 ## Relevanz für die geplanten drei festen SVGA-Modi
 
-Die früher festgelegten Zielmodi für den 16-Farben-/16-Bit-SVGA-Treiber waren 1024×768×16, 1280×1024×16 und 1280×720×16.
+Die früher festgelegten Zielmodi für den SVGA16.GEO-Treiber (16 Farben = 4 Bit pro Pixel, nicht 16 Bit pro Pixel) waren 1024×768, 1280×1024 und 1280×720.
 
 Die BIOS-Probe `probe01/probe-results.json` enthält bereits konkrete VBE-Modusbeschreibungen für zwei der drei Zielauflösungen:
 
