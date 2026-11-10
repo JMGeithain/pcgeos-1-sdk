@@ -1,0 +1,71 @@
+ICONMAKE / GEOTEST – Untersuchung 2369
+Vertiefte Feldprüfung der EGA-Ressource aus M13/M14
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Grundlage
+------------
+Verglichen wurden die vom Nutzer zugeordneten Ausgaben:
+- GTS10000(1).000 = M13, SHA-256
+  7ea8625f66868038b3c1e7c99cc11c5134b8fa2b211b9b84c23767dd6e03b54f
+- GTS10000(2).000 = M14, SHA-256
+  a99afabed9acaa96029eefaa1589803404f2036d69045762475ff5baf8b75422
+
+Ressource 6 beginnt in beiden Dateien bei Dateioffset 03F4h.
+
+2. EGA-Blockkopf
+---------------
+Der EGA-Block beginnt innerhalb der Ressource bei Offset 002Ah.
+Die ersten Bytes sind:
+
+M13:
+46 30 00 1E 00 1A 3E 02 30 00 1E 00 01 11 FB FF ...
+
+M14:
+46 30 00 1E 00 1A 90 02 30 00 1E 00 01 11 FB 00 ...
+
+Die sechs Anfangsbytes 46 30 00 1E 00 1A sind identisch.
+Das WORD an Blockoffset +06h ist:
+- M13: 023Eh
+- M14: 0290h
+
+Differenz: 0052h = 82 Byte.
+
+Der äußere Ressourcenblock ist:
+- M13: 0280h = 640 Byte
+- M14: 02D0h = 720 Byte
+
+Differenz außen: 0050h = 80 Byte.
+
+Die Größenfelder sind also nicht einfach identisch und die beiden
+Ausgaben enthalten unterschiedlich große EGA-Datenblöcke. Die
+Differenz der inneren Längenangabe beträgt 82 Byte; die Differenz
+der äußeren Ressourcengröße 80 Byte. Diese Felder dürfen nicht ohne
+Kenntnis ihrer vollständigen Struktur gleichgesetzt werden.
+
+3. Grenzen der Interpretation
+------------------------------
+Der Blockkopf und die Längenfelder sind nun positionsgenau erfasst.
+Die Nutzdaten nach dem Kopf unterscheiden sich umfangreich. Eine
+pixelgenaue Dekodierung ist mit dieser Feldprüfung allein noch nicht
+erbracht. Insbesondere wird aus den Bytes FB FF / FB 00 oder anderen
+einzelnen Sequenzen keine Farb- oder Transparenzbedeutung abgeleitet.
+
+Für die nächste Stufe muss das konkrete Kompressions-/Bitmapformat
+dieses PC/GEOS-1.x-Iconblocks anhand einer gesicherten Formatdefinition,
+des ICONMAKE-Codes oder eines bekannten Referenzblocks entschlüsselt
+werden. Erst danach ist eine belastbare Aussage über einzelne Pixel
+und den transparenten Farbindex möglich.
+
+4. Status
+---------
+- Nutzerzuordnung M13/M14 übernommen.
+- Ressource 6 und innerer Blockanfang erneut bytegenau geprüft.
+- Innerer Längenwert +06h: M13 023Eh, M14 0290h.
+- Äußerer Ressourcenumfang: M13 0280h, M14 02D0h.
+- Keine pixelgenaue Dekodierung behauptet.
+- Keine Token-, GEO-, PCX-, BAT-, README- oder TOKEN.DB-Datei verändert.
+- Kein GeoWorks-Laufzeittest durchgeführt.
+- Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+Ende Untersuchung 2369.
