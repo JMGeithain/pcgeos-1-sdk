@@ -1,0 +1,72 @@
+ICONMAKE.EXE – Untersuchung 2348
+Routinen 1638h und 177Ah: Bytequelle, Bitverarbeitung und gepufferte Ausgabe
+Stand: 2026-11-10
+Projektgrenze: ausschließlich GeoWorks / PC/GEOS 1.x.
+
+1. Untersuchungsgrundlage
+Unveränderte ICONMAKE.EXE aus GEOWORKS.zip:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße 19.477 Byte; SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933.
+MZ-Header 0200h Byte; alle Moduloffsets beziehen sich auf den Beginn des Lademoduls.
+
+2. Routine 1638h – zustandsabhängige Bytequelle
+Parameter:
+[BP+04h] ist ein vorzeichenbehafteter Steuerwert.
+
+Ablauf:
+- Negative Werte setzen das Wort DS:06A6h auf 0 und liefern keinen Nutzbytewert.
+- Bei DS:2FD4h = 0 springt die Routine in den einfachen Pfad bei 168Ch: sie ruft 161Eh auf und liefert dessen AL-Wert.
+- Bei DS:2FD4h ungleich 0 wird DS:06A6h als Zustands-/Zählerwort geprüft und angepasst. Je nach Zustand wird 161Eh einmal oder zweimal aufgerufen; ein Wert wird in DS:06A8h zwischengespeichert.
+- DS:06A6h wird in Abhängigkeit von 80h und 0101h angepasst. Bei negativem Zwischenzustand liefert die Routine den zwischengespeicherten Wert aus DS:06A8h.
+
+Routine 161Eh liest ein Byte über den Zeiger DS:2FE6h und erhöht diesen Zeiger um eins.
+Routine 162Ch liest ein Byte über den gepufferten Eingabepfad: Sie übergibt DS:2FCAh an 210Eh.
+
+Belastbare Aussage: 1638h ist keine reine Pixeloperation. Sie ist eine zustandsabhängige Byte-Bereitstellungsroutine mit zwei Quellen-/Betriebswegen, die durch DS:2FD4h unterschieden werden. Die genaue fachliche Bedeutung der Zustandsvariablen DS:06A6h/06A8h ist noch offen.
+
+3. Routine 177Ah – gepufferte Byteausgabe
+Parameter [BP+04h] ist ein Wortwert.
+- SI wird gesichert und BX erhält den Parameter.
+- Wenn der übergebene Wert dem aktuellen Wert DS:021Ah entspricht und DS:021Ch kleiner als 3Fh ist, wird DS:021Ch inkrementiert und die Routine kehrt zurück.
+- Andernfalls wird abhängig von DS:021Ah und DS:021Ch ein Sonderwert über 20E2h ausgegeben.
+- Danach werden ein oder mehrere gepufferte Werte über 20E2h ausgegeben; abschließend wird DS:021Ah auf den neuen Wert gesetzt und DS:021Ch auf 1 initialisiert.
+
+Routine 20E2h:
+- Verwendet einen Zeiger-/Zählerdeskriptor, auf den das zweite Argument zeigt.
+- Solange dessen Wort bei +2 nicht negativ wird, erhöht sie das Wort am Deskriptoranfang, schreibt das übergebene Byte an die Position vor dem aktuellen Zeiger und kehrt zurück.
+- Bei erschöpftem Puffer ruft sie 2D90h auf und übergibt Pufferdeskriptor und Byte.
+
+Damit ist 177Ah als zustandsabhängige Ausgaberoutine mit Wiederholungszählung und Pufferübergabe einzuordnen. Gleiche aufeinanderfolgende Werte werden zunächst gezählt, statt jedes Mal sofort einzeln geschrieben zu werden. Die konkrete Serialisierung des Laufs wird von 20E2h/2D90h erledigt.
+
+4. Zusammenhang mit Routine 1922h
+1922h verwendet 1638h als Bytequelle und 177Ah als Ausgabesenke.
+- Es berechnet zunächst DI = (Argument+7) >> 3.
+- In einem Zweig wird 1638h wiederholt aufgerufen und die gelieferten Bytes nach DS:06C2h geschrieben.
+- In einem weiteren Zweig werden Bytes von 1638h gelesen, mit einem Bit-/Maskenpfad kombiniert und in DS:30E8h eingearbeitet.
+- Anschließend werden die Bytes des temporären Bereichs DS:30E8h über 177Ah ausgegeben; pro Ausgabesegment wird zusätzlich FFFFh als Sonder-/Abschlusswert an 177Ah übergeben.
+- Ein anderer Zweig ruft 1638h und 177Ah direkt in einer Schleife auf und schließt ebenfalls mit FFFFh ab.
+
+5. Zusammenhang mit 20E2h und 2FCAh
+162Ch übergibt DS:2FCAh an 210Eh. 210Eh/20E2h verwenden einen Pufferdeskriptor und rufen bei Bedarf 2CFC/2D90 auf, um Daten aus einem externen bzw. nachgelagerten Pufferpfad zu beziehen oder dorthin abzugeben.
+Wichtig: DS:2FCAh ist in diesem Teil des Programms nicht selbst ein Icon- oder Dokument-Token, sondern ein Zeiger auf einen gepufferten Datenstrom-/Pufferdeskriptor. Die exakte Struktur und der Ursprung dieses Deskriptors müssen in den Erzeuger- und Verbraucherpfaden weiter bestätigt werden.
+
+6. Was sich daraus über die Rasterdaten sagen lässt
+Die Analyse stützt eine Pipeline mit drei unterscheidbaren Ebenen:
+A. Bytebereitstellung über 1638h (Quell-/Zustandslogik).
+B. Bit- und Byteumformung in 1922h (Zwischenbereich DS:06C2h und DS:30E8h).
+C. Lauflängen-/Puffer-Ausgabe über 177Ah -> 20E2h -> 2D90h.
+Dies ist ein starker Hinweis auf eine komprimierende oder lauflängenorientierte Ausgabe. Die konkrete Bedeutung von 177Ah-Wiederholungszählung und FFFFh-Steuerwert muss durch Analyse von 2D90h und der nachgelagerten Dateischreibfunktion bestätigt werden. Noch keine Aussage über ein vollständiges öffentliches Icon-Binärformat.
+
+7. Konsequenz für GEOTEST.GEO
+Diese Ergebnisse erklären einen Teil des internen IconMake-Konvertierungs-/Ausgabepfads, aber noch nicht die GeoWorks-1.x-Dateitypregistrierung oder den Mechanismus, mit dem der GeoManager das Dokumenticon auswählt.
+Für den GEOTEST-Prototyp bleibt der sichere Entwicklungsweg:
+- zuerst ein einfaches Dokumentformat und Speichern/Laden in GEOTEST.GEO,
+- parallel Dateityp-/Token-Mechanismus von GeoWorks 1.x klären,
+- erst danach das eigene Dokumenticon in der nachgewiesenen Ressourcenform einbinden.
+Kein PC/GEOS-2.x-Verfahren übernehmen.
+
+8. Ergebnisstatus
+Gesichert: 1638h liefert zustandsabhängig Bytes; 177Ah puffert gleiche Werte über einen Wiederholungszähler und leitet die Ausgabe an 20E2h weiter; 1922h verbindet Bytequelle, Bit-/Byteumformung und Ausgabepfad.
+Offen: Semantik aller Zustandsfelder, exakte Kodierung des RLE-/Pufferstroms, genaue Rolle von FFFFh, Aufbau der finalen Icon-Ressource und Dokument-Token-Registrierung.
+Statische 8086-Analyse der unveränderten EXE; keine Laufzeitmessung und kein Patch.
