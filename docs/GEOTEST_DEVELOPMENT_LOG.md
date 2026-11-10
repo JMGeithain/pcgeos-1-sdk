@@ -2351,3 +2351,19 @@ Die inverse Dekodierregel für 1894h ist noch nicht vollständig rekonstruiert. 
 **Status:** Nur Disassemblierung und statische Prüfung. Keine GEO-, PCX-, BAT-, README-, Token- oder TOKEN.DB-Datei geändert. Kein GeoWorks-1.2-Laufzeittest. Keine PC/GEOS-2.x- oder FreeGEOS-Bitmapdefinitionen als Beleg verwendet.
 
 Details: [ICONMAKE_EGA_PIXEL_PIPELINE_2370.TXT](ICONMAKE_EGA_PIXEL_PIPELINE_2370.TXT).
+
+
+## 50. Untersuchung 2371 – Ausgabecodierer und MZ-Offsetzuordnung
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.
+
+Die MZ-Kopfgröße von ICONMAKE.EXE beträgt 0200h Byte (e_cparhdr = 0020h). Damit entsprechen den bisher verwendeten Dateioffsets die um 0200h kleineren Codeoffsets im geladenen Abbild. Beispiel: Dateioffset 1894h entspricht Codeoffset 1694h.
+
+Die Routine am Dateioffset 1894h wurde vollständig bis zu ihren Verzweigungen untersucht. Sie nutzt 2FD4h als Schalter des komprimierten Ausgabepfads, 06AAh als Zeiger/Zustand für das aktuelle Steuerbyte und 2FE6h als Ausgabecursor. FEh wird bei einer erkannten Wiederholung als Marker geschrieben; 00h initialisiert einen neuen Steuerbereich. FFFFh ist ein Steueraufruf zum Zurücksetzen des Zustands. Die positiven und negativen Steuerbytepfade verändern Zähler und können die Ausgabeposition zurücknehmen.
+
+Damit ist ein zustandsbehafteter Encoderpfad mit Wiederholungserkennung belegt. Die vollständige Bytegrammatik und ein korrekter Rückwärtsdecoder sind aber noch offen; es wird noch keine Pixelrekonstruktion behauptet.
+
+**Status:** Statische Disassemblierung und Zustandsanalyse. Keine Token-/GEO-/PCX-/BAT-/README-/TOKEN.DB-Datei geändert. Kein GeoWorks-Laufzeittest. Keine PC/GEOS-2.x-/FreeGEOS-Definitionen verwendet.
+
+Details: [ICONMAKE_OUTPUT_ENCODER_2371.TXT](ICONMAKE_OUTPUT_ENCODER_2371.TXT).
