@@ -89,6 +89,24 @@ These strings prove that WRITE.GEO includes GeoWrite UI and ASCII import/export 
 
 The earlier candidate `GEOWORKS/WORLD/NOTEPAD.GEO` is not a native-document template. It uses DOS-ASCII files (including the `notiz.txt` string) and must not be used to infer GEOTEST's native document structure. Its UI/file-selector patterns may be examined separately if needed, but they are outside the native document-format investigation.
 
+## Starker Befund: GeoWrite- und GeoDraw-Dokument-Token
+
+Ein byteweiser Vergleich mit der ebenfalls vorhandenen nativen Anwendung `DRAW.GEO` zeigt eine wiederkehrende Token-Anordnung in Objektressourcen:
+
+| Anwendung | App-Token im Geode-Header (Offset 0014h) | Token-Paar in Objektressource |
+|---|---|---|
+| GeoWrite / `WRITE.GEO` | `WP00` | `WDAT\0\0 WP00\0\0` |
+| GeoDraw / `DRAW.GEO` | `DP00` | `DDAT\0\0 DP00\0\0` |
+
+Exakte Fundstellen:
+- `WRITE.GEO`: Ressource 9, Datei-Offset `9A4Ch`; `WDAT` beginnt bei `9A4Ch`, `WP00` bei `9A52h`.
+- `DRAW.GEO`: Ressource 6, Datei-Offset `27DAh`; `DDAT` beginnt bei `27DAh`, `DP00` bei `27E0h`.
+- Die App-Tokens `WP00` und `DP00` stimmen jeweils mit dem Token im Geode-Header bei Offset `0014h` überein.
+
+Das ist ein starker struktureller Hinweis auf ein Paar aus anwendungsspezifischem Daten-/Dokument-Token (`WDAT` bzw. `DDAT`) und zugehörigem App-/Creator-Token (`WP00` bzw. `DP00`). Die genaue Feldsemantik und der Weg, auf dem GeoManager daraus das Dokument-Icon auswählt, sind noch nicht vollständig nachgewiesen. Die Token-Paare dürfen daher noch nicht als vollständige Dokumentregistrierung behandelt werden.
+
+Im aktuellen experimentellen `GEOTEST.GEO` steht das App-Token `GTS1` im Header bei Offset `0014h`. Eine entsprechende zweite Token-Kennung für ein eigenes Dokument wurde im aktuellen Build nicht gefunden. Das bestätigt, dass die bisherige Test-App noch keine nachgewiesene native Dokumentregistrierung enthält.
+
 ## What is not yet proven
 
 This pass has not yet identified:
