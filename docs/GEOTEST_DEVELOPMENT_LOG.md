@@ -2205,3 +2205,23 @@ Damit ist keine bytebelegte Referenzkette von Ressource 4 zu den sechs separaten
 - Die Untersuchungsprotokolle und die Zusammenfassung in `docs/GEOTEST_ICON.md` sind im Repository dokumentiert.
 
 **Nächster Schritt 2363:** Die tatsächlichen ICONMAKE-Tabelleneinträge und die geladenen Datenblöcke vollständig rekonstruieren. Danach die native Moniker-Struktur der GEOTEST-Ressourcen 5–10 mit verifizierten GeoWorks-1.x-Referenzressourcen vergleichen. Erst auf dieser Grundlage die Farb-/Monochrom-Zuordnung und den tatsächlichen Auswahlpfad festlegen.
+
+
+## 42. Untersuchung 2363 – Zuordnung der ICONMAKE-Provider-Iconvarianten
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** GeoWorks / PC/GEOS 1.x.
+
+Die bereits extrahierten PAPR- und GDOC-Provider bestätigen unabhängig dieselbe Zuordnung ihrer Ressourcen R4–R6:
+
+- R4: Präfixbyte 0x61, 48×14, PCX-Extraktion 1-Bit monochrom → CGA.
+- R5: Präfixbyte 0x41, 48×30, PCX-Extraktion 1-Bit monochrom → HGC.
+- R6: Präfixbyte 0x46, 48×30, PCX-Extraktion 4-Bit palettiert → EGA.
+
+Die ICONMAKE-Datensätze übergeben die Tabellenindizes 6, 5 und 4 (jeweils mit Zusatzoffset 0x0022) an den Blocklader 1558h. Die Indizes sind mit der Reihenfolge der drei Providerklassen konsistent. Die unmittelbare 32-Bit-Tabellenauflösung zu absoluten Dateioffsets wurde in Untersuchung 2363 jedoch nicht erneut ausgeführt, da PAPR.000 und GDOC.000 in der aktuellen Arbeitsumgebung nicht als separate Originaldateien vorlagen. Die Index-zu-Klassen-Zuordnung wird daher als stark gestützt, aber noch nicht positionsgenau reproduziert geführt.
+
+Wichtige Abgrenzung: GEODE-Ressourcenindex, ICONMAKE-Kontextindex und lokaler LMem-Chunk-Handle sind unterschiedliche Nummernräume. Die in GEOTEST.GEO untersuchten Ressourcen 5–10 dürfen nicht allein aufgrund ähnlicher Nummern oder Handlewerte als CGA/HGC/EGA klassifiziert werden.
+
+Details und Beweisgrenzen: [ICONMAKE_PROVIDER_VARIANT_MAPPING_2363.TXT](ICONMAKE_PROVIDER_VARIANT_MAPPING_2363.TXT).
+
+**Status:** Keine Originaldatei verändert, kein neuer Build, kein Laufzeittest, TOKEN.DB unverändert. Nächster Schritt 2364 ist die erneute Byteauflösung der absoluten Tabellenpositionen und geladenen Blöcke aus PAPR.000/GDOC.000; anschließend ist die unabhängige Dekodierung der GEOTEST-Ressourcen 5–10 fortzusetzen.
