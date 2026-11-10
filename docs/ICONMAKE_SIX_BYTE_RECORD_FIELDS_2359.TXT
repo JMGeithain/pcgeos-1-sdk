@@ -1,0 +1,96 @@
+ICONMAKE – Untersuchung 2359
+=============================
+
+Thema
+-----
+Sechs-Byte-Ressourceneinträge bei 0BB0h: tatsächliche Feldwerte und Übergabe an 0010h.
+
+Untersuchungsbasis
+------------------
+Originalarchiv: GEOWORKS.zip
+Datei: GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Extrahierte EXE: 19,477 Bytes
+MZ-Header: 512 Bytes
+Geladenes Modul: 18,965 Bytes
+SHA-256 der EXE:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Zusätzlich untersuchte Originaldateien:
+- GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/PAPR.000 (2,208 Bytes)
+- GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/GDOC.000 (2,256 Bytes)
+Die beiden Dateien GEOWORKS/ICONS/PAPR.000 und GEOWORKS/ICONS/GDOC.000 enthalten dieselben Bytes wie die jeweiligen Dateien unter ICONEDIT.OR.
+
+1. Die drei Einträge im Original
+-------------------------------
+In PAPR.000 und GDOC.000 stehen die drei von ICONMAKE geprüften Einträge an denselben Datei-Offsets:
+
+Datei-Offset  Bytes                 WORD-Felder (little endian)
+03B4h         C6 10 22 00 06 10    10C6h | 0022h | 1006h
+03BAh         C1 10 22 00 05 10    10C1h | 0022h | 1005h
+03C0h         E1 10 22 00 04 10    10E1h | 0022h | 1004h
+
+Die Einträge sind jeweils exakt sechs Bytes lang. Die ersten WORDs entsprechen exakt den drei Vergleichskonstanten im Code. Das zweite WORD ist in allen drei Fällen 0022h. Das dritte WORD unterscheidet sich nur im hohen Byte bzw. im niedrigen Wert: 1006h, 1005h und 1004h.
+
+2. Verarbeitung in der Schleife 0BB9h–0C01h
+-------------------------------------------
+Nach dem dritten Aufruf von 1558h bei 0BB0h:
+- Der zurückgegebene Blockzeiger wird in [BP-06h] gesichert.
+- Die von 1558h über den optionalen Größenzeiger geschriebene Größe steht in [BP-0Ch].
+- Die Größe wird durch 6 dividiert (BC1h: DIV CX mit CX=6).
+- Der Quotient ist die Anzahl der sechs Byte langen Einträge.
+- Der Code bildet den Zeiger auf den letzten Eintrag und durchläuft die Einträge rückwärts in Schritten von sechs Bytes.
+- Die Schleife vergleicht das erste WORD des Eintrags mit 10C6h, 10C1h und 10E1h.
+
+Für jeden Treffer werden die weiteren Felder wie folgt übergeben:
+- Eintragsadresse +2: WORD wird unverändert als zweites Argument für 0010h übergeben.
+- Eintragsadresse +4: WORD wird geladen; anschließend wird AH mit 0Fh maskiert. Damit wird aus 1006h der Wert 0006h, aus 1005h der Wert 0005h und aus 1004h der Wert 0004h.
+- Zeiger auf den ersten geladenen Block +1Eh: wird als erstes Argument übergeben.
+
+3. Bedeutung der drei Argumente in 0010h
+----------------------------------------
+Der Aufruf bei 0BF7h ist CALL 0010h. Die Aufrufreihenfolge auf dem Stack ergibt für die Routine:
+- [BP+04h] = Zeiger auf den ersten Block +1Eh
+- [BP+06h] = maskiertes WORD aus Eintrag +4 (in den drei konkreten Datensätzen: 0006h, 0005h, 0004h)
+- [BP+08h] = WORD aus Eintrag +2 (in den drei konkreten Datensätzen: 0022h)
+
+Die Routine 0010h verwendet diese beiden letzten Werte unmittelbar beim ersten Aufruf von 1558h bei 003Bh:
+- Kontext: DS:[40E8h]
+- Tabellenindex: [BP+06h]
+- zusätzlicher Offset: [BP+08h]
+- optionaler Größenzeiger: 0
+
+Damit ist für die drei realen Datensätze belegt:
+- 10C6h führt zu Tabellenindex 6 und zusätzlichem Offset 0022h.
+- 10C1h führt zu Tabellenindex 5 und zusätzlichem Offset 0022h.
+- 10E1h führt zu Tabellenindex 4 und zusätzlichem Offset 0022h.
+
+Der von 1558h gelieferte Block wird anschließend von 0010h weiter geprüft und verarbeitet. Die Routine prüft unter anderem Byte +5 auf 1Ah. Die weitere Verarbeitung hängt außerdem vom ersten Byte des gelieferten Blocks ab.
+
+4. Gesicherte Erkenntnisse und Grenzen
+--------------------------------------
+Gesichert:
+- Die drei Vergleichswerte 10C6h, 10C1h und 10E1h sind die ersten WORDs real vorhandener sechs Byte langer Einträge.
+- Die drei Einträge liegen in PAPR.000 und GDOC.000 an 03B4h, 03BAh und 03C0h.
+- Das zweite WORD ist bei allen drei Einträgen 0022h und wird als zusätzlicher Offset an 1558h weitergereicht.
+- Das dritte WORD wird durch Maskierung des hohen Bytes auf 0006h, 0005h bzw. 0004h reduziert und als Tabellenindex an 1558h weitergereicht.
+- Die Einträge sind damit keine bloßen Kennungen: ihre Felder steuern konkret die Auswahl und Positionierung des nachgeladenen Ressourcenblocks.
+
+Noch nicht bewiesen:
+- Die symbolischen bzw. fachlichen Namen der Kennungen 10C6h, 10C1h und 10E1h.
+- Ob die Indizes 6, 5 und 4 unmittelbar CGA/HGC/EGA bezeichnen. Die ICONMAKE-Dokumentation beschreibt zwar diese drei Icon-Klassen, aber die Zuordnung der drei numerischen Indizes zu diesen Klassen ist durch diesen Codeabschnitt allein noch nicht nachgewiesen.
+- Die genaue Bedeutung des Offsets 0022h außerhalb seiner nachgewiesenen Funktion als Zusatzoffset für 1558h.
+
+5. Nächster Untersuchungsschritt (2360)
+---------------------------------------
+Die drei über 1558h geladenen Blöcke für Tabellenindizes 6, 5 und 4 sind bytegenau gegenüberzustellen. Dabei sind insbesondere zu erfassen:
+- Blocklänge und Headerbytes,
+- Bytes +0 bis +0Dh (einschließlich des bereits bekannten Prüfbytes +5=1Ah),
+- Byte +0Ch als Eingabe für 17F0h / DS:2FD4h,
+- Byte +0Dh als Bitfeld,
+- Beginn und Umfang der nachfolgenden Nutzdaten.
+
+Ziel ist, die Indizes 6/5/4 anhand der realen Blockinhalte den Iconvarianten zuzuordnen, ohne die Zuordnung aus den Bezeichnungen zu erraten.
+
+Methodik-Hinweis
+----------------
+Alle Adressen im Disassembly beziehen sich auf das geladene MZ-Modul (EXE-Dateioffset minus 0200h). Die Offsets 03B4h, 03BAh und 03C0h oben beziehen sich dagegen auf die vollständigen .000-Dateien.
