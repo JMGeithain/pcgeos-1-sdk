@@ -1,0 +1,90 @@
+ICONMAKE / GEOTEST – Untersuchung 2367
+Strukturelle Prüfung des hochgeladenen GTS10000.000
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Datei und Hash
+-----------------
+Eingabe: GTS10000(1).000
+Dateigröße: 1.760 Byte
+SHA-256: 7ea8625f66868038b3c1e7c99cc11c5134b8fa2b211b9b84c23767dd6e03b54f
+
+2. Identität und Header
+-----------------------
+- Tokenkennung bei Dateioffset 0014h: "GTS1"
+- Manufacturer ID bei 0018h: 0000h
+- Creator-Kennung bei 001Ah: "GEOS"
+- Ressourcenanzahl bei 00D0h: 7
+
+Damit passt die Datei strukturell zur erwarteten GTS1-Tokenausgabe mit
+Manufacturer ID 0. Der Dateiname allein wurde nicht als Identitätsbeleg
+verwendet; maßgeblich sind die Headerbytes.
+
+3. Ressourcentabelle
+--------------------
+Die sieben WORD-Größen beginnen bei 012Eh; die sieben DWORD-Positionen
+beginnen bei 013Ch.
+
+Index | Größe | Dateiposition | Ende exklusiv
+0     | 0000h | 0174h         | 0174h
+1     | 0060h | 0174h         | 01D4h
+2     | 00D0h | 01DCh         | 02ACh
+3     | 0140h | 02B0h         | 03F0h
+4     | 0030h | 0678h         | 06A8h
+5     | 0030h | 06ACh         | 06DCh
+6     | 0280h | 03F4h         | 0674h
+
+Alle Ressourcenenden liegen innerhalb der 1.760-Byte-Datei; die
+Positionen und Größen sind untereinander plausibel und überschneiden
+sich nicht.
+
+4. Variantensignaturen
+----------------------
+Die Bytes ab Ressourcenposition + 002Ah lauten:
+
+Ressource 4, Position 0678h, Größe 0030h:
+  61 01 00 01 00 00
+
+Ressource 5, Position 06ACh, Größe 0030h:
+  41 01 00 01 00 00
+
+Ressource 6, Position 03F4h, Größe 0280h:
+  46 30 00 1E 00 1A 3E 02 ...
+
+Die ersten Bytes 61h, 41h und 46h stimmen mit den in Untersuchung 2366
+aus PAPR.000/GDOC.000 extrahierten CGA-, HGC- und EGA-Provider-
+Signaturen überein. Die Ressource 6 enthält den umfangreichen EGA-
+Payload. Die Ressourcen 4 und 5 sind in dieser Token-Datei jeweils nur
+30h Byte groß; sie dürfen daher nicht ohne weitere Dekodierung als
+vollständige 48x14- bzw. 48x30-Pixelbilder bezeichnet werden. Der
+Signaturabgleich belegt zunächst nur die Format-/Variantensignaturen.
+
+5. M13/M14-Zuordnung – offene Frage
+-----------------------------------
+Die Datei enthält keinen in dieser Prüfung identifizierten expliziten
+ASCII- oder WORD-Vermerk "M13" oder "M14". Ihre Struktur allein reicht
+daher nicht aus, um sicher festzustellen, mit welchem der beiden
+Testaufrufe sie erzeugt wurde.
+
+Für einen belastbaren M13/M14-Vergleich werden benötigt:
+- die Angabe, aus welchem Testordner diese Datei stammt (M13 oder M14);
+- möglichst auch die zweite GTS10000.000-Datei aus dem anderen Testlauf.
+
+Erst durch einen byteweisen Vergleich der beiden Ausgaben und eine
+Dekodierung des EGA-Payloads kann festgestellt werden, welche
+Pixel-/Transparenzdaten sich durch den Parameter ändern. Ein einzelnes
+Ergebnis darf nicht ohne Referenzdatei einem der beiden Parameter
+zugeordnet werden.
+
+6. Status
+---------
+- Datei gelesen, gehasht und Ressourcentabelle geprüft.
+- GTS1 / Manufacturer 0 / GEOS bestätigt.
+- Variantensignaturen 61h / 41h / 46h im Tokenoutput gefunden.
+- Keine Änderung an der hochgeladenen Datei.
+- Kein ICONMAKE-Lauf in dieser Umgebung.
+- Kein GeoWorks-1.2-Laufzeittest.
+- Transparenzwirkung und M13/M14-Zuordnung noch nicht bestätigt.
+- Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+Ende Untersuchung 2367.
