@@ -4,7 +4,7 @@ Stand: 2026-11-10
 
 ## Ausgangspunkt
 
-Untersucht wird weiterhin ausschließlich GeoWorks / PC/GEOS 1.x. In Untersuchung 2383 wurden in `DESKTOPG.GEO`, Ressource 8, die Dateiverwalter-Schlüsselwörter und eine Schleife mit zwei Far-Calls bei Ressourcenoffsets `050Fh` und `0523h` gefunden.
+Untersucht wird weiterhin ausschließlich GeoWorks / PC/GEOS 1.x. In Untersuchung 2383 wurden in `DESKTOPG.GEO`, Ressource 8, die Dateiverwalter-Schlüsselwörter und eine Schleife mit zwei Far-Calls bei Ressourcenoffsets `0516h` und `052Ah` gefunden.
 
 Originaldatei:
 - `GEOWORKS/SYSAPPL/DESKTOPG.GEO`
@@ -34,21 +34,21 @@ Die in Untersuchung 2383 gefundenen Instruktionen lauten:
 
 | Ressourcenoffset | Dateioffset | Bytes | Disassemblierung |
 |---:|---:|---|---|
-| `050Fh` | `5C0Bh` | `9A 72 00 00 00` | `CALL FAR 0000:0072h` |
-| `0523h` | `5C1Fh` | `9A 71 00 00 00` | `CALL FAR 0000:0071h` |
+| `050Fh` | `5C12h` | `9A 72 00 00 00` | `CALL FAR 0000:0072h` |
+| `0523h` | `5C26h` | `9A 71 00 00 00` | `CALL FAR 0000:0071h` |
 
 Beim 8086-Far-Call stehen nach dem Opcode `9A` zuerst der 16-Bit-Offset und danach das 16-Bit-Segment. Die Segmentwörter befinden sich daher an Ressourcenoffsets:
-- erster Call: `0512h`
-- zweiter Call: `0526h`
+- erster Call: `0519h`
+- zweiter Call: `052Dh`
 
-Die 84 Relocation-Einträge der Ressource wurden auf diese beiden Quellpositionen geprüft. Es gibt keinen Relocation-Eintrag für `0512h` oder `0526h`.
+Die 84 Relocation-Einträge der Ressource wurden auf die tatsächlichen Segmentwortpositionen `0519h` und `052Dh` geprüft. Für keine dieser beiden Positionen ist ein Relocation-Eintrag vorhanden. Die zuvor genannten Positionen `0512h` und `0526h` waren um sieben Bytes verschoben.
 
 ## 3. Belastbare Aussage und Grenze
 
 Bestätigt ist:
 - Die beiden Far-Calls stehen im Code-/Datenbereich der Ressource 8.
 - Ihre Segmentwörter sind in der Rohdatei Null.
-- Die beiden Segmentwortpositionen sind nicht in der Relocation-Liste dieser Ressource enthalten.
+- Die beiden tatsächlichen Segmentwortpositionen sind nicht in der Relocation-Liste dieser Ressource enthalten.
 - Die Calls sind daher keine gewöhnlichen, durch diese Ressourcen-Relocationstabelle zu patchenden Segmentreferenzen.
 
 Nicht bestätigt ist:
