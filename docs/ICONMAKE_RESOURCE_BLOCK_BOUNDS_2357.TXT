@@ -1,0 +1,98 @@
+ICONMAKE – Untersuchung 2357
+1558h: Resource-Index, Dateipositionen und geladener Block
+Stand: 10.11.2026
+
+Untersuchungsgrundlage
+Programm: GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße: 19.477 Bytes
+Geladenes MZ-Modul: 18.965 Bytes
+SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Offsets beziehen sich auf den Anfang des geladenen MZ-Moduls.
+
+1. Parameter von 1558h
+Prolog und Parameterverwendung:
+1558h: PUSH BP
+1559h: MOV BP,SP
+155Bh: SUB SP,8
+155Eh: PUSH DI
+155Fh: PUSH SI
+1560h: MOV SI,[BP+04h]
+1563h: MOV BX,[SI+08h]
+1566h: MOV DI,[BP+06h]
+1569h: SHL DI,1
+156Bh: SHL DI,1
+156Dh: MOV AX,[BX+DI]
+1570h: MOV DX,[BX+DI+2]
+
+Damit:
+- [BP+04h] ist der Resource-Kontext.
+- Kontextfeld +08h zeigt auf eine Tabelle mit vier Byte breiten Einträgen.
+- [BP+06h] ist der Index in dieser Tabelle.
+- Der ausgewählte Eintrag wird als 32-Bit-Wert (DX:AX) übernommen.
+- [BP+08h] ist ein zusätzlicher Positionswert, der beim ersten Seek zum Offset addiert wird.
+- [BP+0Ah] ist ein optionaler Ausgabezeiger für einen zusätzlichen zurückgegebenen Wert.
+
+2. Erste Dateiposition und erstes Längen-/Positionswort
+1558h addiert [BP+08h] zum 32-Bit-Tabellenwert und ruft 217Eh mit Dateihandle, Position und Ursprung 0 auf:
+1578h–1587h: Seek über 217Eh.
+
+Anschließend werden genau zwei Bytes über 1EF8h in die lokale Variable [BP-08h] gelesen:
+158Ah–159Bh: Read von 2 Bytes.
+
+Das gelesene Word wird anschließend zur Berechnung einer zweiten Dateiposition verwendet.
+
+3. Zweite Dateiposition und Blocklänge
+Die zweite Seek-Position wird berechnet als:
+Tabellenoffset + erstes gelesenes Word - 2
+
+Die Instruktionen:
+15A1h–15B7h: Berechnung und Seek über 217Eh.
+
+Danach liest 1558h erneut genau zwei Bytes, diesmal nach [BP-06h]:
+15BDh–15CEh: Read von 2 Bytes.
+
+Dieses zweite Word wird als Größe für die Speicheranforderung verwendet:
+15D1h: PUSH [BP-06h]
+15D4h: CALL 212Ch
+
+Nach erfolgreicher Allokation wird genau diese Anzahl Bytes über 1EF8h in den neuen Speicherblock eingelesen:
+15DAh–15E9h: Read des Blocks.
+
+Der zurückgegebene Wert AX ist der Zeiger auf den neu geladenen Block. Falls [BP+0Ah] ungleich null ist, schreibt 1558h das zweite gelesene Word (Blockgröße) an diese Adresse:
+15ECh–15F8h.
+
+4. Was bedeutet das für Descriptor +0Eh?
+In der zuvor untersuchten Hauptverarbeitung wird der Rückgabewert von 1558h als Descriptor-/Blockbasis verwendet:
+- [BP-02h] erhält den Blockzeiger.
+- DS:2FE6h wird auf Blockbasis +0Eh gesetzt.
+
+Damit beginnt der in 1638h gelesene Byte-/Entpackstrom 14 Bytes nach Beginn des von 1558h eingelesenen Blocks.
+
+Wichtig: Die 14 Bytes sind ein Präfix innerhalb des geladenen Blocks. Die bisherige Disassemblierung belegt nicht, dass alle 14 Bytes ein einzelner Header mit einer einheitlichen Bedeutung sind. Ebenso ist die genaue Beziehung des ersten Positionsworts zum Ressourcenende noch nicht vollständig geklärt.
+
+5. Belastbare Aussagen über Blockgrenzen
+Gesichert:
+- Der Resource-Kontext enthält eine Tabelle von 4-Byte-Einträgen.
+- 1558h wählt anhand des Index einen 32-Bit-Dateioffset aus.
+- Ein erstes 16-Bit-Wort wird an einer daraus berechneten Dateiposition gelesen.
+- Dieses Wort wird zur Berechnung einer zweiten Dateiposition verwendet.
+- An der zweiten Position wird ein weiteres 16-Bit-Wort gelesen.
+- Dieses zweite Wort bestimmt die Allokations- und Leselänge des zurückgegebenen Blocks.
+- Die gelesene Datenmenge ist damit auf Blockebene explizit begrenzt.
+- Der Byte-/Entpackstrom beginnt im Hauptpfad bei Blockbasis +0Eh.
+
+Noch offen:
+- Ob das erste Word eine Ressourcenlänge, einen relativen Offset oder eine andere Positionsangabe codiert.
+- Ob das zweite Word die vollständige Größe einschließlich Präfix oder nur die Größe eines Teilbereichs beschreibt.
+- Ob das Ende des dekodierten Stroms zusätzlich durch einen Zähler oder ausschließlich durch den Blockinhalt bestimmt wird.
+- Ob unterschiedliche Resource-Varianten andere Präfixlayouts besitzen.
+
+6. Konsequenz
+Wir können jetzt die physische Lesebegrenzung des Eingabeblocks benennen, aber noch nicht die exakte Länge des dekodierten Datenstroms. Insbesondere darf aus der Blockgröße allein keine Pixelzahl abgeleitet werden, solange der 14-Byte-Präfix und mögliche Steuerdaten nicht vollständig interpretiert sind.
+
+7. Nächster Untersuchungsschritt
+Als Nächstes sind die konkreten Aufrufer von 1558h und die Werte für [BP+08h] zu vergleichen. Zusätzlich muss die Verwendung des optionalen Größen-Ausgabezeigers [BP+0Ah] verfolgt werden. Ziel ist, die beiden 16-Bit-Wörter semantisch einzuordnen und die tatsächliche Grenze des komprimierten bzw. direkten Datenstroms zu bestimmen.
+
+Ende Untersuchung 2357.
