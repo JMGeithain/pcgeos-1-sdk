@@ -178,3 +178,17 @@ A static disassembly of the supplied GeoWorks 1.x `ICONMAKE.EXE` identified a pr
 The routine at `0x1894` handles repeated adjacent output bytes and control values including `0xFE` and `0x00`, but its complete inverse decoding rule has not yet been reconstructed. Therefore the M13/M14 payloads are not yet claimed to be pixel-decoded. This narrows the next task to reconstructing that output encoding and validating it against the two supplied token files.
 
 See [investigation 2370](ICONMAKE_EGA_PIXEL_PIPELINE_2370.TXT). This analysis uses the original GeoWorks 1.x ICONMAKE binary only; no PC/GEOS 2.x or FreeGEOS bitmap definitions were used as evidence.
+
+
+## Output encoder state machine (investigation 2371)
+
+The MZ header is 0x200 bytes (`e_cparhdr = 0x20`). Earlier routine labels such as file offset `0x1894` are full-file offsets; the corresponding loaded code offset is `0x1694`. This distinction is now explicit in the investigation notes.
+
+The routine at file offset `0x1894` (code offset `0x1694`) uses:
+- `0x2FD4` as the compressed-output switch,
+- `0x06AA` as a pointer/state for the current control/run byte,
+- `0x2FE6` as the output cursor.
+
+It writes the `0xFE` marker during a repeated-byte path, initializes new control regions with `0x00`, and treats argument `0xFFFF` as a state-reset/control call. Positive and negative control-byte paths update counters and may rewind the output cursor. This is strong evidence for a stateful repeat/literal encoder, but not yet a complete formal byte-stream grammar. No inverse decoder or pixel reconstruction is claimed yet.
+
+See [investigation 2371](ICONMAKE_OUTPUT_ENCODER_2371.TXT).
