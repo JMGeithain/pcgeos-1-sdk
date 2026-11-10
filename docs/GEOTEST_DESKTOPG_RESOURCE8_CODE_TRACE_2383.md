@@ -54,8 +54,8 @@ Nach dem letzten Namen folgt ab Ressourcenoffset `0500h` wieder 8086-Code. Diese
 - `CS:[DI+055Ch]`
 
 Er enthält zwei unmittelbare Far-Call-Operanden:
-- Ressourcenoffset `050Fh`, Dateioffset `5C0Bh`: `CALL FAR 0000:0072h`
-- Ressourcenoffset `0523h`, Dateioffset `5C1Fh`: `CALL FAR 0000:0071h`
+- Ressourcenoffset `0516h`, Dateioffset `5C12h`: `CALL FAR 0000:0072h`
+- Ressourcenoffset `052Ah`, Dateioffset `5C26h`: `CALL FAR 0000:0071h`
 
 Zwischen diesen Aufrufen liegen bedingte Sprünge und die Schleifensteuerung über `DI`; der Code erhöht `DI` um zwei und vergleicht es mit `000Ch`. Die Tabellen werden damit in einer Schleife verarbeitet.
 
@@ -89,7 +89,7 @@ Er steht zusammen mit UI-Texten wie `Executable`, `Benennt ... um` und `Kopie vo
 1. `fileManager`, `filenameTokens`, `tokenPathnames`, `dosAssociations` und `dosParameters` liegen in DESKTOPG.GEO-Ressource 8.
 2. Ressource 8 enthält ausführbaren 8086-Code und direkt anschließende tabellenartige Datenbereiche.
 3. Der Code liest mehrere Tabellenadressen relativ zu CS und verarbeitet sie in einer Schleife.
-4. Die Schleife enthält zwei Far-Calls mit den numerischen Offsets `0072h` und `0071h`.
+4. Die Schleife enthält zwei Far-Calls mit den numerischen Offsets `0072h` und `0071h` (Instruktionsanfänge `0516h` und `052Ah`; die früher notierten Positionen `050Fh`/`0523h` waren Fehlzuordnungen zu den jeweils vorausgehenden MOV-Instruktionen).
 5. `VM-Datei` liegt in einer separaten UI-/LMem-Ressource 37.
 
 ## 8. Noch nicht bewiesen
