@@ -2367,3 +2367,19 @@ Damit ist ein zustandsbehafteter Encoderpfad mit Wiederholungserkennung belegt. 
 **Status:** Statische Disassemblierung und Zustandsanalyse. Keine Token-/GEO-/PCX-/BAT-/README-/TOKEN.DB-Datei geändert. Kein GeoWorks-Laufzeittest. Keine PC/GEOS-2.x-/FreeGEOS-Definitionen verwendet.
 
 Details: [ICONMAKE_OUTPUT_ENCODER_2371.TXT](ICONMAKE_OUTPUT_ENCODER_2371.TXT).
+
+
+## 51. Untersuchung 2372 – Aufruferkette des EGA-Ausgabecodierers
+
+**Datum:** 10.11.2026  
+**Geltungsbereich:** ausschließlich GeoWorks / PC/GEOS 1.x.
+
+Die MZ-bereinigte Disassemblierung bestätigt sieben direkte CALL-Stellen aus dem Pixel-/Ausgabepfad zum Encoder (Dateioffset 1894h, Codeoffset 1694h): Codeoffsets 1B03h, 1C1Bh, 1C4Ch, 1C96h, 1CBFh, 1CFFh und 1D18h.
+
+Die Routine am Dateioffset 197Ah (Codeoffset 177Ah) ist davon getrennt: Sie verwaltet Datenblöcke/Puffer und wird aus dem Aufbereitungspfad am Dateioffset 1B22h (Codeoffset 1922h) aufgerufen. Sie übergibt Daten an die Schreibfunktion bei Codeoffset 20E2h.
+
+Damit sind Bytecodierung und Block-/Pufferübergabe als getrennte Ebenen belegt. Der Encoder ist im tatsächlichen Bildverarbeitungspfad eingebunden. Seine vollständige inverse Bytegrammatik ist weiterhin offen.
+
+**Status:** Statische Aufrufkettenanalyse; keine Dateien geändert außer dieser Dokumentation. Keine Token-/GEO-/PCX-/BAT-/README-/TOKEN.DB-Datei verändert. Kein GeoWorks-Laufzeittest. Nur PC/GEOS 1.x.
+
+Details: [ICONMAKE_EGA_OUTPUT_CALLCHAIN_2372.TXT](ICONMAKE_EGA_OUTPUT_CALLCHAIN_2372.TXT).
