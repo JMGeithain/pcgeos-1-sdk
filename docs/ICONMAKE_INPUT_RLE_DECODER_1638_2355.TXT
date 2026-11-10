@@ -1,0 +1,90 @@
+ICONMAKE – Untersuchung 2355
+1638h als direkte Bytequelle und RLE-ähnlicher Entpacker
+Stand: 10.11.2026
+
+Untersuchungsgrundlage
+Programm: GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße: 19.477 Bytes
+Geladenes MZ-Modul: 18.965 Bytes
+SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933
+
+Offsets beziehen sich auf den Anfang des geladenen MZ-Moduls.
+
+1. Direkte Byte-Lesehilfe 161Eh
+161Eh liest ein Byte aus dem Eingabebereich:
+161Eh: MOV BX,[2FE6h]
+1622h: INC WORD [2FE6h]
+1626h: MOV AL,[BX]
+1628h: SUB AH,AH
+162Ah: RET
+
+Der Zeiger DS:2FE6h wird bei jedem Lesevorgang um eins erhöht. Rückgabe ist das gelesene Byte in AL, AH wird auf null gesetzt.
+
+2. Steuerung in 1638h
+1638h erhält einen Word-Parameter [BP+04h].
+- Ist der Parameter negativ, wird DS:06A6h auf null gesetzt und AX=0 zurückgegeben.
+- Ist DS:2FD4h gleich null, wird unmittelbar 161Eh aufgerufen und dessen Byte zurückgegeben.
+- Ist DS:2FD4h ungleich null, wird ein Steuerbyte-basierter Entpackpfad verwendet.
+
+3. Aufbau des Entpackpfads
+Der Entpackzustand liegt in:
+- DS:06A6h: Restzähler/Zustand der laufenden Folge.
+- DS:06A8h: gespeicherter Wiederholungswert.
+- DS:2FE6h: Eingabeposition.
+
+Wenn DS:06A6h beim Eintritt null ist, liest 1638h zunächst ein Steuerbyte über 161Eh.
+
+Fall A – Steuerbyte 00h bis 7Fh:
+- Das Steuerbyte wird in DS:06A6h übernommen und um eins erhöht.
+- Solange der Zähler positiv ist, wird er pro Aufruf dekrementiert.
+- Danach wird jeweils das nächste Byte direkt über 161Eh gelesen.
+Ergebnis: Es folgen Steuerbyte+1 wörtliche Datenbytes.
+
+Fall B – Steuerbyte 80h bis FFh:
+- Vom Steuerbyte wird 0101h subtrahiert.
+- Das Ergebnis ist ein negativer Zähler.
+- Das nächste Eingabebyte wird als Wiederholungswert in DS:06A8h gespeichert.
+- Bei jedem Aufruf wird der negative Zähler erhöht und der gespeicherte Wert zurückgegeben, bis der Zähler null erreicht.
+Ergebnis: Der Wiederholungswert wird (0101h-Steuerbyte)-mal ausgegeben.
+
+Beispiele aus der Rechenregel:
+- Steuerbyte 00h: 1 wörtliches Byte.
+- Steuerbyte 7Fh: 128 wörtliche Bytes.
+- Steuerbyte 80h: 129 Wiederholungen des folgenden Bytes.
+- Steuerbyte FFh: 2 Wiederholungen des folgenden Bytes.
+
+Die Zählerarithmetik und die Rückgabepfade in 1638h stützen diese Werte. Es handelt sich um die interne Eingangsdekodierung.
+
+4. Aufrufer und Verwendung
+Direkte Aufrufe von 1638h sind unter anderem:
+- 1809h innerhalb der Initialisierung 17F0h; dort wird der Aufruf mit FFFFh verwendet, um den Entpackzustand zurückzusetzen.
+- 1947h in 1922h; hier werden Werte in DS:06C2h zwischengespeichert.
+- 196Eh in 1922h; hier werden gelesene Werte mit DS:06C0h XOR-verknüpft und an 177Ah weitergegeben.
+- 19ECh in 1922h; hier werden Werte für die weitere Bit-/Byteverarbeitung gelesen.
+
+Damit ist belegt, dass 1922h den durch 1638h dekodierten Byte-/Wertstrom verarbeitet.
+
+5. Bedeutung von DS:2FD4h
+17F0h speichert seinen ersten Parameter in DS:2FD4h (MOV [2FD4h],AX bei 1822h).
+1638h prüft dieses Wort:
+- null: direkter Byteabruf über 161Eh.
+- ungleich null: Steuerbyte-basierte RLE-ähnliche Dekodierung.
+
+Die genaue semantische Herkunft des Parameters muss weiterhin aus den Aufrufern von 17F0h und den Descriptorfeldern hergeleitet werden. Die technische Wirkung auf 1638h ist jedoch eindeutig.
+
+6. Gesicherte Schlussfolgerung
+1638h ist keine bloße Auswahl zwischen zwei Eingabepuffern. Es ist:
+- im Nullmodus ein direkter Byte-Leser,
+- im Nichtnullmodus ein zustandsbehafteter Entpacker mit Literal- und Wiederholungsfolgen.
+
+Die Eingabekodierung ist damit konkret beschrieben:
+- 00h–7Fh: Literalfolge mit Länge Steuerbyte+1.
+- 80h–FFh: Wiederholungsfolge mit Länge 0101h-Steuerbyte; das folgende Byte ist der Wiederholungswert.
+
+Diese Aussage betrifft den Eingangsdatenstrom von ICONMAKE. Sie beweist nicht, dass die später geschriebene Datei dieselbe Kodierung verwendet oder dass der Strom eine vollständige Icon-Ressource darstellt.
+
+7. Nächster Untersuchungsschritt
+Als Nächstes sind die Aufrufer von 17F0h sowie die Herkunft der Parameter zu untersuchen, die DS:2FD4h und DS:2FE6h initialisieren. Danach kann die Eingangsdekodierung mit den konkreten Ressourcendaten und dem in 1922h erzeugten Zwischenbereich abgeglichen werden.
+
+Ende Untersuchung 2355.
