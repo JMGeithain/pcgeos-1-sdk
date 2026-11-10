@@ -57,8 +57,8 @@ Die BIOS-Probe `probe01/probe-results.json` enthält bereits konkrete VBE-Modusb
 
 | Auflösung | VBE-Modus | Pitch | Modell / Maske |
 |---|---:|---:|---|
-| 1024×768×16 | `0117h` | 2.048 Bytes | Direct Color, 5:6:5, Positionen 11/5/0 |
-| 1280×1024×16 | `011Ah` | 2.560 Bytes | Direct Color, 5:6:5, Positionen 11/5/0 |
+| 1024×768, Probe mit 16 bpp | `0117h` | 2.048 Bytes | Direct Color, 5:6:5, Positionen 11/5/0 |
+| 1280×1024, Probe mit 16 bpp | `011Ah` | 2.560 Bytes | Direct Color, 5:6:5, Positionen 11/5/0 |
 
 Die Probe meldet für beide Modi Status `004Fh`, Attribute `009Bh`, 64-KiB-Fenster und 64-KiB-Granularität. Das ist ein positiver BIOS-Probe-Befund für die bereitgestellte Basebox-Konfiguration. Es ist noch kein Laufzeittest dieser beiden Modi mit einem angepassten GEOS-Treiber.
 
