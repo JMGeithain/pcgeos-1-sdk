@@ -1,0 +1,64 @@
+ICONMAKE.EXE – Untersuchung 2347
+Bytevorlagen bei 0042h/0047h/004Ch und Datenfluss in 1922h
+Stand: 2026-11-10
+Projektgrenze: ausschließlich GeoWorks / PC/GEOS 1.x.
+
+1. Untersuchungsgrundlage
+Erneut untersucht wurde die unveränderte ICONMAKE.EXE aus:
+GEOWORKS/WORLD/PROGRAMM.E/ICONEDIT.OR/ICONMAKE.EXE
+Dateigröße 19.477 Byte; SHA-256:
+72960ca2c01ca1b42813ed530d26a95e1e568d64c954f51ba363261732252933.
+MZ-Header 0200h Byte; alle folgenden Offsets sind relativ zum Beginn des Lademoduls.
+
+2. Korrektur der Bezeichnung aus Untersuchung 2346
+Die in Routine 0010h verwendeten Startadressen 0042h, 0047h und 004Ch sind keine nachgewiesenen Textstrings. Sie liegen innerhalb des ausführbaren Instruktionsstroms von Routine 0010h. Der Code verwendet sie als Startadressen für SCASB/REPNE, sucht ab dort das erste Nullbyte und kopiert den Bereich bis vor dieses Nullbyte in den lokalen Puffer BP-0Ch.
+
+Die tatsächlich gelesenen Bytefolgen sind:
+- Start 0042h, Ende exklusiv 0054h, Länge 18: D8 89 5E FE 80 7F 05 1A 74 03 E9 55 01 8A 07 98 3D 61
+- Start 0047h, Ende exklusiv 0054h, Länge 13: 7F 05 1A 74 03 E9 55 01 8A 07 98 3D 61
+- Start 004Ch, Ende exklusiv 0054h, Länge 8: E9 55 01 8A 07 98 3D 61
+
+Alle drei Bereiche sind Suffixe desselben Codebytesegments und enden am ersten Nullbyte bei Moduloffset 0054h. Die Auswahl erfolgt nach dem ersten Descriptorbyte:
+- 61h -> Start 0042h
+- 41h -> Start 0047h
+- 46h -> Start 004Ch
+Der lokale Puffer wird danach als nullterminierte Bytefolge an weitere Routinen übergeben. Die Semantik dieser Bytefolgen ist nicht bewiesen. Insbesondere werden sie nicht als Dateinamen, Ressourcennamen oder menschenlesbare Kennungen bezeichnet.
+
+3. Descriptorfelder +08h und +0Ah: tatsächliche Weitergabe
+In Routine 0010h:
+- WORD [Descriptor+08h] wird nach DS:1D54h kopiert.
+- Derselbe Wert minus eins wird nach DS:1D50h kopiert.
+- WORD [Descriptor+0Ah] wird nach DS:1D56h kopiert.
+- Derselbe Wert minus eins wird nach DS:1D52h kopiert.
+Danach wird DS:1D54h um 7 erhöht, durch 8 geteilt und das Ergebnis nach DS:1D8Ah geschrieben.
+Anschließend wird 1922h in einer Schleife DS:1D56h-mal mit WORD DS:1D54h als Parameter aufgerufen.
+
+4. Routine 1922h: gesicherte Berechnungen
+Routine 1922h beginnt mit:
+- DI = (WORD [BP+04h] + 7) >> 3
+- prüft WORD DS:1C46h und WORD DS:2FCCh, um unterschiedliche Verarbeitungszweige auszuwählen.
+Damit wird der übergebene Wert zunächst in eine Bytezahl pro 8 Einheiten umgerechnet. Das ist ein typisches Maß für eine gepackte Bitzeile; allein aus dieser Rechnung ist aber noch nicht endgültig bewiesen, dass das Eingabefeld eine Pixelbreite ist.
+
+Im Zweig ab 1992h wird unter anderem:
+- ein Zähler aus (Argument+1)>>1 gebildet,
+- ein Ausgabebereich ab DS:30E8h adressiert,
+- die Routine 1638h wiederholt aufgerufen,
+- ein Zwischenwert mit DS:06C0h verknüpft,
+- Routine 177Ah aufgerufen,
+- Bits aus einem Hilfsbereich DS:06C2h gelesen und in den Ausgabebereich DS:30E8h eingearbeitet.
+Die Verarbeitung ist damit bit-/byteorientiert und erzeugt oder verändert einen gepackten Ausgabepuffer. Eine vollständige Dekodierung der Farb- und Pixeloperationen erfordert weitere Analyse von 1638h, 177Ah und den globalen Steuerfeldern.
+
+5. Vorläufige Einordnung der Descriptorfelder
+Die Verwendung von +08h als Argument einer Funktion, die daraus (Wert+7)>>3 berechnet und einen gepackten Datenpfad bedient, spricht dafür, dass +08h eine Größe in Bit-/Pixel-ähnlichen Einheiten repräsentiert. +0Ah steuert die Anzahl der Aufrufe der Zeilenverarbeitung. Diese Interpretation ist eine starke technische Indikation, aber noch keine endgültig bewiesene Felddefinition. Bis zur Bestätigung durch die Descriptor-Erzeuger und alle Verbraucher bleiben die Feldnamen neutral.
+
+6. Konsequenz für das GEOTEST-Dokumenticon
+Diese Untersuchung erklärt noch nicht die vollständige Icon-Ressourcenstruktur und auch nicht die Dateityp-Zuordnung. Sie grenzt aber einen nachgelagerten Raster-/Bitpuffer-Verarbeitungspfad ein. Für GEOTEST.GEO dürfen wir daraus noch keine fertige Icon-Binärstruktur ableiten. Weiter erforderlich sind:
+- genaue Analyse von 1638h und 177Ah,
+- Analyse des Descriptorbytes +0Dh und der globalen Flags,
+- Verbindung des erzeugten Puffers mit der konkreten PAPR-/GDOC-Ressource,
+- getrennte Analyse der GeoWorks-1.x-Dateitypregistrierung und des Dokument-Open-Mechanismus.
+
+7. Ergebnisstatus
+Gesichert: die drei Startadressen sind Bytebereiche im Code, keine Textstrings; die exakten Bytefolgen und Längen sind oben dokumentiert; Descriptor+08h/+0Ah steuern einen wiederholten bit-/byteorientierten Verarbeitungsweg in 1922h.
+Nicht gesichert: semantische Namen der Descriptorfelder, genaue Pixel-/Farbkodierung, Zuordnung zu einem bestimmten Icon-Ressourcentyp.
+Keine Laufzeitmessung und keine Änderung der EXE; ausschließlich statische 8086-Analyse.
