@@ -1,0 +1,101 @@
+GEOTEST / ICONMAKE – Untersuchung 2365
+Prüfung der Transparenzindex-Angaben in den vorhandenen PCX-Paketen
+Datum: 10.11.2026
+Geltungsbereich: ausschließlich GeoWorks / PC/GEOS 1.x
+
+1. Ausgangsmaterial
+-------------------
+Untersucht wurden die tatsächlich hochgeladenen ZIP-Dateien:
+- GEOTEST(1).ZIP
+- GEOTEST_ICON_Paket(1).zip
+- GEOTEST_DOKUMENT_ICONS_2305(1).zip
+
+Die Originaldateien ICONMAKE.EXE, PAPR.000 und GDOC.000 liegen weiterhin
+nicht in dieser Arbeitsumgebung vor. Daher wurde kein ICONMAKE-Lauf und
+keine native GeoWorks-Token-Erzeugung durchgeführt.
+
+2. PCX-Struktur
+---------------
+Die PCX-Dateien wurden anhand ihres PCX-Headers und der RLE-dekodierten
+Bilddaten geprüft.
+
+GTS1ICON.PCX:
+- Dateigröße: 858 Bytes
+- SHA-256: 23d2278b5a16c2a29e6f1a0f4bfd05e0fa3d69ecf66268df25ec0df90fbc322b
+- Header: 1 Bit je Plane, 4 Planes, 6 Bytes je Plane und Zeile
+- dekodierte Eckpixel: [13, 13, 13, 13]
+- verwendete Palettenindizes: 1 bis 15, darunter 13 und 14
+
+GTS1DOC_COLOR_48x30_M14_4PLANE.PCX:
+- Dateigröße: 1099 Bytes
+- SHA-256: cf6c7916d660bb2338a32a97ec8963590025b847d5f890ea36fce53a18fa7d9d
+- Header: 1 Bit je Plane, 4 Planes, 6 Bytes je Plane und Zeile
+- dekodierte Eckpixel: [14, 14, 14, 14]
+
+GTS1DOC_MONO_48x30_M14_4PLANE.PCX:
+- Dateigröße: 1092 Bytes
+- SHA-256: 1d8d210cf49b5940cd4d4983f01718eaa717773681e0e6f42bd40762490c8ea8
+- Header: 1 Bit je Plane, 4 Planes, 6 Bytes je Plane und Zeile
+- dekodierte Eckpixel: [14, 14, 14, 14]
+
+GEOTEST_EGA.PCX:
+- Dateigröße: 1994 Bytes
+- SHA-256: c3857a1c560a73918dc65acf211902f84059d3ab1bd3678a1594642e3fc61c0d
+- Header: 8 Bit je Pixel, 1 Plane, 48 Bytes je Zeile
+- dekodierte Eckpixel: [7, 7, 9, 7]
+
+3. Nachweisbarer Widerspruch
+----------------------------
+ERZEUGE.BAT aus GEOTEST(1).ZIP ruft auf:
+  ICONMAKE M14 GTS1,0 GTS1ICON.PCX
+
+Die zugehörige README.TXT behauptet zugleich:
+- Transparenzfarbe 14 sei Standard und werde mit M14 explizit gewählt.
+- Der PCX-Außenbereich habe Palettenindex 13.
+- ICONMAKE behandle diesen Außenbereich als transparent.
+
+Die tatsächlichen dekodierten Eckpixel von GTS1ICON.PCX sind 13,
+nicht 14. Die Behauptung, der Aufruf M14 mache diesen Rand transparent,
+ist durch die vorhandenen Dateien nicht belegt und steht im Widerspruch
+zur eigenen Angabe, dass M14 den Index 14 auswählt.
+
+Die beiden Dokument-PCX-Dateien haben dagegen tatsächlich Eckpixel 14
+und sind damit auf Dateiebene konsistent mit dem angegebenen M14-Index.
+Das beweist noch nicht die tatsächliche Transparenzwirkung in ICONMAKE
+oder GeoManager.
+
+4. Sichere Schlussfolgerung
+---------------------------
+- Die PCX-Daten von GTS1ICON.PCX enthalten an allen vier Ecken Index 13.
+- Die Batchdatei fordert M14 an.
+- Die README erklärt Index 13 für transparent.
+- Diese drei Angaben sind nicht widerspruchsfrei.
+- Die beiden Dokument-PCX-Dateien haben Eckpixel 14.
+- GEOTEST_EGA.PCX wird mit M0 (Transparenz deaktiviert) aufgerufen und
+  hat daher aus dem Dateibefund heraus keine entsprechende M14-Anforderung.
+
+Nicht bestätigt werden kann ohne ICONMAKE.EXE und einen nativen Test,
+ob ICONMAKE eine andere, hier nicht dokumentierte Transparenzregel oder
+Farbumsetzung verwendet. Deshalb wird GTS1ICON.PCX nicht automatisch
+korrigiert.
+
+5. Nächste Schritte
+-------------------
+1. Original ICONMAKE.EXE aus GeoWorks 1.x bereitstellen.
+2. Die PCX-Dateien in getrennten Testläufen mit M14 bzw. M0 verarbeiten.
+3. Ausgabedateien sichern, hashen und intern strukturell vergleichen.
+4. Die resultierenden Tokenicons in einer gesicherten GeoWorks-1.2-Umgebung
+   mit GeoManager prüfen.
+5. Erst nach diesem Test README und Batchdatei berichtigen.
+
+6. Änderungs- und Teststatus
+----------------------------
+- Keine PCX-Datei verändert.
+- Keine Batchdatei oder README verändert.
+- GEOTEST.GEO unverändert.
+- TOKEN.DB unverändert.
+- Kein ICONMAKE-Lauf.
+- Kein GeoWorks-Laufzeittest.
+- Keine PC/GEOS-2.x- oder FreeGEOS-Definitionen verwendet.
+
+Ende Untersuchung 2365.
