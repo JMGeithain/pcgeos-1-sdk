@@ -118,3 +118,12 @@ A discrepancy exists in the older GTS1ICON.PCX: its four corner pixels are palet
 The separate GEOTEST_EGA.PCX is 8 bpp / one plane, unlike the four-plane assets, and has non-uniform corner indices (7 and 9). It is described as an opaque M0 input and must not be conflated with the M14 assets.
 
 See [investigation 2364](GEOTEST_ICON_INPUT_AUDIT_2364.TXT) for hashes, header fields, pixel counts, and test boundaries. No token was generated, no GEO or PCX file was modified, and no runtime test was performed.
+
+
+## Transparency-index discrepancy (investigation 2365)
+
+A fresh RLE decode of the uploaded PCX files found that all four corner pixels of `GTS1ICON.PCX` are palette index 13, while its batch file invokes `ICONMAKE M14`. Its README says index 13 is transparent. Those statements are internally inconsistent if M14 selects index 14, as the same README claims. The two separate document PCX files have all four corner pixels at index 14 and are structurally consistent with M14 at the file-data level.
+
+This is not proof of ICONMAKE's actual transparency behavior. The original ICONMAKE executable is still unavailable in the current workspace, so no native output or GeoManager test was performed. Do not alter the PCX, batch file, or README until the original GeoWorks 1.x ICONMAKE test resolves the discrepancy.
+
+See [investigation 2365](GEOTEST_ICON_TRANSPARENZ_WIDERSPRUCH_2365.TXT). No GEO, PCX, token, or TOKEN.DB file was modified.
