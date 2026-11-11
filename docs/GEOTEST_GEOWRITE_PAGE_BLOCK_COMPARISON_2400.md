@@ -23,9 +23,9 @@ Der Parser prüft GEOS-Dateisignatur `C7 45 CF 53`, VM-Signatur `ADEBh), liest d
 | VM-Flag | `01FFh` | `01FFh` | `01FFh` |
 | LMem-Handle-Tabellenoffset | `0020h` | `0020h` | `0020h` |
 | Chunk-Slots | 38 | 38 | 38 |
-| Aktive Chunk-Handles | 19 | 19 | 19 |
+| Aktive Chunk-Payloads im Dump | 18 | 18 | 18 |
 
-Hinweis: Der LMem-Parser zählt die Handle-Slots; in diesen drei Blöcken sind die im Dump sichtbaren aktiven Chunks `20h` bis `42h` in geraden Schritten. Die Slotanzahl beträgt 38, nicht 38 aktive Chunk-Payloads. Bei der Auswertung sind Handle-Slot-Zahl und aktive Chunk-Anzahl zu unterscheiden.
+Hinweis: Der LMem-Parser zählt die Handle-Slots; in diesen drei Blöcken sind die im Dump sichtbaren aktiven Chunks `20h` bis `42h` in geraden Schritten. Die Slotanzahl beträgt 38; davon sind in jedem dieser drei Blöcke 18 Chunk-Payloads belegt. Bei der Auswertung sind Handle-Slot-Zahl und aktive Chunk-Anzahl zu unterscheiden.
 
 ## 4. Vergleich der ersten Chunks
 
