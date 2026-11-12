@@ -54,7 +54,7 @@ Das Wort bei +0x0C ist je nach Provider und Typ unterschiedlich:
 |---|---:|---:|---:|---:|
 | 04 | `0x0094` | `0x0098` | `0x0094` | `0x0098` |
 | 05 | `0x00F4` | `0x010C` | `0x00F4` | `0x010C` |
-| 06 | `0x0230` | `0x02F0` | `0x0330` | `0x02F0` |
+| 06 | `0x0230` | `0x02F0` | `0x0230` | `0x02F0` |
 
 Diese Werte könnten relative Verweise oder Größen-/Positionsangaben sein. Ihre Bezugsbasis und genaue Funktion sind mit diesem Vergleich allein nicht geklärt. Sie dürfen daher noch nicht als Dateioffsets oder Ressourcennummern interpretiert werden.
 
