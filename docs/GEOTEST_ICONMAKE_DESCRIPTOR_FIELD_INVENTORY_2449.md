@@ -31,7 +31,7 @@ Jeder erkannte Deskriptor beginnt mit der 4-Byte-Signatur `23 00 00 00`. Die nac
 | +0x0A | 2 | 02 00 | gleich | gleich | unbekannt |
 | +0x0C | 2 | variabel | variabel | variabel | unbekannt; kein bestätigter Pointer |
 | +0x0E | 2 | 02 00 | gleich | gleich | unbekannt |
-| +0x10–+0x16 | 14 | meist 00 | meist 00 | meist 00 | reserviert/unbekannt |
+| +0x10–+0x16 | 8 | meist 00 | meist 00 | meist 00 | reserviert/unbekannt |
 | +0x18–+0x22 | 12 | überwiegend 00 | überwiegend 00 | überwiegend 00 | unbekannt; teils Vorlage-spezifische Abweichung |
 | +0x24 | 2 | 26 00 | gleich | gleich | unbekannt |
 | +0x26 | 2 | 2A 00 | gleich | gleich | unbekannt |
@@ -50,30 +50,30 @@ Hinweis: Die Tabelle zeigt gemeinsame Strukturmerkmale. Einzelne Felder zwischen
 
 ### Typ 04 (CGA), Deskriptor 0x3F0
 
-| Datei | +0x0C | +0x18 | +0x2C/+0x2D | +0x34/+0x35 | +0x36/+0x38 |
+| Datei | +0x0C | +0x18 | Rohbytes +0x2C–+0x2F | Rohbytes +0x34–+0x37 | +0x36/+0x38 |
 |---|---:|---:|---|---|---|
-| GTI1 | 0x0094 | 0x0000 | 6C 61 | 61 30 | 48×14 |
-| GDOC | 0x0094 | 0x00A0 | 6C 61 | 61 30 | 48×14 |
-| GTI2 | 0x0098 | 0x0000 | 70 61 | 65 30 | 48×14 |
-| PAPR | 0x0098 | 0x00A0 | 70 61 | 65 30 | 48×14 |
+| GTI1 | 0x0094 | 0x0000 | 6C 00 61 30 | 61 00 30 00 | 48×14 |
+| GDOC | 0x0094 | 0x00A0 | 6C 00 61 30 | 61 00 30 00 | 48×14 |
+| GTI2 | 0x0098 | 0x0000 | 70 00 61 30 | 65 00 30 00 | 48×14 |
+| PAPR | 0x0098 | 0x00A0 | 70 00 61 30 | 65 00 30 00 | 48×14 |
 
 ### Typ 05 (HGC), Deskriptor 0x494
 
 | Datei | +0x0C | +0x18 | +0x2C/+0x2D | +0x34/+0x35 | +0x36/+0x38 |
 |---|---:|---:|---|---|---|
-| GTI1 | 0x00F4 | 0x0000 | CA 41 | BF 30 | 48×30 |
-| GDOC | 0x00F4 | 0x0000 | CA 41 | BF 30 | 48×30 |
-| GTI2 | 0x010C | 0x0000 | E1 41 | D6 30 | 48×30 |
-| PAPR | 0x010C | 0x0110 | E1 41 | D6 30 | 48×30 |
+| GTI1 | 0x00F4 | 0x0000 | CA 00 41 30 | BF 00 30 00 | 48×30 |
+| GDOC | 0x00F4 | 0x0000 | CA 00 41 30 | BF 00 30 00 | 48×30 |
+| GTI2 | 0x010C | 0x0000 | E1 00 41 30 | D6 00 30 00 | 48×30 |
+| PAPR | 0x010C | 0x0110 | E1 00 41 30 | D6 00 30 00 | 48×30 |
 
 ### Typ 06 (EGA), Deskriptorposition 0x598 oder 0x5A8
 
 | Datei | +0x0C | +0x18 | +0x2C/+0x2D | +0x34/+0x35 | +0x36/+0x38 |
 |---|---:|---:|---|---|---|
-| GTI1 | 0x0230 | 0x0000 | 06 46 | FB 30 | 48×30 |
-| GDOC | 0x0230 | 0x0330 | 06 46 | FB 30 | 48×30 |
-| GTI2 | 0x02F0 | 0x0000 | C8 02 | BD 02 | 48×30 |
-| PAPR | 0x02F0 | 0x02F0 | C8 02 | BD 02 | 48×30 |
+| GTI1 | 0x0230 | 0x0000 | 06 00 46 30 | FB 00 30 00 | 48×30 |
+| GDOC | 0x0230 | 0x0330 | 06 00 46 30 | FB 00 30 00 | 48×30 |
+| GTI2 | 0x02F0 | 0x0000 | C8 02 46 30 | BD 02 30 00 | 48×30 |
+| PAPR | 0x02F0 | 0x02F0 | C8 02 46 30 | BD 02 30 00 | 48×30 |
 
 Die Felder +0x18 und +0x0C dürfen nicht gleichgesetzt werden. Die Tabelle zeigt, dass Originalprovider an +0x18 teils Werte tragen, während ICONMAKE-Dummys an dieser Stelle Nullen aufweisen. Auch daraus wird noch keine Semantik abgeleitet.
 
