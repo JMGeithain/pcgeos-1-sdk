@@ -182,3 +182,19 @@ Wenn mit „neue GEO“ die nächste Version gemeint ist, die ein echtes Dokumen
 ## 10. Versionsabgrenzung
 
 Nur GeoWorks 1.x / PC/GEOS 1.x. Die Datei besitzt Format-1-Signatur `C7 45 CF 53` und Kernel-Protokoll 622.3. PC/GEOS 2.x-/FreeGEOS-Implementierungen wurden nicht als Belege herangezogen.
+
+
+## 11. Zusätzliche Prüfung: GEOWORKS.zip erfüllt das SDK-Zielprofil
+
+Die vier vom SDK-Profil `geoworks-1.2.8-de` geforderten Template-Dateien wurden direkt aus dem Nutzerarchiv `GEOWORKS.zip` gehasht. Alle vier Hashes stimmen exakt mit `docs/TARGET_COMPATIBILITY.md` überein:
+
+| Datei im Archiv | SHA-256 | Ergebnis |
+|---|---|---|
+| `GEOWORKS/WORLD/PROGRAMM.E/SPINTEXT.GEO` | `18f2075c9d61fe7231b1dacae8c171e68c2028ef2fca6d40a6694158fdfcb9fd` | Treffer |
+| `GEOWORKS/WORLD/NOTEPAD.GEO` | `a1ebd0cb84712a126b1f67f5fd1ca6b57f8bda2e9038e9224ba16ebc008f9ea9` | Treffer |
+| `GEOWORKS/WORLD/VIEWER.GEO` | `c884b76cdc4f9119d4794f7830d5438e0abcc1d92d3cc248aa912bde85ed43e7` | Treffer |
+| `GEOWORKS/WORLD/TERM.GEO` | `a62ebc0fb3c01acb4b59c8172d20d520653822a6d42f0bec4831dfdb93e1cf3a` | Treffer |
+
+Wichtig: Das Archiv enthält zusätzlich eine andere `SPINTEXT.GEO` unter `GEOWORKS/WORLD/`, deren Hash nicht zum Profil passt. Für den SDK-Build muss daher die passende Datei aus `GEOWORKS/WORLD/PROGRAMM.E/` verwendet werden. Der Target-Scanner muss die Profilauflösung bestätigen; nicht allein den Dateinamen verwenden.
+
+Damit ist die erforderliche Zielvorlagenbasis für das dokumentierte deutsche GeoWorks-1.2.8-Profil im bereitgestellten Archiv vorhanden. Ein neuer Build mit diesem Profil ist technisch vorbereitet. In Untersuchung 2480 wurde trotzdem kein Build ausgeführt.
