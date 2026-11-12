@@ -51,7 +51,7 @@ Berechnung: Die Exporttabelle enthält 262 Einträge zu je vier Bytes. Für jede
 
 ## 2. Relokationsverteilung
 
-Die Ressourcen besitzen insgesamt 2.447 Relokationseinträge. Die Typ-/Klassenhäufigkeiten aus dem ersten Byte der vier Byte großen Relokationsrecords:
+Die Ressourcen besitzen insgesamt 2.784 Relokationseinträge. Die Typ-/Klassenhäufigkeiten aus dem ersten Byte der vier Byte großen Relokationsrecords:
 
 | Oberes Nibble (Klasse) | Unteres Nibble (Typ) | Anzahl |
 |---:|---:|---:|
@@ -108,10 +108,6 @@ Die Relokationszahlen für die drei zuerst genannten Ressourcen:
 - Ressource 1: 649
 - Ressource 2: 245
 - Ressource 3: 143
-
-## 5. Wichtige Korrektur zur Zählung
-
-Die Relokations-Typentabelle summiert sich auf 2.784. Die zuvor im Fließtext genannte Gesamtzahl 2.447 wäre falsch und wird ausdrücklich zurückgenommen. Die tatsächliche Summe aus den Ressourcen-Relokationslängen beträgt 2.784 Records.
 
 ## Ergebnis
 
