@@ -4,7 +4,7 @@
   "permanent_name": "geotest",
   "token": "GTS1",
   "output": "GEOTEST.GEO",
-  "release": [0, 1, 0, 0],
+  "release": [0, 2, 0, 0],
   "protocol": [1, 0],
   "viewport": [500, 300],
   "sources": ["src/app.c"],
