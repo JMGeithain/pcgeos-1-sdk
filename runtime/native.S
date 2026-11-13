@@ -301,6 +301,104 @@ native_poll:
  popfd
  .byte 0x66,0xc3
 
+/* Kernel file services adapted from the advanced MiniCalc reference.
+ * All calls restore the saved GEOS session stack before entering the kernel.
+ * This is experimental and must be live-tested in the pinned GeoWorks 1.2.8.
+ */
+.globl native_file
+native_file:
+ pushfd
+ pushad
+ push ds
+ push es
+ mov dword ptr [E_ESP],esp
+ mov ebp,esp
+ /* 4 return + 4 flags + 32 regs + 4 segments = args at ESP+44. */
+ mov ax,word ptr ss:[ebp+44]
+ mov dx,word ptr ss:[ebp+48]
+ mov cx,word ptr ss:[ebp+52]
+ mov bx,word ptr ss:[ebp+56]
+ mov di,bx
+ mov si,ax
+ mov ax,word ptr [E_SS]
+ mov bp,word ptr [E_SP]
+ mov ss,ax
+ mov sp,bp
+ sti
+ cmp si,0
+ je nf_open
+ cmp si,1
+ je nf_create
+ cmp si,2
+ je nf_read
+ cmp si,3
+ je nf_write
+ cmp si,4
+ je nf_close
+ mov ax,1
+ stc
+ jmp nf_result
+nf_open:
+ mov ax,0x00c0
+ K 0x34
+ jmp nf_result
+nf_create:
+ mov ax,0x02c1
+ xor cx,cx
+ K 0x35
+ jmp nf_result
+nf_read:
+ xor ax,ax
+ K 0x3a
+ jnc nf_count
+ cmp ax,128
+ je nf_count
+ stc
+ jmp nf_result
+nf_write:
+ xor ax,ax
+ K 0x3b
+ jnc nf_count
+ cmp ax,128
+ je nf_count
+ stc
+ jmp nf_result
+nf_count:
+ mov ax,cx
+ clc
+ jmp nf_result
+nf_close:
+ xor ax,ax
+ K 0x36
+ jc nf_result
+ xor ax,ax
+ jmp nf_result
+nf_result:
+ cli
+ /* Save carry and AX before restoring the C register image. */
+ pushf
+ pop dx
+ mov cx,ax
+ mov ax,ds
+ mov ss,ax
+ mov esp,dword ptr [E_ESP]
+ movzx eax,cx
+ test dx,1
+ jz nf_restore
+ cmp ax,130
+ jne nf_neg
+ mov eax,80
+nf_neg:
+ neg eax
+nf_restore:
+ /* Saved EAX is at ESP+32: segment slots + 28 into pushad. */
+ mov dword ptr ss:[esp+32],eax
+ pop es
+ pop ds
+ popad
+ popfd
+ .byte 0x66,0xc3
+
 draw_native:
  push ax
  push bx
