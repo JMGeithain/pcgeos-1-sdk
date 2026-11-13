@@ -23,3 +23,26 @@ void sdk_dispatch(unsigned action){
     else if(action==3){pcg_key_handled=0;app_key();}
     else if(action==4){app_click();}
 }
+
+/* Native file-service wrappers. The low-level adapter runs on the saved
+ * GEOS stack; handles are passed in the fourth argument as a 16-bit value.
+ */
+extern int native_file(int operation, const char *buffer_or_path,
+                       unsigned count, const char *handle_or_path);
+int file_open(const char *path) {
+    return native_file(0, path, 0, 0);
+}
+int file_create_new(const char *path) {
+    return native_file(1, path, 0, 0);
+}
+int file_read(int handle, void *buffer, unsigned count) {
+    return native_file(2, (const char *)buffer, count,
+                       (const char *)(unsigned)handle);
+}
+int file_write(int handle, const void *buffer, unsigned count) {
+    return native_file(3, (const char *)buffer, count,
+                       (const char *)(unsigned)handle);
+}
+int file_close(int handle) {
+    return native_file(4, 0, 0, (const char *)(unsigned)handle);
+}
