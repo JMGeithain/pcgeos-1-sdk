@@ -36,6 +36,16 @@ void pcg_rect(int x1,int y1,int x2,int y2,pcg_u16 color);
 void pcg_text(int x,int y,pcg_u16 color,const char *text);
 void pcg_invalidate(void);
 
+/* Experimental native kernel file API (GEOS 1.x only).
+ * Negative return values indicate an error; read/write return byte counts.
+ * file_create_new never overwrites an existing file.
+ */
+int file_open(const char *path);
+int file_create_new(const char *path);
+int file_read(int handle, void *buffer, unsigned count);
+int file_write(int handle, const void *buffer, unsigned count);
+int file_close(int handle);
+
 /* Application callbacks. app_draw() should emit pcg_* drawing commands. */
 void app_init(void);
 void app_draw(void);
