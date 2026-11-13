@@ -1,5 +1,13 @@
-GEOTEST
+GEOTEST 0.2 - Native File I/O Test
 
-Minimal GeoWorks 1.x SDK test application.
+Press Enter or click in the application view to run the file test.
 
-Click the view or press Enter to exercise an application callback.
+The test creates TEST.GTD without overwriting an existing file, writes a
+small GTD1 test record, closes the file, reopens it, reads the complete
+record and verifies every byte.
+
+If TEST.GTD already exists, remove it manually before repeating the test.
+The test does not delete or overwrite existing files.
+
+This is an experimental PC/GEOS 1.x kernel file-service test. TEST.GTD is
+a private GEOTEST test file, not a native GeoWorks document format.
